@@ -3,3 +3,4 @@ __pycache__/
 *.ofx
 *.pyc
 config.json
+siga_browser_data/

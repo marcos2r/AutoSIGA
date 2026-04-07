@@ -301,19 +301,43 @@ class AutoSigaApp(ctk.CTk):
             from playwright.sync_api import sync_playwright
             
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=False) # Visível para o usuário interagir
-                context = browser.new_context()
-                page = context.new_page()
+                # 1. Usar modo "Persistente" para salvar os cookies e sessão do usuário na pasta local
+                data_dir = os.path.join(os.getcwd(), 'siga_browser_data')
                 
-                self.atualizar_status(self.label_status_siga, f"Navegador aberto! Faça o login ({self.localidade_selecionada}).", "#428BCA")
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=data_dir,
+                    headless=False,
+                    no_viewport=True # Permite a janela abrir em tamanhos padronizados do OS
+                )
+                
+                # No modo persistente, uma guia já vem previamente aberta
+                page = context.pages[0] if context.pages else context.new_page()
+                
+                self.atualizar_status(self.label_status_siga, f"Iniciando navegador e validando sessão...", "#428BCA")
                 page.goto("https://siga.congregacao.org.br/")
                 
-                # Aguarda até que a URL deixe de ser a URL raiz (indicando que logou e foi pra Home)
-                page.wait_for_function('() => window.location.pathname !== "/"', timeout=0)
+                # Aguarda o html estrutural carregar
+                page.wait_for_load_state("domcontentloaded")
                 
-                self.atualizar_status(self.label_status_siga, f"✅ Login detectado!\nLocalidade alvo: {self.localidade_selecionada}\nAguardando próximos passos...", "#3C763D")
+                # 2. Lógica para detectar se o usuário já possui cookies válidos de outra sessão
+                # O input type="password" é um padrão universal da página de login não autenticada
+                try:
+                    # Dá 3 segundos no máximo para a box de senha aparecer; se não aparecer, é pq já pulou de tela (logado)
+                    senha_locator = page.locator('input[type="password"]')
+                    senha_locator.wait_for(state="visible", timeout=3000)
+                    precisa_fazer_login = True
+                except:
+                    precisa_fazer_login = False
                 
-                # Mantém o navegador aberto num loop para os próximos comandos que implementarmos depois
+                if precisa_fazer_login:
+                    self.atualizar_status(self.label_status_siga, f"Sessão não detectada.\nFaça o login na janela aberta...", "#F89406")
+                    # Congela o loop até que a box de senha não seja mais visível na página (ex: clicou em Entrar)
+                    senha_locator.wait_for(state="hidden", timeout=0)
+                
+                # A partir desse ponto sabemos que o sistema autenticou e trocou de tela
+                self.atualizar_status(self.label_status_siga, f"✅ Sessão Validada: Pronto para automação!\nLocalidade alvo: {self.localidade_selecionada}", "#3C763D")
+                
+                # Como a automação futura dependerá de manter o navegador aberto, mantemos num while
                 while True:
                     time.sleep(1)
                     

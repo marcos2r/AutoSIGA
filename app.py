@@ -454,7 +454,15 @@ class AutoSigaApp(ctk.CTk):
                 page.wait_for_load_state("domcontentloaded")
                 time.sleep(2) # Pequena pausa pra garantir que a tela Tesouraria "piscou e abriu"
                 
-                self.atualizar_status(self.label_status_siga, f"⏳ Tela TES01701 Aberta! Aguardando Mapeamento...", "#F89406")
+                # 6. Abertura da janela/modal do Extrato
+                self.atualizar_status(self.label_status_siga, f"Abrindo menu do Extrato...", "#428BCA")
+                
+                btn_extrato = page.locator('#btn-filtro')
+                btn_extrato.wait_for(state="visible", timeout=10000)
+                btn_extrato.click()
+                time.sleep(1.5) # Aguarda o componente de extrato ser renderizado na tela
+                
+                self.atualizar_status(self.label_status_siga, f"⏳ Tela Extrato Aberta! Aguardando novos passos...", "#F89406")
                     
                 # Mantém o navegador aberto num loop
                 self.browser_aberto = True

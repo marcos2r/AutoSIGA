@@ -23,6 +23,8 @@ class AutoSigaApp(ctk.CTk):
         self.geometry("600x680")
         self.configure(fg_color="#F1F5F9") # Fundo cinza clarinho (estilo SIGA)
         
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
         # Identidade Visual SIGA
         self.fonte_padrao = ("Open Sans", 14)
         self.fonte_titulo = ("Open Sans", 24, "bold")
@@ -33,6 +35,10 @@ class AutoSigaApp(ctk.CTk):
 
         self.construir_interface()
         self.carregar_configuracoes()
+
+    def on_closing(self):
+        self.browser_aberto = False
+        self.after(500, self.destroy)
 
     def construir_interface(self):
         # 1. Header estilo SIGA
@@ -399,7 +405,8 @@ class AutoSigaApp(ctk.CTk):
                 self.atualizar_status(self.label_status_siga, f"✅ Pronto e Logado em: {self.localidade_selecionada}", "#3C763D")
                     
                 # Mantém o navegador aberto num loop
-                while True:
+                self.browser_aberto = True
+                while self.browser_aberto:
                     time.sleep(1)
                     
         except Exception as e:

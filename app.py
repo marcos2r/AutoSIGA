@@ -320,16 +320,37 @@ class AutoSigaApp(ctk.CTk):
             
             with sync_playwright() as p:
                 # 1. Usar modo "Persistente" para salvar os cookies e sessão do usuário na pasta local
-                data_dir = os.path.join(os.getcwd(), 'siga_browser_data')
-                
+                user_data_dir = os.path.join(os.getcwd(), 'siga_browser_data')
                 context = p.chromium.launch_persistent_context(
-                    user_data_dir=data_dir,
+                    user_data_dir=user_data_dir,
                     headless=False,
-                    no_viewport=True # Permite a janela abrir em tamanhos padronizados do OS
+                    no_viewport=True,  # Deixa abrir maximizado ou no tamanho natural
+                    args=["--start-maximized"]
                 )
                 
                 # No modo persistente, uma guia já vem previamente aberta
                 page = context.pages[0] if context.pages else context.new_page()
+                
+                # --- INJEÇÃO "MODO ESPIÃO" PARA MAPEAMENTO ---
+                page.on("console", lambda msg: logging.info(msg.text) if "SIGA-CLIQUE" in msg.text else None)
+                page.add_init_script("""
+                    document.addEventListener('click', function(e) {
+                        let el = e.target;
+                        let tags = [];
+                        while(el && el.tagName !== 'BODY' && el.tagName !== 'HTML') {
+                            let id_str = el.id ? '#' + el.id : '';
+                            let class_str = (el.className && typeof el.className === 'string' && el.className.trim() !== '') ? '.' + el.className.trim().split(/\\s+/).join('.') : '';
+                            tags.unshift(el.tagName.toLowerCase() + id_str + class_str);
+                            el = el.parentElement;
+                        }
+                        let info = 'SIGA-CLIQUE -> ' + tags.join(' > ');
+                        if (e.target.innerText) {
+                            info += ' || TEXTO: ' + e.target.innerText.trim().substring(0, 40).replace(/\\n/g, ' ');
+                        }
+                        console.log(info);
+                    }, true);
+                """)
+                # ---------------------------------------------
                 
                 self.atualizar_status(self.label_status_siga, f"Iniciando navegador e validando sessão...", "#428BCA")
                 page.goto("https://siga.congregacao.org.br/")

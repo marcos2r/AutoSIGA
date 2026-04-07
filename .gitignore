@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 config.json
 siga_browser_data/
+autosiga.log

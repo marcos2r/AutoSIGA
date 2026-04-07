@@ -4,7 +4,16 @@ import os
 import threading
 import time
 import json
+import logging
 from ofxparse import OfxParser
+
+# Configuração de Logs Globais
+logging.basicConfig(
+    filename='autosiga.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    encoding='utf-8'
+)
 
 # Configuração do estilo para combinar com o SIGA
 ctk.set_appearance_mode("light") 
@@ -144,6 +153,7 @@ class AutoSigaApp(ctk.CTk):
 
     def atualizar_status(self, label_widget, texto, cor="#666666"):
         # Atualiza a UI a partir de threads de forma segura
+        logging.info(f"[STATUS] {texto}")
         self.after(0, lambda: label_widget.configure(text=texto, text_color=cor))
         
     def get_config_data(self):
@@ -268,7 +278,9 @@ class AutoSigaApp(ctk.CTk):
             self.atualizar_status(self.label_status_siga, "Pronto! Preencha as informações e abra o SIGA.", "#F89406")
             
         except Exception as e:
-            messagebox.showerror("Erro de Leitura", f"Encontramos um problema ao ler o arquivo OFX.\nDetalhe: {e}")
+            self.dados_processados = None
+            logging.error(f"Erro ao ler OFX: {e}")
+            messagebox.showerror("Erro de Leitura", f"Não foi possível processar o arquivo OFX.\n\nDetalhes:\n{e}")
 
     def iniciar_conexao_siga(self):
         nome_adm = self.entry_nome_adm.get().strip().upper()
@@ -374,8 +386,8 @@ class AutoSigaApp(ctk.CTk):
                 else:
                     if precisa_trocar:
                         self.atualizar_status(self.label_status_siga, f"Trocando perfil do SIGA para {self.localidade_selecionada}...", "#F89406")
-                        # Realiza o clique no link daquela localidade forçando pois o menu pode estar fechado/invisivel
-                        linha_alvo.locator('a').click(force=True)
+                        # Usa o JS nativo para forçar o clique, pois links de dropdown ficam invisíveis (display: none)
+                        linha_alvo.locator('a').evaluate("el => el.click()")
                         page.wait_for_load_state("domcontentloaded")
                         time.sleep(2) # Aguarda atualizar a página da nova localidade
                     
@@ -395,7 +407,8 @@ class AutoSigaApp(ctk.CTk):
                             link_mes = page.locator(f'a.f_competencia_master:has-text("{mes_ano_alvo}")')
                             
                             if link_mes.count() > 0:
-                                link_mes.first.click(force=True)
+                                # Usa JS nativo para contornar bloqueio de visibilidade do Elemento no dropdown
+                                link_mes.first.evaluate("el => el.click()")
                                 page.wait_for_load_state("domcontentloaded")
                                 time.sleep(2) # Aguarda página recarregar com novo mês
                             else:
@@ -410,8 +423,16 @@ class AutoSigaApp(ctk.CTk):
                     time.sleep(1)
                     
         except Exception as e:
-            # Esses Print/Errors silenciam se o usuário apenas fechar a janela 
-            self.atualizar_status(self.label_status_siga, f"Sessão no navegador finalizada.", "#F89406")
+            # Exibe o erro no console e no arquivo de log
+            msg_erro = f"Erro inesperado na automação do SIGA: {e}"
+            print(f"⚠️ {msg_erro}")
+            logging.error(msg_erro, exc_info=True)
+            import traceback
+            traceback.print_exc()
+            
+            # Avisa na UI que houve falha (mostra o erro truncado pra centralizar)
+            erro_resumido = str(e).split('\n')[0][:50]
+            self.atualizar_status(self.label_status_siga, f"Erro no navegador: {erro_resumido}...", "#D9534F")
             self.after(0, lambda: self.botao_conectar.configure(state="normal"))
 
 if __name__ == "__main__":

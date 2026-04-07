@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox
 import os
 import threading
 import time
+import json
 from ofxparse import OfxParser
 
 # Configuração do estilo para combinar com o SIGA
@@ -31,6 +32,7 @@ class AutoSigaApp(ctk.CTk):
         self.cor_azul_header = "#438EB9"
 
         self.construir_interface()
+        self.carregar_configuracoes()
 
     def construir_interface(self):
         # 1. Header estilo SIGA
@@ -114,6 +116,36 @@ class AutoSigaApp(ctk.CTk):
     def atualizar_status(self, label_widget, texto, cor="#666666"):
         # Atualiza a UI a partir de threads de forma segura
         self.after(0, lambda: label_widget.configure(text=texto, text_color=cor))
+        
+    def carregar_configuracoes(self):
+        caminho = "config.json"
+        if os.path.exists(caminho):
+            try:
+                with open(caminho, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    
+                tipo = config.get("tipo_adm", "ADM")
+                nome = config.get("nome_adm", "")
+                
+                self.combo_tipo_adm.set(tipo)
+                if nome:
+                    # Remove valor existente e insere o novo do config
+                    self.entry_nome_adm.delete(0, 'end')
+                    self.entry_nome_adm.insert(0, nome)
+            except Exception as e:
+                print(f"Erro ao carregar configurações: {e}")
+
+    def salvar_configuracoes(self, tipo_adm, nome_adm):
+        caminho = "config.json"
+        try:
+            config = {
+                "tipo_adm": tipo_adm,
+                "nome_adm": nome_adm
+            }
+            with open(caminho, 'w', encoding='utf-8') as f:
+                json.dump(config, f)
+        except Exception as e:
+            print(f"Erro ao salvar configurações: {e}")
 
     def selecionar_arquivo(self):
         caminho_arquivo = filedialog.askopenfilename(
@@ -171,6 +203,9 @@ class AutoSigaApp(ctk.CTk):
         tipo_adm = self.combo_tipo_adm.get()
         self.localidade_selecionada = f"{tipo_adm} - {nome_adm}"
         
+        # Salva para a proxima vez
+        self.salvar_configuracoes(tipo_adm, nome_adm)
+        
         self.botao_conectar.configure(state="disabled")
         self.atualizar_status(self.label_status_siga, f"Abrindo SIGA para {self.localidade_selecionada}...", "#F89406")
         
@@ -199,9 +234,9 @@ class AutoSigaApp(ctk.CTk):
                     time.sleep(1)
                     
         except Exception as e:
-            self.atualizar_status(self.label_status_siga, f"Erro na automação: {e}", "#D9534F")
+            # Esses Print/Errors silenciam se o usuário apenas fechar a janela 
+            self.atualizar_status(self.label_status_siga, f"Sessão no navegador finalizada.", "#F89406")
             self.after(0, lambda: self.botao_conectar.configure(state="normal"))
-
 
 if __name__ == "__main__":
     app = AutoSigaApp()

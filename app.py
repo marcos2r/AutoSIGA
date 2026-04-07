@@ -318,9 +318,19 @@ class AutoSigaApp(ctk.CTk):
                 
         # Procura quais itens do OFX não existem no SIGA
         a_lancar = []
+        
+        # Filtro: nesta primeira versão, consideramos apenas transações de investimento/resgate
+        kw_investimentos = ['APLIC', 'RESG', 'RDC', 'CDB', 'POUP', 'INVEST']
+        
         for tx in ofx_txs:
             tx_data = tx.get("data", "")
             tx_valor = tx.get("valor", 0.0)
+            tx_desc = tx.get("descricao", "").upper()
+            
+            # Checa se a transação é de aplicação/resgate
+            eh_investimento = any(kw in tx_desc for kw in kw_investimentos)
+            if not eh_investimento:
+                continue # Ignora transferências, PIX e depósitos comuns
             
             matched = False
             for stx in siga_txs:

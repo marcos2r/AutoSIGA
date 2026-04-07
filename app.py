@@ -15,10 +15,11 @@ class AutoSigaApp(ctk.CTk):
         # Mantenha referência aos dados
         self.dados_processados = None
         self.browser_aberto = False
+        self.localidade_selecionada = ""
 
         # Configurações da Janela
         self.title("AutoSIGA - Importação")
-        self.geometry("550x550")
+        self.geometry("600x600") # Aumentei um pouco para caber os inputs
         self.configure(fg_color="#F1F5F9") # Fundo cinza clarinho (estilo SIGA)
         
         # Identidade Visual SIGA
@@ -66,15 +67,32 @@ class AutoSigaApp(ctk.CTk):
 
         # 4. Label para mostrar o nome do arquivo selecionado
         self.label_arquivo = ctk.CTkLabel(self.frame_card, text="Nenhum arquivo selecionado.", font=self.fonte_padrao, text_color="#666666")
-        self.label_arquivo.pack(pady=(5, 20))
+        self.label_arquivo.pack(pady=(5, 10))
         
         # Divisor
         self.frame_divisor = ctk.CTkFrame(self.frame_card, height=1, fg_color="#EEEEEE")
         self.frame_divisor.pack(fill="x", padx=20, pady=10)
 
         # 5. Etapa de Conexão com o SIGA
-        self.label_instrucao2 = ctk.CTkLabel(self.frame_card, text="2. Conexão ao Sistema", font=("Open Sans", 16, "bold"), text_color="#3D71A8")
+        self.label_instrucao2 = ctk.CTkLabel(self.frame_card, text="2. Configuração e Conexão", font=("Open Sans", 16, "bold"), text_color="#3D71A8")
         self.label_instrucao2.pack(pady=(10, 10))
+        
+        # --- NOVO: Configuração da Localidade ---
+        self.frame_localidade = ctk.CTkFrame(self.frame_card, fg_color="transparent")
+        self.frame_localidade.pack(pady=10)
+
+        self.label_localidade = ctk.CTkLabel(self.frame_localidade, text="Localidade:", font=self.fonte_padrao, text_color="#333333")
+        self.label_localidade.grid(row=0, column=0, padx=5)
+
+        self.combo_tipo_adm = ctk.CTkComboBox(self.frame_localidade, values=["ADM", "DR", "PIA"], width=70)
+        self.combo_tipo_adm.grid(row=0, column=1, padx=5)
+        
+        self.label_hifen = ctk.CTkLabel(self.frame_localidade, text="-", font=self.fonte_padrao, text_color="#333333")
+        self.label_hifen.grid(row=0, column=2)
+
+        self.entry_nome_adm = ctk.CTkEntry(self.frame_localidade, placeholder_text="Ex: SÃO PAULO", width=180)
+        self.entry_nome_adm.grid(row=0, column=3, padx=5)
+        # ----------------------------------------
         
         self.botao_conectar = ctk.CTkButton(
             self.frame_card, 
@@ -88,10 +106,10 @@ class AutoSigaApp(ctk.CTk):
             state="disabled", # Desabilitado até carregar o OFX
             command=self.iniciar_conexao_siga
         )
-        self.botao_conectar.pack(pady=5)
+        self.botao_conectar.pack(pady=15)
         
         self.label_status_siga = ctk.CTkLabel(self.frame_card, text="Aguardando arquivo OFX...", font=self.fonte_padrao, text_color="#666666")
-        self.label_status_siga.pack(pady=(5, 20))
+        self.label_status_siga.pack(pady=(0, 20))
 
     def atualizar_status(self, label_widget, texto, cor="#666666"):
         # Atualiza a UI a partir de threads de forma segura
@@ -139,14 +157,23 @@ class AutoSigaApp(ctk.CTk):
             
             # Habilita a etapa 2
             self.botao_conectar.configure(state="normal")
-            self.atualizar_status(self.label_status_siga, "Pronto! Clique acima para abrir o SIGA.", "#F89406")
+            self.atualizar_status(self.label_status_siga, "Pronto! Preencha a localidade e abra o SIGA.", "#F89406")
             
         except Exception as e:
             messagebox.showerror("Erro de Leitura", f"Encontramos um problema ao ler o arquivo OFX.\nDetalhe: {e}")
 
     def iniciar_conexao_siga(self):
+        nome_adm = self.entry_nome_adm.get().strip().upper()
+        if not nome_adm:
+            messagebox.showwarning("Atenção", "Por favor, digite o nome da administração (ex: SÃO PAULO).")
+            return
+            
+        tipo_adm = self.combo_tipo_adm.get()
+        self.localidade_selecionada = f"{tipo_adm} - {nome_adm}"
+        
         self.botao_conectar.configure(state="disabled")
-        self.atualizar_status(self.label_status_siga, "Abrindo navegador... Aguarde.", "#F89406")
+        self.atualizar_status(self.label_status_siga, f"Abrindo SIGA para {self.localidade_selecionada}...", "#F89406")
+        
         # Inicia a automação em uma thread separada para não travar a interface
         threading.Thread(target=self._fluxo_automacao_siga, daemon=True).start()
 
@@ -159,16 +186,13 @@ class AutoSigaApp(ctk.CTk):
                 context = browser.new_context()
                 page = context.new_page()
                 
-                self.atualizar_status(self.label_status_siga, "Navegador aberto! Faça o login no SIGA.", "#428BCA")
+                self.atualizar_status(self.label_status_siga, f"Navegador aberto! Faça o login ({self.localidade_selecionada}).", "#428BCA")
                 page.goto("https://siga.congregacao.org.br/")
                 
                 # Aguarda até que a URL deixe de ser a URL raiz (indicando que logou e foi pra Home)
-                # Como não sabemos a exata url, aguardamos que a pagina mude significativamente 
-                # ou que não haja mais um botão/submit de login na tela.
-                # SIGA tipicamente vai para /alguma_coisa. O timeout=0 significa esperar indefinidamente.
                 page.wait_for_function('() => window.location.pathname !== "/"', timeout=0)
                 
-                self.atualizar_status(self.label_status_siga, "✅ Login detectado com sucesso!\nAguardando próximos passos...", "#3C763D")
+                self.atualizar_status(self.label_status_siga, f"✅ Login detectado!\nLocalidade alvo: {self.localidade_selecionada}\nAguardando próximos passos...", "#3C763D")
                 
                 # Mantém o navegador aberto num loop para os próximos comandos que implementarmos depois
                 while True:

@@ -437,6 +437,24 @@ class AutoSigaApp(ctk.CTk):
                                 time.sleep(3) # Pausa pro usuario ler e poder agir
                                 
                 self.atualizar_status(self.label_status_siga, f"✅ Pronto e Logado em: {self.localidade_selecionada}", "#3C763D")
+                
+                # 5. Navegação para a Tela Operacional (TES01701 - Caixas e Bancos)
+                self.atualizar_status(self.label_status_siga, f"Acessando rotina TES01701...", "#428BCA")
+                
+                input_programa = page.locator('#f_executar_programa')
+                btn_executar = page.locator('#btn_executar_programa')
+                
+                # Aguarda o input e preenche
+                input_programa.wait_for(state="visible", timeout=10000)
+                input_programa.fill("TES01701")
+                time.sleep(0.5)
+                
+                # Clica na setinha verde e aguarda o carregamento
+                btn_executar.click()
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(2) # Pequena pausa pra garantir que a tela Tesouraria "piscou e abriu"
+                
+                self.atualizar_status(self.label_status_siga, f"⏳ Tela TES01701 Aberta! Aguardando Mapeamento...", "#F89406")
                     
                 # Mantém o navegador aberto num loop
                 self.browser_aberto = True

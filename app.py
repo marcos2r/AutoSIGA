@@ -510,7 +510,36 @@ class AutoSigaApp(ctk.CTk):
                 page.wait_for_load_state("domcontentloaded")
                 time.sleep(3) # Aguarda o grid carregar com os registros
                 
-                self.atualizar_status(self.label_status_siga, f"⏳ Tabela renderizada! Qual o próximo passo?", "#F89406")
+                # 8. Extrai as linhas da Tabela (Para bater com o OFX depois)
+                self.atualizar_status(self.label_status_siga, f"Lendo dados da tabela do SIGA...", "#428BCA")
+                page.locator('#grid1').wait_for(state="visible", timeout=10000)
+                
+                extrato_siga = page.evaluate('''() => {
+                    let rows = document.querySelectorAll('#grid1 tbody tr');
+                    let result = [];
+                    for (let tr of rows) {
+                        let tds = tr.querySelectorAll('td');
+                        // Ignora "Saldo Anterior" que tem <th> em vez de <td>
+                        if (tds.length >= 8) {
+                            result.push({
+                                data: tds[0].innerText.trim(),
+                                lote: tds[1].innerText.trim(),
+                                documento: tds[2].innerText.trim(),
+                                historico: tds[3].innerText.trim(),
+                                origem: tds[4].innerText.trim(),
+                                entrada: tds[5].innerText.trim(),
+                                saida: tds[6].innerText.trim(),
+                                saldo: tds[7].innerText.trim()
+                            });
+                        }
+                    }
+                    return result;
+                }''')
+                
+                self.dados_processados["extrato_siga"] = extrato_siga
+                qtd_siga = len(extrato_siga)
+                
+                self.atualizar_status(self.label_status_siga, f"✅ {qtd_siga} Lançamentos capturados do SIGA! Próximo passo?", "#3C763D")
                     
                 # Mantém o navegador aberto num loop
                 self.browser_aberto = True

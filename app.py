@@ -282,6 +282,99 @@ class AutoSigaApp(ctk.CTk):
             logging.error(f"Erro ao ler OFX: {e}")
             messagebox.showerror("Erro de Leitura", f"Não foi possível processar o arquivo OFX.\n\nDetalhes:\n{e}")
 
+    def conciliar_extratos(self):
+        if not self.dados_processados or "extrato_siga" not in self.dados_processados:
+            return []
+            
+        ofx_txs = self.dados_processados.get("transacoes", [])
+        siga_txs_raw = self.dados_processados.get("extrato_siga", [])
+        
+        siga_txs = []
+        for entry in siga_txs_raw:
+            val_str = entry.get('entrada', '-').strip()
+            is_saida = False
+            if val_str == '-':
+                val_str = entry.get('saida', '-').strip()
+                is_saida = True
+                
+            if not val_str or val_str == '-':
+                continue
+                
+            try:
+                # Transforma 3.000,00 ou 150,00 em float
+                val_float = float(val_str.replace('.', '').replace(',', '.'))
+                if is_saida:
+                    val_float = -abs(val_float)
+                else:
+                    val_float = abs(val_float)
+                    
+                siga_txs.append({
+                    'data': entry.get('data', '').strip(),
+                    'valor': val_float,
+                    'matched': False
+                })
+            except Exception as e:
+                logging.error(f"Erro ao converter valor do SIGA: {val_str} - {e}")
+                
+        # Procura quais itens do OFX não existem no SIGA
+        a_lancar = []
+        for tx in ofx_txs:
+            tx_data = tx.get("data", "")
+            tx_valor = tx.get("valor", 0.0)
+            
+            matched = False
+            for stx in siga_txs:
+                if not stx['matched'] and stx['data'] == tx_data:
+                    # Tolerância de 1 centavo para problemas de float
+                    if abs(stx['valor'] - tx_valor) <= 0.01:
+                        stx['matched'] = True
+                        matched = True
+                        break
+            
+            if not matched: # Não achou correspondência no SIGA
+                a_lancar.append(tx)
+                
+        return a_lancar
+
+    def mostrar_janela_lancamentos(self, lancamentos):
+        janela = ctk.CTkToplevel(self)
+        janela.title("Prévia de Importação")
+        janela.geometry("650x500")
+        janela.transient(self) # Fica por cima
+        janela.grab_set() # Foca os cliques nela
+        
+        lbl_titulo = ctk.CTkLabel(janela, text=f"Lançamentos a Importar ({len(lancamentos)})", font=self.fonte_titulo, text_color=self.cor_azul_header)
+        lbl_titulo.pack(pady=(20, 10))
+        
+        lbl_sub = ctk.CTkLabel(janela, text="Estes são os registros do OFX que não foram encontrados no SIGA e estão prontos para descer pro sistema.", font=self.fonte_padrao, text_color="#777")
+        lbl_sub.pack(pady=(0, 15))
+        
+        frame_scroll = ctk.CTkScrollableFrame(janela, width=600, height=300, fg_color="#F8F9FA", corner_radius=6)
+        frame_scroll.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        for tx in lancamentos:
+            frame_item = ctk.CTkFrame(frame_scroll, fg_color="#FFFFFF", corner_radius=4, border_width=1, border_color="#DDDDDD")
+            frame_item.pack(fill="x", pady=5, padx=5)
+            
+            data = tx.get("data", "")
+            valor = tx.get("valor", 0.0)
+            desc = tx.get("descricao", "")
+            
+            cor_valor = "#3C763D" if valor >= 0 else "#D9534F"
+            valor_fmt = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            
+            lbl_data = ctk.CTkLabel(frame_item, text=data, font=("Open Sans", 13, "bold"), width=80)
+            lbl_data.pack(side="left", padx=10, pady=5)
+            
+            lbl_desc = ctk.CTkLabel(frame_item, text=desc[:50] + ("..." if len(desc)>50 else ""), font=("Open Sans", 12), anchor="w")
+            lbl_desc.pack(side="left", padx=10, pady=5, fill="x", expand=True)
+            
+            lbl_valor = ctk.CTkLabel(frame_item, text=valor_fmt, font=("Open Sans", 13, "bold"), text_color=cor_valor)
+            lbl_valor.pack(side="right", padx=15, pady=5)
+            
+        btn_fechar = ctk.CTkButton(janela, text="Fechar Prévia (Apenas Leitura)", command=janela.destroy, font=("Open Sans", 14, "bold"), fg_color="#5CB85C", hover_color="#4CAE4C", height=40)
+        btn_fechar.pack(pady=15)
+
     def iniciar_conexao_siga(self):
         nome_adm = self.entry_nome_adm.get().strip().upper()
         if not nome_adm:
@@ -539,7 +632,16 @@ class AutoSigaApp(ctk.CTk):
                 self.dados_processados["extrato_siga"] = extrato_siga
                 qtd_siga = len(extrato_siga)
                 
-                self.atualizar_status(self.label_status_siga, f"✅ {qtd_siga} Lançamentos capturados do SIGA! Próximo passo?", "#3C763D")
+                # 9. Realiza a Conciliação (Cruzamento) dos dados
+                self.atualizar_status(self.label_status_siga, f"Cruzando {qtd_siga} itens do SIGA com o OFX...", "#428BCA")
+                novos_lancamentos = self.conciliar_extratos()
+                
+                if novos_lancamentos:
+                    self.atualizar_status(self.label_status_siga, f"⚠️ Há {len(novos_lancamentos)} lançamentos para importar!", "#F89406")
+                    # Chama a UI pra mostrar na thread principal de forma segura
+                    self.after(0, lambda: self.mostrar_janela_lancamentos(novos_lancamentos))
+                else:
+                    self.atualizar_status(self.label_status_siga, f"✅ Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
                     
                 # Mantém o navegador aberto num loop
                 self.browser_aberto = True

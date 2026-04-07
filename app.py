@@ -335,9 +335,47 @@ class AutoSigaApp(ctk.CTk):
                     senha_locator.wait_for(state="hidden", timeout=0)
                 
                 # A partir desse ponto sabemos que o sistema autenticou e trocou de tela
-                self.atualizar_status(self.label_status_siga, f"✅ Sessão Validada: Pronto para automação!\nLocalidade alvo: {self.localidade_selecionada}", "#3C763D")
+                self.atualizar_status(self.label_status_siga, f"Sessão Validada. Verificando localidade...", "#428BCA")
                 
-                # Como a automação futura dependerá de manter o navegador aberto, mantemos num while
+                # Aguarda o elemento de perfil carregar no menu superior (indica que a home carregou por completo)
+                page.locator('.informacao-local').first.wait_for(state="visible", timeout=15000)
+                
+                # Encontra todas as localidades no dropdown (mesmo oculto)
+                locais_locator = page.locator('ul#dropdown_localidades > li')
+                locais_locator.first.wait_for(state="attached", timeout=10000)
+                
+                quantidade = locais_locator.count()
+                precisa_trocar = True
+                linha_alvo = None
+                
+                tipo_alvo = self.combo_tipo_adm.get().upper()
+                nome_alvo = self.entry_nome_adm.get().strip().upper()
+                
+                for i in range(quantidade):
+                    li = locais_locator.nth(i)
+                    texto_li = li.text_content().upper()
+                    
+                    if tipo_alvo in texto_li and nome_alvo in texto_li:
+                        linha_alvo = li
+                        classe_li = li.get_attribute("class") or ""
+                        if "active" in classe_li.lower():
+                            precisa_trocar = False
+                        break
+                        
+                if not linha_alvo:
+                    # Se não achou na lista
+                    self.atualizar_status(self.label_status_siga, f"⚠️ Localidade '{self.localidade_selecionada}' não encontrada no seu menu!", "#D9534F")
+                else:
+                    if precisa_trocar:
+                        self.atualizar_status(self.label_status_siga, f"Trocando perfil do SIGA para {self.localidade_selecionada}...", "#F89406")
+                        # Realiza o clique no link daquela localidade forçando pois o menu pode estar fechado/invisivel
+                        linha_alvo.locator('a').click(force=True)
+                        page.wait_for_load_state("domcontentloaded")
+                        time.sleep(2) # Aguarda atualizar a página da nova localidade
+                    
+                    self.atualizar_status(self.label_status_siga, f"✅ Pronto e Logado em: {self.localidade_selecionada}", "#3C763D")
+                    
+                # Mantém o navegador aberto num loop
                 while True:
                     time.sleep(1)
                     

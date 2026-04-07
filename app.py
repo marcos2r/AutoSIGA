@@ -425,16 +425,24 @@ class AutoSigaApp(ctk.CTk):
                         
                         if mes_trabalho_atual != mes_ano_alvo:
                             self.atualizar_status(self.label_status_siga, f"Trocando Mês de {mes_trabalho_atual} para {mes_ano_alvo}...", "#F89406")
+                            
+                            # Clica no botão dropdown do menu superior para revelar as opções
+                            page.locator('#a_competencia').click()
+                            time.sleep(0.5) # aguarda animação da listinha descendo
+                            
                             link_mes = page.locator(f'a.f_competencia_master:has-text("{mes_ano_alvo}")')
                             
                             if link_mes.count() > 0:
-                                # Usa JS nativo para contornar bloqueio de visibilidade do Elemento no dropdown
-                                link_mes.first.evaluate("el => el.click()")
+                                # Usa clique nativo do Playwright agora que o menu está aberto
+                                link_mes.first.click()
                                 page.wait_for_load_state("domcontentloaded")
                                 time.sleep(2) # Aguarda página recarregar com novo mês
                             else:
                                 self.atualizar_status(self.label_status_siga, f"⚠️ Mês {mes_ano_alvo} precisa ser trocado manualmente!", "#D9534F")
                                 time.sleep(3) # Pausa pro usuario ler e poder agir
+                        else:
+                            self.atualizar_status(self.label_status_siga, f"Mês de competência ({mes_ano_alvo}) já está correto.", "#3C763D")
+                            time.sleep(1.5)
                                 
                 self.atualizar_status(self.label_status_siga, f"✅ Pronto e Logado em: {self.localidade_selecionada}", "#3C763D")
                 

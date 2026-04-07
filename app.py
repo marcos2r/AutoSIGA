@@ -1,6 +1,7 @@
 import customtkinter as ctk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 import os
+from ofxparse import OfxParser
 
 # Configuração do estilo para combinar com o SIGA
 ctk.set_appearance_mode("light") 
@@ -8,6 +9,9 @@ ctk.set_appearance_mode("light")
 class AutoSigaApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+
+        # Mantenha referência aos dados
+        self.dados_processados = None
 
         # Configurações da Janela
         self.title("AutoSIGA - Importação")
@@ -73,6 +77,51 @@ class AutoSigaApp(ctk.CTk):
             # Verde sucesso (estilo alert-success do Bootstrap)
             self.label_arquivo.configure(text=f"Arquivo selecionado:\n{nome_arquivo}", text_color="#3C763D") 
             print(f"Arquivo selecionado para processamento: {caminho_arquivo}")
+            
+            # Após selecionar, realizar o processamento
+            self.processar_ofx(caminho_arquivo)
+
+    def processar_ofx(self, caminho):
+        try:
+            with open(caminho, 'rb') as f:
+                ofx = OfxParser.parse(f)
+            
+            conta = ofx.account
+            extrato = conta.statement
+            
+            # Objeto (dicionário) com os dados consolidados para a próxima etapa
+            dados_ofx = {
+                "banco": getattr(conta, 'routing_number', ''),
+                "conta_id": getattr(conta, 'account_id', ''),
+                "moeda": getattr(extrato, 'currency', ''),
+                "saldo_atual": float(extrato.balance) if hasattr(extrato, 'balance') else 0.0,
+                "data_inicial": extrato.start_date.strftime("%d/%m/%Y") if hasattr(extrato, 'start_date') and extrato.start_date else None,
+                "data_final": extrato.end_date.strftime("%d/%m/%Y") if hasattr(extrato, 'end_date') and extrato.end_date else None,
+                "transacoes": []
+            }
+            
+            for tx in extrato.transactions:
+                dados_ofx["transacoes"].append({
+                    "id": getattr(tx, 'id', ''),
+                    "data": tx.date.strftime("%d/%m/%Y") if tx.date else '',
+                    "valor": float(tx.amount) if tx.amount else 0.0,
+                    "tipo": getattr(tx, 'type', ''),
+                    "descricao": getattr(tx, 'memo', getattr(tx, 'payee', ''))
+                })
+                
+            self.dados_processados = dados_ofx
+            quantidade_tx = len(dados_ofx["transacoes"])
+            saldo = dados_ofx["saldo_atual"]
+            
+            print(f"Processamento concluído. {quantidade_tx} transações estruturadas.")
+            messagebox.showinfo(
+                "Processamento Concluído", 
+                f"Extrato lido com sucesso!\n\nTransações encontradas: {quantidade_tx}\nSaldo: R$ {saldo:.2f}"
+            )
+            
+        except Exception as e:
+            print(f"Erro ao processar arquivo: {e}")
+            messagebox.showerror("Erro de Leitura", f"Encontramos um problema ao ler o arquivo OFX.\nDetalhe: {e}")
 
 if __name__ == "__main__":
     app = AutoSigaApp()

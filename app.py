@@ -382,8 +382,27 @@ class AutoSigaApp(ctk.CTk):
             lbl_valor = ctk.CTkLabel(frame_item, text=valor_fmt, font=("Open Sans", 13, "bold"), text_color=cor_valor)
             lbl_valor.pack(side="right", padx=15, pady=5)
             
-        btn_fechar = ctk.CTkButton(janela, text="Fechar Prévia (Apenas Leitura)", command=janela.destroy, font=("Open Sans", 14, "bold"), fg_color="#5CB85C", hover_color="#4CAE4C", height=40)
-        btn_fechar.pack(pady=15)
+        frame_botoes = ctk.CTkFrame(janela, fg_color="transparent")
+        frame_botoes.pack(pady=15)
+        
+        btn_autorizar = ctk.CTkButton(frame_botoes, text="Autorizar Lançamentos", command=lambda: self.autorizar_lancamentos(janela), font=("Open Sans", 14, "bold"), fg_color="#5CB85C", hover_color="#4CAE4C", height=40)
+        btn_autorizar.pack(side="left", padx=10)
+        
+        btn_cancelar = ctk.CTkButton(frame_botoes, text="Cancelar", command=lambda: self.cancelar_lancamentos(janela), font=("Open Sans", 14, "bold"), fg_color="#D9534F", hover_color="#C9302C", height=40)
+        btn_cancelar.pack(side="right", padx=10)
+        
+        # Trata o caso de quem fecha a janela pelo X (fechamento bruto)
+        janela.protocol("WM_DELETE_WINDOW", lambda: self.cancelar_lancamentos(janela))
+
+    def autorizar_lancamentos(self, janela):
+        self.autorizou_importacao = True
+        self.esperando_autorizacao = False
+        janela.destroy()
+        
+    def cancelar_lancamentos(self, janela):
+        self.autorizou_importacao = False
+        self.esperando_autorizacao = False
+        janela.destroy()
 
     def iniciar_conexao_siga(self):
         nome_adm = self.entry_nome_adm.get().strip().upper()
@@ -647,11 +666,32 @@ class AutoSigaApp(ctk.CTk):
                 novos_lancamentos = self.conciliar_extratos()
                 
                 if novos_lancamentos:
-                    self.atualizar_status(self.label_status_siga, f"⚠️ Há {len(novos_lancamentos)} lançamentos para importar!", "#F89406")
+                    self.atualizar_status(self.label_status_siga, f"⚠️ Há {len(novos_lancamentos)} lançamentos para importar! Aguardando sua ação...", "#F89406")
+                    
+                    self.esperando_autorizacao = True
+                    self.autorizou_importacao = False
+                    
                     # Chama a UI pra mostrar na thread principal de forma segura
                     self.after(0, lambda: self.mostrar_janela_lancamentos(novos_lancamentos))
+                    
+                    # Trava temporariamente o fluxo do Playwright aguardando o usuário clicar 'Autorizar' ou 'Cancelar'
+                    while self.esperando_autorizacao:
+                        if not self.browser_aberto:
+                            # Cai se o app for fechado
+                            break
+                        time.sleep(1)
+                        
+                    if self.autorizou_importacao:
+                        self.atualizar_status(self.label_status_siga, "🚀 Lançamentos autorizados! Iniciando inserção...", "#428BCA")
+                        # 10. Implementar loop de cliques de lançamento aqui na proxima etapa
+                        time.sleep(2) # Placeholder
+                    else:
+                        self.atualizar_status(self.label_status_siga, "❌ Importação cancelada pelo usuário.", "#D9534F")
+                    
                 else:
                     self.atualizar_status(self.label_status_siga, f"✅ Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
+                    # Pop-up de OK direto para o usuário na interface principal
+                    self.after(0, lambda: messagebox.showinfo("AutoSIGA", "Todos os investimentos e resgates do OFX já estão conciliados no SIGA!\n\nNão há nada pendente para importar."))
                     
                 # Mantém o navegador aberto num loop
                 self.browser_aberto = True

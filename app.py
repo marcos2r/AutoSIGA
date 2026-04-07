@@ -462,7 +462,47 @@ class AutoSigaApp(ctk.CTk):
                 btn_extrato.click()
                 time.sleep(1.5) # Aguarda o componente de extrato ser renderizado na tela
                 
-                self.atualizar_status(self.label_status_siga, f"⏳ Tela Extrato Aberta! Aguardando novos passos...", "#F89406")
+                # 7. Preenche os dados no Formulário HTML (modal)
+                self.atualizar_status(self.label_status_siga, f"Preenchendo Conta e Datas...", "#428BCA")
+                
+                conta_alvo = self.dados_processados.get("conta_siga_corrente", "")
+                achou_conta = False
+                
+                # Mapeia as <option> do select original e simula a troca
+                if conta_alvo:
+                    opcoes = page.locator('#f_conta option')
+                    for i in range(opcoes.count()):
+                        texto_opt = opcoes.nth(i).text_content()
+                        if conta_alvo in texto_opt:
+                            valor_id = opcoes.nth(i).get_attribute('value')
+                            # Força via js para que o 'select2' (componente visual do SIGA) reconheça
+                            page.evaluate(f'$("#f_conta").val("{valor_id}").trigger("change")')
+                            achou_conta = True
+                            break
+                            
+                if not achou_conta:
+                    self.atualizar_status(self.label_status_siga, f"⚠️ Conta '{conta_alvo}' não encontrada na lista!", "#D9534F")
+                    time.sleep(3) # Pausa pro usuario ler
+
+                # Preenche datainicial e final puxados direto do Extrato Bancário
+                data_in = self.dados_processados.get("data_inicial", "")
+                data_fim = self.dados_processados.get("data_final", "")
+                
+                if data_in:
+                    page.locator('#f_data1').fill(data_in)
+                if data_fim:
+                    page.locator('#f_data2').fill(data_fim)
+                    
+                time.sleep(0.5)
+                
+                # Clica no submit do form (Botão Consultar)
+                self.atualizar_status(self.label_status_siga, f"Consultando movimentações no banco...", "#F89406")
+                page.locator('#f_main button[type="submit"].btn-success').click()
+                
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(3) # Aguarda o grid carregar com os registros
+                
+                self.atualizar_status(self.label_status_siga, f"⏳ Tabela renderizada! Qual o próximo passo?", "#F89406")
                     
                 # Mantém o navegador aberto num loop
                 self.browser_aberto = True

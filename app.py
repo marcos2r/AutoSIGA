@@ -373,7 +373,30 @@ class AutoSigaApp(ctk.CTk):
                         page.wait_for_load_state("domcontentloaded")
                         time.sleep(2) # Aguarda atualizar a página da nova localidade
                     
-                    self.atualizar_status(self.label_status_siga, f"✅ Pronto e Logado em: {self.localidade_selecionada}", "#3C763D")
+                # 4. Verificação do Mês de Trabalho (Competência)
+                self.atualizar_status(self.label_status_siga, f"Verificando Mês de Trabalho...", "#428BCA")
+                data_final_ofx = self.dados_processados.get("data_final", "")
+                
+                if data_final_ofx and len(data_final_ofx) == 10: # No formato DD/MM/YYYY
+                    mes_ano_alvo = data_final_ofx[3:] # Ex: captura "02/2026" de "28/02/2026"
+                    
+                    mes_trabalho_locator = page.locator('#f_competencianome')
+                    if mes_trabalho_locator.count() > 0:
+                        mes_trabalho_atual = mes_trabalho_locator.text_content().strip()
+                        
+                        if mes_trabalho_atual != mes_ano_alvo:
+                            self.atualizar_status(self.label_status_siga, f"Trocando Mês de {mes_trabalho_atual} para {mes_ano_alvo}...", "#F89406")
+                            link_mes = page.locator(f'a.f_competencia_master:has-text("{mes_ano_alvo}")')
+                            
+                            if link_mes.count() > 0:
+                                link_mes.first.click(force=True)
+                                page.wait_for_load_state("domcontentloaded")
+                                time.sleep(2) # Aguarda página recarregar com novo mês
+                            else:
+                                self.atualizar_status(self.label_status_siga, f"⚠️ Mês {mes_ano_alvo} precisa ser trocado manualmente!", "#D9534F")
+                                time.sleep(3) # Pausa pro usuario ler e poder agir
+                                
+                self.atualizar_status(self.label_status_siga, f"✅ Pronto e Logado em: {self.localidade_selecionada}", "#3C763D")
                     
                 # Mantém o navegador aberto num loop
                 while True:

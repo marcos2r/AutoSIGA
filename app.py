@@ -553,9 +553,19 @@ class AutoSigaApp(ctk.CTk):
                     # Fallback bruto caso mude layout
                     page.locator('button.btn-success:has(i.icon-ok)').first.click()
                 
-                # Aguarda o reload da tela (ou pop-up de sucesso ajax)
+                # Aguarda o reload da tela ou pop-up de sucesso ajax do SIGA
                 page.wait_for_load_state("domcontentloaded")
-                time.sleep(2) # Pequeno sleep pós transação para SIGA processar
+                
+                # O SIGA joga um modal de "Informação: armazenada com sucesso!"
+                try:
+                    btn_sucesso = page.locator('.bootbox button:has-text("Ok"), .bootbox button[data-bb-handler="botao"]').first
+                    btn_sucesso.wait_for(state="visible", timeout=6000)
+                    btn_sucesso.click()
+                except Exception:
+                    # Se salvou de forma transparente sem popup, apenas segue
+                    pass
+                    
+                time.sleep(1) # Aguarda o modal sumir completamente
                 
             self.atualizar_status(self.label_status_siga, f"✅ Finalizado! {len(lanc_ordenados)} registros injetados no SIGA.", "#3C763D")
             from tkinter import messagebox

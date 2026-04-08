@@ -464,8 +464,35 @@ class AutoSigaApp(ctk.CTk):
                 page.wait_for_load_state("domcontentloaded")
                 time.sleep(2)
                 
-                # 1. Data e Valor
-                page.locator('#f_data').fill(data_tx)
+                # 1. Data e Tratamento de Alerta de Competência do SIGA
+                # Dribla o Datepicker que força a 'data de hoje' ao receber foco
+                page.evaluate(f'''() => {{
+                    let inp = document.getElementById("f_data");
+                    if (inp) {{
+                        inp.value = "{data_tx}";
+                        if (window.jQuery) {{
+                            window.jQuery(inp).datepicker('update', "{data_tx}");
+                            window.jQuery(inp).trigger('change');
+                            window.jQuery('.datepicker').hide(); // Esconde o calendário visualmente
+                        }} else {{
+                            inp.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        }}
+                    }}
+                }}''')
+                
+                time.sleep(1) # Aguarda debounce ou processamento AJAX do SIGA
+                # Se a data informada (do OFX) divergir da competência aberta no momento, 
+                # o SIGA joga uma tela de bloqueio perguntando se deseja continuar.
+                try:
+                    btn_sim = page.locator('.bootbox button:has-text("Sim")').first
+                    btn_sim.wait_for(state="visible", timeout=2000)
+                    btn_sim.click()
+                    time.sleep(0.5)
+                except Exception:
+                    # Se não aparecer a tela, maravilhoso, segue a vida em paz.
+                    pass
+                
+                # 1.1 Valor
                 valor_str = f"{abs(valor_tx):.2f}".replace('.', ',')
                 input_valor = page.locator('#f_valor')
                 input_valor.click()
@@ -505,12 +532,15 @@ class AutoSigaApp(ctk.CTk):
                 time.sleep(1)
                 
                 # 6. Salvar/Gravar form_main
-                btn_gravar = page.locator('button.btn-success[type="submit"]')
+                btn_gravar = page.locator('button.btn-success').filter(has_text="Salvar").first
                 if btn_gravar.count() > 0:
-                    btn_gravar.first.click()
+                    # Avalia se a o texto bate só com Salvar e clica
+                    btn_gravar.click()
                 else:
-                    page.evaluate('document.getElementById("f_main").submit()')
-                    
+                    # Tenta fallback se a tradução estiver diferente
+                    page.locator('button.btn-success:has(i.icon-ok)').click()
+                
+                # Aguarda o reload da tela (ou pop-up de sucesso ajax)
                 page.wait_for_load_state("domcontentloaded")
                 time.sleep(2) # Pequeno sleep pós transação para SIGA processar
                 
@@ -555,6 +585,7 @@ class AutoSigaApp(ctk.CTk):
         threading.Thread(target=self._fluxo_automacao_siga, daemon=True).start()
 
     def _fluxo_automacao_siga(self):
+        self.browser_aberto = True
         try:
             from playwright.sync_api import sync_playwright
             

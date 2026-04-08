@@ -134,10 +134,14 @@ class AutoSigaApp(ctk.CTk):
         self.btn_limpar_conta.configure(state="disabled")
         # ----------------------------------------
         
+        # --- Botões de Ação Principais ---
+        self.frame_botoes_acao = ctk.CTkFrame(self.frame_card, fg_color="transparent")
+        self.frame_botoes_acao.pack(pady=10)
+        
         self.botao_conectar = ctk.CTkButton(
-            self.frame_card, 
-            text="Abrir SIGA e Fazer Login", 
-            font=("Open Sans", 14, "bold"),
+            self.frame_botoes_acao, 
+            text="Inserir Investimentos no SIGA", 
+            font=("Open Sans", 13, "bold"),
             fg_color="#5CB85C", # Verde
             hover_color="#4CAE4C",
             text_color="#FFFFFF",
@@ -146,7 +150,21 @@ class AutoSigaApp(ctk.CTk):
             state="disabled", # Desabilitado até carregar o OFX
             command=self.iniciar_conexao_siga
         )
-        self.botao_conectar.pack(pady=10)
+        self.botao_conectar.grid(row=0, column=0, padx=5)
+
+        self.botao_gerar_txt = ctk.CTkButton(
+            self.frame_botoes_acao, 
+            text="Gerar TXT Ofertas", 
+            font=("Open Sans", 13, "bold"),
+            fg_color="#0275D8", # Azul
+            hover_color="#025AA5",
+            text_color="#FFFFFF",
+            corner_radius=4,
+            height=40,
+            state="disabled",
+            command=self.gerar_txt_ofertas
+        )
+        self.botao_gerar_txt.grid(row=0, column=1, padx=5)
         
         self.label_status_siga = ctk.CTkLabel(self.frame_card, text="Aguardando arquivo OFX...", font=self.fonte_padrao, text_color="#666666")
         self.label_status_siga.pack(pady=(0, 10))
@@ -275,7 +293,8 @@ class AutoSigaApp(ctk.CTk):
             # Habilita a etapa 2 e carrega mapeamentos de conta vinculados a esse OFX
             self.carregar_mapeamento_conta(dados_ofx["conta_id"])
             self.botao_conectar.configure(state="normal")
-            self.atualizar_status(self.label_status_siga, "Pronto! Preencha as informações e abra o SIGA.", "#F89406")
+            self.botao_gerar_txt.configure(state="normal")
+            self.atualizar_status(self.label_status_siga, "Extrato lido! Escolha uma das opções acima.", "#F89406")
             
         except Exception as e:
             self.dados_processados = None
@@ -935,6 +954,84 @@ class AutoSigaApp(ctk.CTk):
             erro_resumido = str(e).split('\n')[0][:50]
             self.atualizar_status(self.label_status_siga, f"Erro no navegador: {erro_resumido}...", "#D9534F")
             self.after(0, lambda: self.botao_conectar.configure(state="normal"))
+
+    def gerar_txt_ofertas(self):
+        """
+        Extrai transações positivas do OFX, aplica regras de higienização
+        e exporta arquivo .TXT limpo e pronto de captação (IT.TES.05)
+        """
+        if not hasattr(self, "dados_processados") or not self.dados_processados:
+            messagebox.showerror("Erro", "Nenhum arquivo processado.")
+            return
+
+        transacoes = self.dados_processados.get("transacoes", [])
+        if not transacoes:
+            messagebox.showwarning("Aviso", "O arquivo OFX carregado não possui transações para avaliar.")
+            return
+
+        # Palavras bloqueadas que categorizam lançamentos que NÃO são Ofertas
+        # Rendimentos de aplicação, saques aplicados e dinheiro em caixa já lançado direto (depositos)
+        palavras_bloqueadas = ["APLICA", "RESGATE", "RENDIMENT", "DEPOSITO"]
+
+        linhas_limpas = []
+        qtd_descartadas = 0
+
+        for tx in transacoes:
+            valor = tx.get("valor", 0.0)
+            descricao = tx.get("descricao", "").upper()
+            data = tx.get("data", "")
+
+            # COND. 1: Somente valores POSITIVOS entram no lançamento puro (sem "-").
+            if valor <= 0:
+                qtd_descartadas += 1
+                continue
+            
+            # COND. 2: Nenhuma palavra bloqueada pode fazer parte da descrição.
+            if any(palavra in descricao for palavra in palavras_bloqueadas):
+                qtd_descartadas += 1
+                continue
+
+            # FORMATAR VALOR (sem separador de milhar, virgula p/ centavos. ex: 1530,50)
+            valor_fmt = f"{valor:.2f}".replace(".", ",")
+            
+            # Formato SIGA Csv: DATA;HISTÓRICO;VALOR
+            linha = f"{data};{tx.get('descricao', '').strip()};{valor_fmt}"
+            linhas_limpas.append(linha)
+
+        if not str(linhas_limpas):
+            pass # safe escape
+
+        if not linhas_limpas:
+            messagebox.showwarning("Aviso", "Após os filtros (tirando gastos e aplicações), não sobrou nenhuma linha de Oferta/PIX/Cartão para gerar arquivo!")
+            return
+
+        # Pede para salvar
+        nome_sugerido = f"OFERTAS_LIMPO_{self.dados_processados.get('conta_id', '1')}.txt"
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            initialfile=nome_sugerido,
+            title="Salvar arquivo de Ofertas SIGA",
+            filetypes=[("Arquivos de Texto", "*.txt"), ("Todos os Arquivos", "*.*")]
+        )
+
+        if filepath:
+            try:
+                # SIGA em geral aceita bem ISO-8859-1 (Latin1) ou UTF-8 nativo em importador web ASP.
+                # Como extratos OFX costumam trazer acentos mistos, usaremos utf-8
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    for l in linhas_limpas:
+                        f.write(l + "\n")
+                
+                messagebox.showinfo(
+                    title="Sucesso IT.TES.05", 
+                    message=f"Exportação finalizada em estado puro de captação!\n\n"
+                            f"✅ Ofertas Válidas Mantidas: {len(linhas_limpas)}\n"
+                            f"❌ Despesas/Aplicações Descartadas: {qtd_descartadas}\n\n"
+                            f"O arquivo está perfeitamente formatado para importação."
+                )
+            except Exception as e:
+                logging.error(f"Erro ao salvar arquivo TXT: {e}", exc_info=True)
+                messagebox.showerror("Erro de IO", f"Falha ao salvar o arquivo: {e}")
 
 if __name__ == "__main__":
     app = AutoSigaApp()

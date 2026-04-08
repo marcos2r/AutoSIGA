@@ -404,6 +404,124 @@ class AutoSigaApp(ctk.CTk):
         self.esperando_autorizacao = False
         janela.destroy()
 
+    def selecionar_select2(self, page, select_id, termo_busca, dropdown_is_ajax=True):
+        """
+        Interage com os componentes Select2 do SIGA.
+        Como o HTML muda muito, foca em clicar na wrapper e digitar no input.
+        """
+        try:
+            # Container wrapper q abriga o select2
+            container = page.locator(f'#s2id_{select_id}')
+            container.wait_for(state="visible", timeout=5000)
+            container.click()
+            time.sleep(0.5)
+            
+            # Input de texto que aparece lá embaixo quando clicamos num select2
+            input_search = page.locator('#select2-drop:visible .select2-input')
+            input_search.fill(str(termo_busca))
+            
+            if dropdown_is_ajax:
+                time.sleep(2.0) # Espera o SIGA buscar no servidor
+            else:
+                time.sleep(0.5) # Filtro puramente local HTML
+                
+            # Clica no primeiro item resultante
+            opcao_li = page.locator('#select2-drop:visible .select2-results li.select2-result-selectable').first
+            opcao_li.wait_for(state="visible", timeout=3000)
+            opcao_li.click()
+            time.sleep(0.5)
+        except Exception as e:
+            logging.error(f"Falha ao usar Select2 {select_id} para o termo {termo_busca}: {e}")
+
+    def inserir_lancamentos_siga(self, page, lancamentos):
+        """
+        Executa os cliques para incluir Aplicações e Resgates na tela TES01704.
+        """
+        try:
+            # Ordenação exigida pelo usuário: Resgates (Valores Positivos) PRIMEIRO, Aplicações (Negativos) DEPOIS.
+            lanc_ordenados = sorted(lancamentos, key=lambda tx: tx.get("valor", 0.0), reverse=True)
+            
+            conta_corrente = self.dados_processados.get("conta_siga_corrente", "")
+            conta_aplicacao = self.dados_processados.get("conta_siga_aplicacao", "")
+            
+            import time
+            for i, tx in enumerate(lanc_ordenados):
+                if not self.browser_aberto:
+                    break
+                    
+                data_tx = tx.get("data", "")
+                valor_tx = tx.get("valor", 0.0)
+                desc_tx = tx.get("descricao", "OFX")
+                
+                eh_resgate = valor_tx > 0
+                tipo_nome = "RESGATE" if eh_resgate else "APLICAÇÃO"
+                
+                self.atualizar_status(self.label_status_siga, f"Lançando {i+1}/{len(lanc_ordenados)}: {tipo_nome} -> R$ {abs(valor_tx):.2f}", "#F89406")
+                
+                # Vai p/ a tela TES01704 (Movimentação Interna)
+                page.locator('#f_executar_programa').fill("TES01704")
+                page.locator('#btn_executar_programa').click()
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(2)
+                
+                # 1. Data e Valor
+                page.locator('#f_data').fill(data_tx)
+                valor_str = f"{abs(valor_tx):.2f}".replace('.', ',')
+                input_valor = page.locator('#f_valor')
+                input_valor.click()
+                input_valor.fill("")
+                input_valor.type(valor_str)
+                time.sleep(0.5)
+                
+                # 2. Forma de Pagamento (Transf Bancaria = "5")
+                self.selecionar_select2(page, "f_formapagamento", "TRANSF. BANCÁRIA", dropdown_is_ajax=False)
+                
+                # Estabelece Origem x Destino
+                if eh_resgate:
+                    str_orig = conta_aplicacao
+                    str_dest = conta_corrente
+                else:
+                    str_orig = conta_corrente
+                    str_dest = conta_aplicacao
+                    
+                # 3. Contas Origem / Destino (Select Ajax)
+                self.selecionar_select2(page, "f_contaorigem", str_orig, dropdown_is_ajax=True)
+                self.selecionar_select2(page, "f_contadestino", str_dest, dropdown_is_ajax=True)
+                
+                # 4. Históricos (Padrão: "32 - TRANSF")
+                self.selecionar_select2(page, "f_historicoorigem", "032", dropdown_is_ajax=True)
+                self.selecionar_select2(page, "f_historicodestino", "032", dropdown_is_ajax=True)
+                
+                # 5. Complemento e Documento
+                msg_comp = f"{tipo_nome} - {desc_tx}"
+                page.evaluate(f'''
+                    if (document.getElementById("f_complementoorigem")) document.getElementById("f_complementoorigem").value = "{msg_comp}";
+                    if (document.getElementById("f_complementodestino")) document.getElementById("f_complementodestino").value = "{msg_comp}";
+                    if (document.getElementById("f_complemento")) document.getElementById("f_complemento").value = "{msg_comp}";
+                    if (document.getElementById("f_documentoorigem")) document.getElementById("f_documentoorigem").value = "OFX";
+                    if (document.getElementById("f_documentodestino")) document.getElementById("f_documentodestino").value = "OFX";
+                    if (document.getElementById("f_documento")) document.getElementById("f_documento").value = "OFX";
+                ''')
+                time.sleep(1)
+                
+                # 6. Salvar/Gravar form_main
+                btn_gravar = page.locator('button.btn-success[type="submit"]')
+                if btn_gravar.count() > 0:
+                    btn_gravar.first.click()
+                else:
+                    page.evaluate('document.getElementById("f_main").submit()')
+                    
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(2) # Pequeno sleep pós transação para SIGA processar
+                
+            self.atualizar_status(self.label_status_siga, f"✅ Finalizado! {len(lanc_ordenados)} registros injetados no SIGA.", "#3C763D")
+            from tkinter import messagebox
+            self.after(0, lambda: messagebox.showinfo("AutoSIGA", "Todos os lançamentos foram importados com sucesso!"))
+            
+        except Exception as e:
+            logging.error(f"Erro inserindo lançamentos: {e}", exc_info=True)
+            self.atualizar_status(self.label_status_siga, f"Falha na inserção: {e}", "#D9534F")
+
     def iniciar_conexao_siga(self):
         nome_adm = self.entry_nome_adm.get().strip().upper()
         if not nome_adm:
@@ -684,7 +802,7 @@ class AutoSigaApp(ctk.CTk):
                     if self.autorizou_importacao:
                         self.atualizar_status(self.label_status_siga, "🚀 Lançamentos autorizados! Iniciando inserção...", "#428BCA")
                         # 10. Implementar loop de cliques de lançamento aqui na proxima etapa
-                        time.sleep(2) # Placeholder
+                        self.inserir_lancamentos_siga(page, novos_lancamentos)
                     else:
                         self.atualizar_status(self.label_status_siga, "❌ Importação cancelada pelo usuário.", "#D9534F")
                     

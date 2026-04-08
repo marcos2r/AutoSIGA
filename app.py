@@ -546,9 +546,10 @@ class AutoSigaApp(ctk.CTk):
                 self.selecionar_select2(page, "f_contaorigem", str_orig, dropdown_is_ajax=True)
                 self.selecionar_select2(page, "f_conta", str_dest, dropdown_is_ajax=True)
                 
-                # 4. Históricos (Padrão: "32 - TRANSF")
-                self.selecionar_select2(page, "f_historicoorigem", "032", dropdown_is_ajax=True)
-                self.selecionar_select2(page, "f_historico", "032", dropdown_is_ajax=True)
+                # 4. Históricos (002 p/ Aplicação, 031 p/ Resgate)
+                codigo_historico = "002" if tx["valor"] < 0 else "031"
+                self.selecionar_select2(page, "f_historicoorigem", codigo_historico, dropdown_is_ajax=True)
+                self.selecionar_select2(page, "f_historico", codigo_historico, dropdown_is_ajax=True)
                 
                 # 5. Complemento e Documento
                 msg_comp = f"{tipo_nome} - {desc_tx}"

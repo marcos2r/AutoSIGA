@@ -517,12 +517,13 @@ class AutoSigaApp(ctk.CTk):
                     str_dest = conta_aplicacao
                     
                 # 3. Contas Origem / Destino (Select Ajax)
+                # No SIGA TES01704, a Origem ganha sufixo 'origem' e o Destino usa o ID padrão sem sufixo
                 self.selecionar_select2(page, "f_contaorigem", str_orig, dropdown_is_ajax=True)
-                self.selecionar_select2(page, "f_contadestino", str_dest, dropdown_is_ajax=True)
+                self.selecionar_select2(page, "f_conta", str_dest, dropdown_is_ajax=True)
                 
                 # 4. Históricos (Padrão: "32 - TRANSF")
                 self.selecionar_select2(page, "f_historicoorigem", "032", dropdown_is_ajax=True)
-                self.selecionar_select2(page, "f_historicodestino", "032", dropdown_is_ajax=True)
+                self.selecionar_select2(page, "f_historico", "032", dropdown_is_ajax=True)
                 
                 # 5. Complemento e Documento
                 msg_comp = f"{tipo_nome} - {desc_tx}"

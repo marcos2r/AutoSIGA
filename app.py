@@ -412,13 +412,19 @@ class AutoSigaApp(ctk.CTk):
         try:
             # Container wrapper q abriga o select2
             container = page.locator(f'#s2id_{select_id}')
-            container.wait_for(state="visible", timeout=5000)
-            container.click()
+            container.wait_for(state="visible", timeout=3000) # Diminuído para 3s para evitar espera longa
+            
+            classes = container.get_attribute("class") or ""
+            if "select2-container-disabled" in classes:
+                # O campo é automático/somente leitura (ex: Histórico de Destino copiado da Origem)
+                return
+                
+            container.click(timeout=3000)
             time.sleep(0.5)
             
             # Input de texto que aparece lá embaixo quando clicamos num select2
             input_search = page.locator('#select2-drop:visible .select2-input')
-            input_search.fill(str(termo_busca))
+            input_search.fill(str(termo_busca), timeout=3000)
             
             if dropdown_is_ajax:
                 time.sleep(2.0) # Espera o SIGA buscar no servidor

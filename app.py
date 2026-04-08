@@ -458,11 +458,16 @@ class AutoSigaApp(ctk.CTk):
                 
                 self.atualizar_status(self.label_status_siga, f"Lançando {i+1}/{len(lanc_ordenados)}: {tipo_nome} -> R$ {abs(valor_tx):.2f}", "#F89406")
                 
-                # Vai p/ a tela TES01704 (Movimentação Interna)
-                page.locator('#f_executar_programa').fill("TES01704")
-                page.locator('#btn_executar_programa').click()
-                page.wait_for_load_state("domcontentloaded")
-                time.sleep(2)
+                # Somente precisa navegar para a tela TES01704 no PRIMEIRO item.
+                # Nos itens subsequentes, usaremos o "Salvar e Novo" que já limpa a tela automaticamente.
+                if i == 0:
+                    page.locator('#f_executar_programa').fill("TES01704")
+                    page.locator('#btn_executar_programa').click()
+                    page.wait_for_load_state("domcontentloaded")
+                    time.sleep(2)
+                else:
+                    self.atualizar_status(self.label_status_siga, f"Preparando novo registro na tela atual...", "#F89406")
+                    time.sleep(1) # Intervalo pro form vazio carregar no DOM após um 'Salvar e Novo'
                 
                 # 1. Data e Tratamento de Alerta de Competência do SIGA
                 # Dribla o Datepicker que força a 'data de hoje' ao receber foco
@@ -531,14 +536,21 @@ class AutoSigaApp(ctk.CTk):
                 ''')
                 time.sleep(1)
                 
-                # 6. Salvar/Gravar form_main
-                btn_gravar = page.locator('button.btn-success').filter(has_text="Salvar").first
-                if btn_gravar.count() > 0:
-                    # Avalia se a o texto bate só com Salvar e clica
-                    btn_gravar.click()
+                # 6. Salvar/Gravar usando Inteligência de Rota do SIGA
+                is_ultimo = (i == len(lanc_ordenados) - 1)
+                
+                if is_ultimo:
+                    # Último registro: Clicar apenas em "Salvar" (voltando p/ painel)
+                    btn_gravar = page.locator('button.btn-salvar[data-comando="F"]')
                 else:
-                    # Tenta fallback se a tradução estiver diferente
-                    page.locator('button.btn-success:has(i.icon-ok)').click()
+                    # Ainda tem mais: Clicar em "Salvar e Novo" (mantém na tela limpo)
+                    btn_gravar = page.locator('button.btn-salvar[data-comando="N"]')
+                    
+                if btn_gravar.count() > 0:
+                    btn_gravar.first.click()
+                else:
+                    # Fallback bruto caso mude layout
+                    page.locator('button.btn-success:has(i.icon-ok)').first.click()
                 
                 # Aguarda o reload da tela (ou pop-up de sucesso ajax)
                 page.wait_for_load_state("domcontentloaded")

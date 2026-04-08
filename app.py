@@ -857,6 +857,53 @@ class AutoSigaApp(ctk.CTk):
                         self.atualizar_status(self.label_status_siga, "🚀 Lançamentos autorizados! Iniciando inserção...", "#428BCA")
                         # 10. Implementar loop de cliques de lançamento aqui na proxima etapa
                         self.inserir_lancamentos_siga(page, novos_lancamentos)
+                        
+                        # 11. Conferência Final (Prova Real)
+                        self.atualizar_status(self.label_status_siga, "Realizando conferência final no servidor...", "#428BCA")
+                        time.sleep(2)
+                        
+                        try:
+                            # A tela TES01701 provavelmente já carregou após o último 'Salvar'
+                            if page.locator('#btn-filtro').is_visible():
+                                page.locator('#btn-filtro').click()
+                                time.sleep(1)
+                                
+                            # Clica pra gerar o Relatório da Tabela com os dados recém injetados
+                            page.locator('#modal-filtro form#f_main button.btn-success').first.click()
+                            page.wait_for_load_state("domcontentloaded")
+                            time.sleep(4)
+                            
+                            extrato_recente = page.evaluate('''() => {
+                                let rows = document.querySelectorAll('#grid1 tbody tr');
+                                let r = [];
+                                for (let tr of rows) {
+                                    let tds = tr.querySelectorAll('td');
+                                    if (tds.length >= 8) {
+                                        r.push({
+                                            data: tds[0].innerText.trim(), lote: tds[1].innerText.trim(),
+                                            documento: tds[2].innerText.trim(), historico: tds[3].innerText.trim(),
+                                            origem: tds[4].innerText.trim(), entrada: tds[5].innerText.trim(),
+                                            saida: tds[6].innerText.trim(), saldo: tds[7].innerText.trim()
+                                        });
+                                    }
+                                }
+                                return r;
+                            }''')
+                            
+                            self.dados_processados["extrato_siga"] = extrato_recente
+                            pendentes = self.conciliar_extratos()
+                            
+                            if not pendentes:
+                                self.atualizar_status(self.label_status_siga, f"✅ Conferência 100%: Nenhum item para trás!", "#3C763D")
+                                self.after(0, lambda: messagebox.showinfo("AutoSIGA", "Todos os lançamentos foram importados e validados com 100% de sucesso pela conferência do robô!"))
+                            else:
+                                self.atualizar_status(self.label_status_siga, f"⚠️ Alerta: {len(pendentes)} itens não bateram no SIGA.", "#D9534F")
+                                self.after(0, lambda: messagebox.showwarning("AutoSIGA", f"O robô terminou de lançar, porém na verificação final constam {len(pendentes)} transações com divergência de centavos ou não registradas.\n\nVerifique o extrato manualmente!"))
+                                
+                        except Exception as e:
+                            logging.error(f"Erro na conferência final: {e}")
+                            self.atualizar_status(self.label_status_siga, f"✅ Lançamentos finalizados (sem prova real)", "#3C763D")
+                            
                     else:
                         self.atualizar_status(self.label_status_siga, "❌ Importação cancelada pelo usuário.", "#D9534F")
                     

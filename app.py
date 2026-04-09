@@ -1064,17 +1064,23 @@ class AutoSigaApp(ctk.CTk):
         tempo_decorrido = time.time() - tempo_inicio
         tempo_decorrido_str = f"{int(tempo_decorrido // 60)}m {int(tempo_decorrido % 60)}s"
         
-        # Matemáticas do Dólar do Tempo (Baseline de 60 segundos p/ lançamento manual do SIGA)
+        # Matemáticas do Dólar do Tempo (Baseline de 60 segundos p/ injeção + 6 segundos p/ cruzar cada linha do OFX)
         injecoes = getattr(self, "_qtd_injecoes_efetuadas", 0)
         siga_items = telemetria.get("siga_itens", 0)
         if siga_items == 0 and hasattr(self, "dados_processados") and "extrato_siga" in self.dados_processados:
              siga_items = len(self.dados_processados["extrato_siga"])
              
-        tempo_poupado_seg = injecoes * 60
+        ofx_items = telemetria.get("ofx_itens", 0)
+        
+        tempo_poupado_seg = (injecoes * 60) + (ofx_items * 6)
+        
         p_hrs = int(tempo_poupado_seg // 3600)
         p_min = int((tempo_poupado_seg % 3600) // 60)
-        tempo_poupado_str = f"{p_hrs}h {p_min}m" if p_hrs > 0 else f"{p_min} minutos"
-        if injecoes == 0: tempo_poupado_str = "0m (Apenas check)"
+        
+        if p_hrs > 0:
+            tempo_poupado_str = f"{p_hrs}h {p_min}m"
+        else:
+            tempo_poupado_str = f"{p_min} minutos"
 
         dash = ctk.CTkToplevel(self)
         dash.title("Relatório de Produtividade AutoSIGA 🚀")

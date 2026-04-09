@@ -369,7 +369,8 @@ class AutoSigaApp(ctk.CTk):
         janela = ctk.CTkToplevel(self)
         janela.title("Prévia de Importação")
         janela.geometry("650x500")
-        janela.transient(self) # Fica por cima
+        janela.transient(self) # Fica por cima da main
+        janela.attributes('-topmost', True) # Fica por cima do Windows/Navegador
         janela.grab_set() # Foca os cliques nela
         
         lbl_titulo = ctk.CTkLabel(janela, text=f"Lançamentos a Importar ({len(lancamentos)})", font=self.fonte_titulo, text_color=self.cor_azul_header)

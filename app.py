@@ -778,8 +778,11 @@ class AutoSigaApp(ctk.CTk):
                 input_programa.fill("TES01701")
                 time.sleep(0.5)
                 
+                # Remove notificações do sistema (modais flutuantes) para que não interceptem cliques
+                page.evaluate("document.querySelectorAll('.notificacao').forEach(e => e.remove());")
+                
                 # Clica na setinha verde e aguarda o carregamento
-                btn_executar.click()
+                btn_executar.click(force=True)
                 page.wait_for_load_state("domcontentloaded")
                 time.sleep(2) # Pequena pausa pra garantir que a tela Tesouraria "piscou e abriu"
                 

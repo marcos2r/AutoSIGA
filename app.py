@@ -999,7 +999,7 @@ class AutoSigaApp(ctk.CTk):
 
         # Palavras bloqueadas que categorizam lançamentos que NÃO são Ofertas
         # Rendimentos de aplicação, saques aplicados e dinheiro em caixa já lançado direto (depositos)
-        palavras_bloqueadas = ["APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "TRANSF", "RESG.", "DEP DINHEIRO"]
+        palavras_bloqueadas = ["APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "TRANSF", "RESG.", "DEP "]
 
         linhas_limpas = []
         qtd_descartadas = 0

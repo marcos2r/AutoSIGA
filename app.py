@@ -1088,7 +1088,7 @@ class AutoSigaApp(ctk.CTk):
 
         dash = ctk.CTkToplevel(self)
         dash.title("Relatório de Produtividade AutoSIGA 🚀")
-        dash.geometry("520x450")
+        dash.geometry("520x530")
         dash.transient(self)
         dash.attributes('-topmost', True)
         dash.grab_set()
@@ -1112,6 +1112,11 @@ class AutoSigaApp(ctk.CTk):
             ctk.CTkLabel(f, text=title, font=("Open Sans", 13), text_color="#555").pack(side="left")
             ctk.CTkLabel(f, text=value, font=("Open Sans", 16, "bold"), text_color=v_color).pack(side="right", padx=15)
 
+        conta_origem = "Desconhecida"
+        if hasattr(self, "dados_processados") and self.dados_processados:
+            conta_origem = self.dados_processados.get("conta_id", "Desconhecida")
+
+        card(frame_quadros, "🏦", "Conta Bancária", f"{conta_origem}", "#333")
         card(frame_quadros, "⏱", "Tempo do Robô", tempo_decorrido_str, "#333")
         card(frame_quadros, "⏳", "Tempo Poupado (Humano)", tempo_poupado_str, "#0275D8")
         card(frame_quadros, "🔍", "Dados Analisados (Linhas)", f"{telemetria.get('ofx_itens')} + {siga_items} SIGA", "#333")
@@ -1130,6 +1135,7 @@ class AutoSigaApp(ctk.CTk):
             h = dash.winfo_height()
             
             filepath = filedialog.asksaveasfilename(
+                parent=dash,
                 defaultextension=".jpg",
                 initialfile="Relatorio_Produtividade_AutoSIGA.jpg",
                 title="Exportar Relatório",

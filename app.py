@@ -174,6 +174,14 @@ class AutoSigaApp(ctk.CTk):
         logging.info(f"[STATUS] {texto}")
         self.after(0, lambda: label_widget.configure(text=texto, text_color=cor))
         
+    def exibir_mensagem_topo(self, tipo, titulo, mensagem):
+        self.attributes('-topmost', True)
+        if tipo == 'info':
+            messagebox.showinfo(titulo, mensagem, parent=self)
+        elif tipo == 'warning':
+            messagebox.showwarning(titulo, mensagem, parent=self)
+        self.attributes('-topmost', False)
+        
     def get_config_data(self):
         caminho = "config.json"
         if os.path.exists(caminho):
@@ -595,8 +603,7 @@ class AutoSigaApp(ctk.CTk):
                 time.sleep(1) # Aguarda o modal sumir completamente
                 
             self.atualizar_status(self.label_status_siga, f"✅ Finalizado! {len(lanc_ordenados)} registros injetados no SIGA.", "#3C763D")
-            from tkinter import messagebox
-            self.after(0, lambda: messagebox.showinfo("AutoSIGA", "Todos os lançamentos foram importados com sucesso!"))
+            self.after(0, lambda: self.exibir_mensagem_topo("info", "AutoSIGA", "Todos os lançamentos foram importados com sucesso!"))
             
         except Exception as e:
             logging.error(f"Erro inserindo lançamentos: {e}", exc_info=True)
@@ -925,10 +932,10 @@ class AutoSigaApp(ctk.CTk):
                             
                             if not pendentes:
                                 self.atualizar_status(self.label_status_siga, f"✅ Conferência 100%: Nenhum item para trás!", "#3C763D")
-                                self.after(0, lambda: messagebox.showinfo("AutoSIGA", "Todos os lançamentos foram importados e validados com 100% de sucesso pela conferência do robô!"))
+                                self.after(0, lambda: self.exibir_mensagem_topo("info", "AutoSIGA", "Todos os lançamentos foram importados e validados com 100% de sucesso pela conferência do robô!"))
                             else:
                                 self.atualizar_status(self.label_status_siga, f"⚠️ Alerta: {len(pendentes)} itens não bateram no SIGA.", "#D9534F")
-                                self.after(0, lambda: messagebox.showwarning("AutoSIGA", f"O robô terminou de lançar, porém na verificação final constam {len(pendentes)} transações com divergência de centavos ou não registradas.\n\nVerifique o extrato manualmente!"))
+                                self.after(0, lambda: self.exibir_mensagem_topo("warning", "AutoSIGA", f"O robô terminou de lançar, porém na verificação final constam {len(pendentes)} transações com divergência de centavos ou não registradas.\n\nVerifique o extrato manualmente!"))
                                 
                         except Exception as e:
                             logging.error(f"Erro na conferência final: {e}")
@@ -940,7 +947,7 @@ class AutoSigaApp(ctk.CTk):
                 else:
                     self.atualizar_status(self.label_status_siga, f"✅ Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
                     # Pop-up de OK direto para o usuário na interface principal
-                    self.after(0, lambda: messagebox.showinfo("AutoSIGA", "Todos os investimentos e resgates do OFX já estão conciliados no SIGA!\n\nNão há nada pendente para importar."))
+                    self.after(0, lambda: self.exibir_mensagem_topo("info", "AutoSIGA", "Todos os investimentos e resgates do OFX já estão conciliados no SIGA!\n\nNão há nada pendente para importar."))
                     
                 # Mantém o navegador aberto num loop
                 self.browser_aberto = True

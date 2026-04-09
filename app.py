@@ -602,14 +602,16 @@ class AutoSigaApp(ctk.CTk):
                     
                 time.sleep(1) # Aguarda o modal sumir completamente
                 
+            self._qtd_injecoes_efetuadas = len(lanc_ordenados)
             self.atualizar_status(self.label_status_siga, f"✅ Finalizado! {len(lanc_ordenados)} registros injetados no SIGA.", "#3C763D")
-            self.after(0, lambda: self.exibir_mensagem_topo("info", "AutoSIGA", "Todos os lançamentos foram importados com sucesso!"))
+            self.after(0, lambda: self.exibir_mensagem_topo("info", "AutoSIGA", "Todos os lançamentos foram importados com sucesso! O robô agora fará a validação."))
             
         except Exception as e:
             logging.error(f"Erro inserindo lançamentos: {e}", exc_info=True)
             self.atualizar_status(self.label_status_siga, f"Falha na inserção: {e}", "#D9534F")
 
     def iniciar_conexao_siga(self):
+        self._qtd_injecoes_efetuadas = 0
         nome_adm = self.entry_nome_adm.get().strip().upper()
         if not nome_adm:
             messagebox.showwarning("Atenção", "Por favor, digite o nome da administração (ex: SÃO PAULO).")
@@ -643,6 +645,13 @@ class AutoSigaApp(ctk.CTk):
 
     def _fluxo_automacao_siga(self):
         self.browser_aberto = True
+        tempo_inicio = time.time()
+        telemetria = {
+            "ofx_itens": len(self.dados_processados.get("transacoes", [])),
+            "siga_itens": 0,
+            "injecoes": 0,
+            "pendentes": 0
+        }
         try:
             from playwright.sync_api import sync_playwright
             
@@ -930,12 +939,15 @@ class AutoSigaApp(ctk.CTk):
                             self.dados_processados["extrato_siga"] = extrato_recente
                             pendentes = self.conciliar_extratos()
                             
+                            telemetria["siga_itens"] = len(extrato_recente)
+                            telemetria["pendentes"] = len(pendentes)
+                            
                             if not pendentes:
                                 self.atualizar_status(self.label_status_siga, f"✅ Conferência 100%: Nenhum item para trás!", "#3C763D")
-                                self.after(0, lambda: self.exibir_mensagem_topo("info", "AutoSIGA", "Todos os lançamentos foram importados e validados com 100% de sucesso pela conferência do robô!"))
                             else:
                                 self.atualizar_status(self.label_status_siga, f"⚠️ Alerta: {len(pendentes)} itens não bateram no SIGA.", "#D9534F")
-                                self.after(0, lambda: self.exibir_mensagem_topo("warning", "AutoSIGA", f"O robô terminou de lançar, porém na verificação final constam {len(pendentes)} transações com divergência de centavos ou não registradas.\n\nVerifique o extrato manualmente!"))
+                                
+                            self.after(0, lambda: self.mostrar_dashboard_produtividade(telemetria, tempo_inicio))
                                 
                         except Exception as e:
                             logging.error(f"Erro na conferência final: {e}")
@@ -946,8 +958,8 @@ class AutoSigaApp(ctk.CTk):
                     
                 else:
                     self.atualizar_status(self.label_status_siga, f"✅ Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
-                    # Pop-up de OK direto para o usuário na interface principal
-                    self.after(0, lambda: self.exibir_mensagem_topo("info", "AutoSIGA", "Todos os investimentos e resgates do OFX já estão conciliados no SIGA!\n\nNão há nada pendente para importar."))
+                    # Pop-up de Estatisticas
+                    self.after(0, lambda: self.mostrar_dashboard_produtividade(telemetria, tempo_inicio))
                     
                 # Mantém o navegador aberto num loop
                 self.browser_aberto = True
@@ -1044,6 +1056,59 @@ class AutoSigaApp(ctk.CTk):
             except Exception as e:
                 logging.error(f"Erro ao salvar arquivo TXT: {e}", exc_info=True)
                 messagebox.showerror("Erro de IO", f"Falha ao salvar o arquivo: {e}")
+
+    def mostrar_dashboard_produtividade(self, telemetria, tempo_inicio):
+        """
+        Exibe o resumo estatístico de performance e tempo economizado.
+        """
+        tempo_decorrido = time.time() - tempo_inicio
+        tempo_decorrido_str = f"{int(tempo_decorrido // 60)}m {int(tempo_decorrido % 60)}s"
+        
+        # Matemáticas do Dólar do Tempo (Baseline de 60 segundos p/ lançamento manual do SIGA)
+        injecoes = getattr(self, "_qtd_injecoes_efetuadas", 0)
+        siga_items = telemetria.get("siga_itens", 0)
+        if siga_items == 0 and hasattr(self, "dados_processados") and "extrato_siga" in self.dados_processados:
+             siga_items = len(self.dados_processados["extrato_siga"])
+             
+        tempo_poupado_seg = injecoes * 60
+        p_hrs = int(tempo_poupado_seg // 3600)
+        p_min = int((tempo_poupado_seg % 3600) // 60)
+        tempo_poupado_str = f"{p_hrs}h {p_min}m" if p_hrs > 0 else f"{p_min} minutos"
+        if injecoes == 0: tempo_poupado_str = "0m (Apenas check)"
+
+        dash = ctk.CTkToplevel(self)
+        dash.title("Relatório de Produtividade AutoSIGA 🚀")
+        dash.geometry("520x450")
+        dash.transient(self)
+        dash.attributes('-topmost', True)
+        dash.grab_set()
+
+        lbl_titulo = ctk.CTkLabel(dash, text="Relatório Finalizado", font=("Open Sans", 24, "bold"), text_color="#0275D8")
+        lbl_titulo.pack(pady=(20, 5))
+        
+        msg_sub = "100% Conciliado e Validado" if telemetria.get("pendentes", 0) == 0 else f"Atenção: Há {telemetria.get('pendentes')} lançamento(s) pendente(s)!"
+        cor_sub = "#5CB85C" if telemetria.get("pendentes", 0) == 0 else "#D9534F"
+        lbl_sub = ctk.CTkLabel(dash, text=msg_sub, font=("Open Sans", 14), text_color=cor_sub)
+        lbl_sub.pack()
+
+        frame_quadros = ctk.CTkFrame(dash, fg_color="transparent")
+        frame_quadros.pack(fill="both", expand=True, padx=30, pady=20)
+        
+        def card(parent, icon, title, value, v_color):
+            f = ctk.CTkFrame(parent, corner_radius=8, fg_color="#F8F9FA", border_width=1, border_color="#DDDDDD", height=80)
+            f.pack(fill="x", pady=5)
+            # Como Ctk não suporta muito layout de tabelas facinhos nativos sem grid complexo, vamos com pack left
+            ctk.CTkLabel(f, text=icon, font=("Open Sans", 26)).pack(side="left", padx=15)
+            ctk.CTkLabel(f, text=title, font=("Open Sans", 13), text_color="#555").pack(side="left")
+            ctk.CTkLabel(f, text=value, font=("Open Sans", 16, "bold"), text_color=v_color).pack(side="right", padx=15)
+
+        card(frame_quadros, "⏱", "Tempo do Robô", tempo_decorrido_str, "#333")
+        card(frame_quadros, "⏳", "Tempo Poupado (Humano)", tempo_poupado_str, "#0275D8")
+        card(frame_quadros, "🔍", "Dados Analisados (Linhas)", f"{telemetria.get('ofx_itens')} + {siga_items} SIGA", "#333")
+        card(frame_quadros, "🚀", "Transações Injetadas", f"{injecoes}", "#5CB85C")
+
+        ctk.CTkButton(dash, text="Incrível! Voltar ao Início", font=("Open Sans", 14, "bold"), height=40, command=dash.destroy).pack(pady=10)
+
 
 if __name__ == "__main__":
     app = AutoSigaApp()

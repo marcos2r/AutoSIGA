@@ -1088,7 +1088,7 @@ class AutoSigaApp(ctk.CTk):
 
         dash = ctk.CTkToplevel(self)
         dash.title("Relatório de Produtividade AutoSIGA 🚀")
-        dash.geometry("520x530")
+        dash.geometry("520x610")
         dash.transient(self)
         dash.attributes('-topmost', True)
         dash.grab_set()
@@ -1113,10 +1113,15 @@ class AutoSigaApp(ctk.CTk):
             ctk.CTkLabel(f, text=value, font=("Open Sans", 16, "bold"), text_color=v_color).pack(side="right", padx=15)
 
         conta_origem = "Desconhecida"
+        mes_competencia = "Desconhecido"
         if hasattr(self, "dados_processados") and self.dados_processados:
             conta_origem = self.dados_processados.get("conta_id", "Desconhecida")
+            data_final = self.dados_processados.get("data_final", "")
+            if len(data_final) == 10:
+                mes_competencia = data_final[3:]
 
         card(frame_quadros, "🏦", "Conta Bancária", f"{conta_origem}", "#333")
+        card(frame_quadros, "📅", "Mês/Ano", f"{mes_competencia}", "#333")
         card(frame_quadros, "⏱", "Tempo do Robô", tempo_decorrido_str, "#333")
         card(frame_quadros, "⏳", "Tempo Poupado (Humano)", tempo_poupado_str, "#0275D8")
         card(frame_quadros, "🔍", "Dados Analisados (Linhas)", f"{telemetria.get('ofx_itens')} + {siga_items} SIGA", "#333")

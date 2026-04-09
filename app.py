@@ -1124,7 +1124,7 @@ class AutoSigaApp(ctk.CTk):
         card(frame_quadros, "📅", "Mês/Ano", f"{mes_competencia}", "#333")
         card(frame_quadros, "⏱", "Tempo do Robô", tempo_decorrido_str, "#333")
         card(frame_quadros, "⏳", "Tempo Poupado (Humano)", tempo_poupado_str, "#0275D8")
-        card(frame_quadros, "🔍", "Dados Analisados (Linhas)", f"{telemetria.get('ofx_itens')} + {siga_items} SIGA", "#333")
+        card(frame_quadros, "🔍", "Dados Analisados (Itens)", f"{telemetria.get('ofx_itens')} OFX + {siga_items} SIGA", "#333")
         card(frame_quadros, "🚀", "Transações Injetadas", f"{injecoes}", "#5CB85C")
 
         frame_botoes = ctk.CTkFrame(dash, fg_color="transparent")

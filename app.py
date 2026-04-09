@@ -6,6 +6,10 @@ import time
 import json
 import logging
 from ofxparse import OfxParser
+try:
+    from PIL import ImageGrab
+except ImportError:
+    pass # Falha silenciosa amigável caso rode em ambiente modesto sem o PIL
 
 # Configuração de Logs Globais
 logging.basicConfig(
@@ -1113,7 +1117,44 @@ class AutoSigaApp(ctk.CTk):
         card(frame_quadros, "🔍", "Dados Analisados (Linhas)", f"{telemetria.get('ofx_itens')} + {siga_items} SIGA", "#333")
         card(frame_quadros, "🚀", "Transações Injetadas", f"{injecoes}", "#5CB85C")
 
-        ctk.CTkButton(dash, text="Incrível! Voltar ao Início", font=("Open Sans", 14, "bold"), height=40, command=dash.destroy).pack(pady=10)
+        frame_botoes = ctk.CTkFrame(dash, fg_color="transparent")
+        frame_botoes.pack(pady=10)
+
+        def exportar_img():
+            dash.update_idletasks()
+            dash.update()
+            # Pega coordernadas absolutas exatas da janela
+            x = dash.winfo_rootx()
+            y = dash.winfo_rooty()
+            w = dash.winfo_width()
+            h = dash.winfo_height()
+            
+            filepath = filedialog.asksaveasfilename(
+                defaultextension=".jpg",
+                initialfile="Relatorio_Produtividade_AutoSIGA.jpg",
+                title="Exportar Relatório",
+                filetypes=[("Imagem JPG", "*.jpg"), ("Documento PDF", "*.pdf"), ("Imagem PNG", "*.png")]
+            )
+            
+            if filepath:
+                try:
+                    img = ImageGrab.grab(bbox=(x, y, x+w, y+h), all_screens=True)
+                    # Converte pra RGB caso o user escolha PDF ou JPG (pois canais alpha estouram a gravação)
+                    if filepath.lower().endswith(".pdf") or filepath.lower().endswith(".jpg"):
+                        img = img.convert('RGB')
+                        
+                    img.save(filepath)
+                    dash.attributes('-topmost', False)
+                    messagebox.showinfo("Sucesso", f"Relatório exportado em:\n{filepath}")
+                    dash.attributes('-topmost', True)
+                except Exception as e:
+                    logging.error(f"Erro exportando relatório: {e}")
+                    dash.attributes('-topmost', False)
+                    messagebox.showerror("Erro de Exportação", f"Erro: {e}")
+                    dash.attributes('-topmost', True)
+
+        ctk.CTkButton(frame_botoes, text="💾 Exportar Gráfico", font=("Open Sans", 14), fg_color="#5CB85C", hover_color="#4CAE4C", height=40, command=exportar_img).pack(side="left", padx=10)
+        ctk.CTkButton(frame_botoes, text="Incrível! Voltar", font=("Open Sans", 14, "bold"), height=40, command=dash.destroy).pack(side="left", padx=10)
 
 
 if __name__ == "__main__":

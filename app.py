@@ -1068,7 +1068,7 @@ class AutoSigaApp(ctk.CTk):
         tempo_decorrido = time.time() - tempo_inicio
         tempo_decorrido_str = f"{int(tempo_decorrido // 60)}m {int(tempo_decorrido % 60)}s"
         
-        # Matemáticas do Dólar do Tempo (Baseline de 60 segundos p/ injeção + 6 segundos p/ cruzar cada linha do OFX)
+        # Matemáticas do Dólar do Tempo (Baseline de 120 segundos p/ injeção + 12 segundos p/ cruzar cada linha do OFX)
         injecoes = getattr(self, "_qtd_injecoes_efetuadas", 0)
         siga_items = telemetria.get("siga_itens", 0)
         if siga_items == 0 and hasattr(self, "dados_processados") and "extrato_siga" in self.dados_processados:
@@ -1076,7 +1076,7 @@ class AutoSigaApp(ctk.CTk):
              
         ofx_items = telemetria.get("ofx_itens", 0)
         
-        tempo_poupado_seg = (injecoes * 60) + (ofx_items * 6)
+        tempo_poupado_seg = (injecoes * 120) + (ofx_items * 12)
         
         p_hrs = int(tempo_poupado_seg // 3600)
         p_min = int((tempo_poupado_seg % 3600) // 60)

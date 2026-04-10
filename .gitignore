@@ -5,3 +5,9 @@ __pycache__/
 config.json
 siga_browser_data/
 autosiga.log
+
+# Diretórios de compilação do PyInstaller
+build/
+dist/
+*.spec
+*.exe

@@ -206,6 +206,14 @@ class AutoSigaApp(ctk.CTk):
         self.label_status_siga = ctk.CTkLabel(self.frame_card, text="Aguardando arquivo OFX...", font=self.fonte_padrao, text_color="#666666")
         self.label_status_siga.pack(pady=(0, 10))
 
+        # 6. Rodapé de Créditos e Versão
+        self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 10))
+        
+        texto_rodape = "AutoSIGA v1.0.0 | Desenvolvido na CCB Dourados/MS sob licença GNU GPL v3.0"
+        self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=("Open Sans", 11), text_color="#999999")
+        self.label_rodape.pack()
+
     def atualizar_status(self, label_widget, texto, cor="#666666"):
         """Atualiza componentes de label na UI de forma thread-safe.
         

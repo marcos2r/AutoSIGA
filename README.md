@@ -51,4 +51,4 @@ playwright install chromium
 O sistema evoluiu partindo de um layout monolítico do *Tkinter* feio p/ o *CustomTkinter* limpo com temas harmoniosos.
 Nenhuma mudança arquitetônica de conta foi feita fora do `.OFX`. E a regra de mapeamento de CC p/ SIGA se concentra totalmente no arquivo simples legível por fora `"config.json"`.
 
-**Maintainer(s):** Marcos | **Ferramenta Idealizada no Ambiente AntiGravity / Playwright (2026).**
+**Maintainer(s):** Marcos Ricardo Rodrigues

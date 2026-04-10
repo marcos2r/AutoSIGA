@@ -55,7 +55,7 @@ class AutoSigaApp(ctk.CTk):
         self.localidade_selecionada = ""
 
         # Configurações da Janela
-        self.title("AutoSIGA - Importação")
+        self.title("AutoSIGA v1.0.0 - Importação de Lançamentos")
         self.geometry("600x680")
         self.configure(fg_color="#F1F5F9") # Fundo cinza clarinho (estilo SIGA)
         
@@ -1245,7 +1245,7 @@ class AutoSigaApp(ctk.CTk):
             tempo_poupado_str = f"{p_min} minutos"
 
         dash = ctk.CTkToplevel(self)
-        dash.title("Relatório de Produtividade AutoSIGA 🚀")
+        dash.title("Relatório de Produtividade AutoSIGA v1.0.0 🚀")
         dash.geometry("520x610")
         dash.transient(self)
         dash.attributes('-topmost', True)

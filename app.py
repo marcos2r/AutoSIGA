@@ -1,3 +1,14 @@
+"""AutoSIGA - Motor de Automação de Tesouraria e Extratos (IT.TES.05)
+
+Este módulo fornece uma interface gráfica moderna utilizando CustomTkinter e um
+motor de navegação em background utilizando Playwright. Seu objetivo principal 
+é cruzar dados de extratos bancários no formato OFX com os registros online do 
+portal SIGA (Sistema de Informação e Gestão) das instituições, realizando
+infiltração de lançamentos ou validação com métricas de tempo economizado.
+
+Padrinho/Design Principal: Marcos Ricardo Rodrigues (2026).
+"""
+
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import os
@@ -23,7 +34,19 @@ logging.basicConfig(
 ctk.set_appearance_mode("light") 
 
 class AutoSigaApp(ctk.CTk):
+    """Aplicativo principal do AutoSIGA.
+    
+    Gerencia a interface do usuário (UI), controla a importação assíncrona
+    e comanda a interceptação do Playwright no portal do SIGA.
+    
+    Attributes:
+        dados_processados (dict): Guarda transações do OFX e metadados.
+        browser_aberto (bool): Loop flag do Playwright web.
+        localidade_selecionada (str): Administração e filial do login web atual.
+    """
+    
     def __init__(self):
+        """Inicializa a root window e desenha o esqueleto visual base."""
         super().__init__()
 
         # Mantenha referência aos dados
@@ -50,10 +73,20 @@ class AutoSigaApp(ctk.CTk):
         self.carregar_configuracoes()
 
     def on_closing(self):
+        """Manipula o evento de fechamento da janela principal.
+        
+        Garante que a flag de loop do Playwright seja interrompida antes
+        da destruição total do CustomTkinter para evitar deadlocks de thread.
+        """
         self.browser_aberto = False
         self.after(500, self.destroy)
 
     def construir_interface(self):
+        """Constrói os widgets e layouts (labels, botões, modais) da Root Window.
+        
+        Os blocos são divididos em containers de cabeçalho, card principal
+        e sub-cards de mapeamento contábil.
+        """
         # 1. Header estilo SIGA
         self.frame_header = ctk.CTkFrame(self, fg_color=self.cor_azul_header, corner_radius=0, height=70)
         self.frame_header.pack(fill="x", side="top")
@@ -174,11 +207,27 @@ class AutoSigaApp(ctk.CTk):
         self.label_status_siga.pack(pady=(0, 10))
 
     def atualizar_status(self, label_widget, texto, cor="#666666"):
-        # Atualiza a UI a partir de threads de forma segura
+        """Atualiza componentes de label na UI de forma thread-safe.
+        
+        Alimenta os logs físicos simultaneamente, servindo como ponte segura
+        para as mensagens originadas nas threads assíncronas do Playwright.
+        
+        Args:
+            label_widget (CTkLabel): O componente visual que herdará a string.
+            texto (str): Mensagem informativa atual.
+            cor (str, optional): Código Hexadecimal da fonte. Padrão '#666666'.
+        """
         logging.info(f"[STATUS] {texto}")
         self.after(0, lambda: label_widget.configure(text=texto, text_color=cor))
         
     def exibir_mensagem_topo(self, tipo, titulo, mensagem):
+        """Gatilho para exibição de Messagebox sobrepondo o browser.
+        
+        Args:
+            tipo (str): O nível do alerta ('info' ou 'warning').
+            titulo (str): Título principal do messagebox.
+            mensagem (str): Descrição completa do aviso.
+        """
         self.attributes('-topmost', True)
         if tipo == 'info':
             messagebox.showinfo(titulo, mensagem, parent=self)
@@ -187,6 +236,12 @@ class AutoSigaApp(ctk.CTk):
         self.attributes('-topmost', False)
         
     def get_config_data(self):
+        """Lê e retorna as configurações armazenadas no arquivo JSON local.
+        
+        Returns:
+            dict: Os dados de configuração lidos ou um dicionário vazio se o
+            arquivo não existir ou não puder ser parseado.
+        """
         caminho = "config.json"
         if os.path.exists(caminho):
             try:
@@ -197,6 +252,11 @@ class AutoSigaApp(ctk.CTk):
         return {}
 
     def save_config_data(self, data):
+        """Salva um objeto contendo configurações da aplicação no disco.
+        
+        Args:
+            data (dict): Metadados contábeis e preferências do usuário.
+        """
         caminho = "config.json"
         try:
             with open(caminho, 'w', encoding='utf-8') as f:
@@ -220,6 +280,15 @@ class AutoSigaApp(ctk.CTk):
         self.save_config_data(config)
 
     def carregar_mapeamento_conta(self, conta_id):
+        """Acopla na UI as contas do SIGA vinculadas ao arquivo OFX que foi lido.
+        
+        Se a respectiva conta OFX foi injetada no passado, o JSON de
+        configurações já trará prontas as contas "corrente" e "aplicação"
+        devolvendo-as ao formulário visual.
+        
+        Args:
+            conta_id (str): O ID limpo roteador do banco abstraído do OFX.
+        """
         self.entry_conta_corrente.configure(state="normal")
         self.entry_conta_aplicacao.configure(state="normal")
         self.btn_limpar_conta.configure(state="normal")
@@ -263,6 +332,7 @@ class AutoSigaApp(ctk.CTk):
         messagebox.showinfo("Limpeza", "O lembrete dessas contas apagadas.")
 
     def selecionar_arquivo(self):
+        """Abre a caixa de diálogo nativa do SO local para o usuário buscar o extrato."""
         caminho_arquivo = filedialog.askopenfilename(
             title="Selecione o arquivo do extrato",
             filetypes=[("Arquivos OFX", "*.ofx"), ("Todos os Arquivos", "*.*")]
@@ -274,6 +344,16 @@ class AutoSigaApp(ctk.CTk):
             self.processar_ofx(caminho_arquivo)
 
     def processar_ofx(self, caminho):
+        """Lê o arquivo físico e indexa os dados na propriedade principal abstrata.
+        
+        Esta função utiliza `ofxparse` para higienizar sintaxes falhas do arquivo
+        feitas pelo banco de origem, padronizando um dicionário imutável e seguro
+        no objeto parent para ser consumido nas lógicas da documentação TXT e 
+        Injeção Online.
+        
+        Args:
+            caminho (str): Diretório absoluto ou relativo local para o .ofx.
+        """
         try:
             with open(caminho, 'rb') as f:
                 ofx = OfxParser.parse(f)
@@ -314,6 +394,16 @@ class AutoSigaApp(ctk.CTk):
             messagebox.showerror("Erro de Leitura", f"Não foi possível processar o arquivo OFX.\n\nDetalhes:\n{e}")
 
     def conciliar_extratos(self):
+        """Cruza os dados do Banco (.OFX) com os dados Web (SIGA) para encontrar pendências.
+        
+        Executa uma checagem reversa bidirecional, avaliando entradas positivas
+        e saídas negativas, comparando as datas e tolerando diferenças de ponto
+        flutuante de até 1 centavo.
+        
+        Returns:
+            list[dict]: Array contendo as transações exclusivas do banco
+            que não foram validadas no extrato atual do SIGA.
+        """
         if not self.dados_processados or "extrato_siga" not in self.dados_processados:
             return []
             
@@ -378,6 +468,14 @@ class AutoSigaApp(ctk.CTk):
         return a_lancar
 
     def mostrar_janela_lancamentos(self, lancamentos):
+        """Renderiza o modal Toplevel listando as pendências iminentes pré-injeção.
+        
+        Desdobra na tela todos os lançamentos que o robô fará no formato de
+        cartões para aprovação humana final antes de acionar gatilho de rede.
+        
+        Args:
+            lancamentos (list): As transações pendentes de fato extraídas de conciliar_extratos().
+        """
         janela = ctk.CTkToplevel(self)
         janela.title("Prévia de Importação")
         janela.geometry("650x500")
@@ -427,19 +525,38 @@ class AutoSigaApp(ctk.CTk):
         janela.protocol("WM_DELETE_WINDOW", lambda: self.cancelar_lancamentos(janela))
 
     def autorizar_lancamentos(self, janela):
+        """Dispara o gatilho de aceitação do motor após o ok humano.
+        
+        Args:
+            janela (CTkToplevel): Instância do modal a ser destruída.
+        """
         self.autorizou_importacao = True
         self.esperando_autorizacao = False
         janela.destroy()
         
     def cancelar_lancamentos(self, janela):
+        """Dispara a trava de segurança abortando a injeção Web.
+        
+        Args:
+            janela (CTkToplevel): Instância do modal visual a ser fechada.
+        """
         self.autorizou_importacao = False
         self.esperando_autorizacao = False
         janela.destroy()
 
     def selecionar_select2(self, page, select_id, termo_busca, dropdown_is_ajax=True):
-        """
-        Interage com os componentes Select2 do SIGA.
-        Como o HTML muda muito, foca em clicar na wrapper e digitar no input.
+        """Hack utilitário para forçar a interação em listas suspensas (Select2) do portal SIGA.
+        
+        Devido a arquitetura do Select2 mascarar inputs reais invisíveis, o
+        Playwright falha em seleções simples. Este método bypassa localizando a box
+        pai, aguardando o input temporário (.select2-input), digitando e esperando
+        o retorno da rede (AJAX).
+        
+        Args:
+            page (playwright.sync_api.Page): Instância da aba atual rodando.
+            select_id (str): ID do elemento Select pai na DOM.
+            termo_busca (str): String com código conta bancária ou histórico.
+            dropdown_is_ajax (bool, optional): Tolerância a delay de requisição do backend online.
         """
         try:
             # Container wrapper q abriga o select2
@@ -472,8 +589,16 @@ class AutoSigaApp(ctk.CTk):
             logging.error(f"Falha ao usar Select2 {select_id} para o termo {termo_busca}: {e}")
 
     def inserir_lancamentos_siga(self, page, lancamentos):
-        """
-        Executa os cliques para incluir Aplicações e Resgates na tela TES01704.
+        """Preenche autonomamente os formulários contábeis para injeção final.
+        
+        Módulo crítico que acessa a URL TES01704 (Resgate e Aplicações). Opera 
+        fazendo a triagem para determinar a matriz Histórica de Destino/Origem
+        (002/031). Envia a pre-ordem 'Salvar e Novo' consecutivamente para emular
+        alta rotatividade nativa do funcionário.
+        
+        Args:
+            page (playwright.sync_api.Page): Página ativa no navegador em background.
+            lancamentos (list[dict]): A lista consolidada final expurgada de pendências para injeção.
         """
         try:
             # Ordenação exigida pelo usuário: Resgates (Valores Positivos) PRIMEIRO, Aplicações (Negativos) DEPOIS.
@@ -615,6 +740,13 @@ class AutoSigaApp(ctk.CTk):
             self.atualizar_status(self.label_status_siga, f"Falha na inserção: {e}", "#D9534F")
 
     def iniciar_conexao_siga(self):
+        """Avalia requisições do formulário e engatilha a automação assíncrona.
+        
+        Persiste as contas bancárias para a próxima sessão, bloqueia inteiramente
+        a interferência da interface nativa (botões ficam disable) e joga a
+        responsabilidade pesada para uma nova Thread de processo, permitindo que
+        a UI do Tkinter não congele (Not Responding) durante as operações online.
+        """
         self._qtd_injecoes_efetuadas = 0
         nome_adm = self.entry_nome_adm.get().strip().upper()
         if not nome_adm:
@@ -648,6 +780,18 @@ class AutoSigaApp(ctk.CTk):
         threading.Thread(target=self._fluxo_automacao_siga, daemon=True).start()
 
     def _fluxo_automacao_siga(self):
+        """Core lógico da conexão e manipulação web usando a infraestrutura do Chromium.
+        
+        Essa é a rotina bruta de automação disparada pela Thread do iniciar_conexao.
+        Suas responsabilidades sequenciais incluem:
+        1. Lançar o Playwright Persistente (para reaproveitar sessão logada/cookies).
+        2. Avaliar se o portal bloqueou ou requisitou login.
+        3. Fazer Bypass das travas burocráticas (Selecionar Localidade/Filial).
+        4. Excluir os Banners informativos em z-index alto que atrapalham cliques.
+        5. Raspar e conciliar a tabela da `TES01704` contra os dados internos `dados_ofx`.
+        6. Evocar `mostrar_janela_lancamentos` se houver divergências e aguardar liberação.
+        7. Direcionar os comandos de injeção (`inserir_lancamentos_siga`).
+        """
         self.browser_aberto = True
         tempo_inicio = time.time()
         telemetria = {
@@ -984,9 +1128,16 @@ class AutoSigaApp(ctk.CTk):
             self.after(0, lambda: self.botao_conectar.configure(state="normal"))
 
     def gerar_txt_ofertas(self):
-        """
-        Extrai transações positivas do OFX, aplica regras de higienização
-        e exporta arquivo .TXT limpo e pronto de captação (IT.TES.05)
+        """Compilador léxico em conformidade com as regras IT.TES.05.
+        
+        Realiza a leitura da lista nativa de transações OFX carregada, itera
+        sobre as descrições e expurga registros usando uma cartilha de Blacklist
+        (Transferências inter-contas, resgates, devoluções, saques). O que sobra,
+        é formatado em separador ';' padrão e salvo `.txt` fisicamente.
+        
+        Raises:
+            messagebox: Exceção visual caso não haja lista instanciada
+            ou se 100% da lista foi vetada pelas tags bloqueadas.
         """
         if not hasattr(self, "dados_processados") or not self.dados_processados:
             messagebox.showerror("Erro", "Nenhum arquivo processado.")
@@ -1062,8 +1213,15 @@ class AutoSigaApp(ctk.CTk):
                 messagebox.showerror("Erro de IO", f"Falha ao salvar o arquivo: {e}")
 
     def mostrar_dashboard_produtividade(self, telemetria, tempo_inicio):
-        """
-        Exibe o resumo estatístico de performance e tempo economizado.
+        """Constrói e renderiza a tela matemática de relatórios de Ganho/Poupados.
+        
+        Engenharia visual final do ciclo de processamento web. Compara estaticamente
+        as cotas de injeção realizadas x validações de malha na tabela com uma base
+        humana otimista (Humano Biônico) estipulada em ~120s e ~12s respec.
+        
+        Args:
+            telemetria (dict): Dados do lote contendo contagens OFX, SIGA e Err.
+            tempo_inicio (float): Carimbo estático de Unix time capturado no start.
         """
         tempo_decorrido = time.time() - tempo_inicio
         tempo_decorrido_str = f"{int(tempo_decorrido // 60)}m {int(tempo_decorrido % 60)}s"

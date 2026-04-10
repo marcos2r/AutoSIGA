@@ -52,3 +52,13 @@ O sistema evoluiu partindo de um layout monolítico do *Tkinter* feio p/ o *Cust
 Nenhuma mudança arquitetônica de conta foi feita fora do `.OFX`. E a regra de mapeamento de CC p/ SIGA se concentra totalmente no arquivo simples legível por fora `"config.json"`.
 
 **Maintainer(s):** Marcos Ricardo Rodrigues
+
+---
+
+## ⚖️ Licenciamento e Isenção de Garantia
+
+Este projeto está devidamente protegido sob a poderosa **GNU GPL v3.0**. Ele pode ser compartilhado gratuitamente, evoluído localmente ou estudado pela irmandade cooperativa. É expressamente **VEDADA** a sua comercialização de código fechado ("Closed Source Proprietary") ou derivações visando lucro.
+
+> [!WARNING]
+> **Aviso de Isenção de Garantia (As-Is):** 
+> O *AutoSIGA* é entregue na configuração *"no estado em que se encontra"* (As-Is), sem garantias implicadas de adequação total às instabilidades ou futuras atualizações visuais do portal governante/institucional web. O desenvolvedor originário (`Marcos Ricardo Rodrigues`) fica permanentemente **isento de qualquer responsabilidade fiscal, contábil ou penal** advinda do intermédio dos processamentos, cruzamentos de dados ou importações. Cabe ao operador (Usuário Final) possuir prerrogativa administrativa e atestar pela Prova Real ou relatórios manuais se a automação espelhou fielmente os saldos da Tesouraria Local.

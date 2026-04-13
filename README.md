@@ -21,7 +21,7 @@ O robô extrai todas as informações de Data, Histórico, Valor e Complemento (
 ### 2. O Dólar do Tempo (Dashboard de Rendimento)
 A cada execução finalizada ou relatório verificado sem alterações na malha, o sistema exibe um relatório visual elegante na tela focado em ganhos corporativos.
 - **Transações Injetadas:** Número absoluto do lote processado no Banco de Dados.
-- **Tempo Ocioso Removido da Máquina Humana:** Adotamos métricas justas (120s por preenchimento de modal e click online, mais 12s de checagem mental humana base a cada linha que o olho cruzaria PDF vs Tela). O robô emite estimativas precisas de Tempo Poupado (*Ex: 30 Lançamentos evitam 1h 12m na cadeira*).
+- **Tempo Ocioso Removido da Máquina Humana:** Adotamos métricas justas (60s por preenchimento de modal e click online, mais 5s de checagem mental humana base a cada linha que o olho cruzaria PDF vs Tela). O robô emite estimativas precisas de Tempo Poupado (*Ex: 30 Lançamentos evitam +30m na cadeira*).
 - **Exportação do Gráfico:** Com a integração local usando *Pillow*, o robô recorta a precisão da tela visual desse resumo e exporta um arquivo `.JPG`, `.PNG` ou `.PDF` apresentável para a auditoria ou o WhatsApp rápido da coordenação.
 
 ### 3. Regras de Negócio e Conformidade Inflexíveis

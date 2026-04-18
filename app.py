@@ -55,7 +55,7 @@ class AutoSigaApp(ctk.CTk):
         self.localidade_selecionada = ""
 
         # Configurações da Janela
-        self.title("AutoSIGA v1.0.1 - Importação de Lançamentos")
+        self.title("AutoSIGA v1.0.3 - Importação de Lançamentos")
         self.geometry("600x680")
         self.configure(fg_color="#F1F5F9") # Fundo cinza clarinho (estilo SIGA)
         
@@ -210,7 +210,7 @@ class AutoSigaApp(ctk.CTk):
         self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 10))
         
-        texto_rodape = "AutoSIGA v1.0.1 | Desenvolvido na CCB Dourados/MS sob licença GNU GPL v3.0"
+        texto_rodape = "AutoSIGA v1.0.3 | Desenvolvido na CCB Dourados/MS sob licença GNU GPL v3.0"
         self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=("Open Sans", 11), text_color="#999999")
         self.label_rodape.pack()
 
@@ -1159,7 +1159,7 @@ class AutoSigaApp(ctk.CTk):
 
         # Palavras bloqueadas que categorizam lançamentos que NÃO são Ofertas
         # Rendimentos de aplicação, saques aplicados e dinheiro em caixa já lançado direto (depositos)
-        palavras_bloqueadas = ["APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "TRANSF", "RESG.", "DEP "]
+        palavras_bloqueadas = ["APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "RESG.", "DEP ", "CONGREGACAO"]
 
         linhas_limpas = []
         qtd_descartadas = 0
@@ -1254,7 +1254,7 @@ class AutoSigaApp(ctk.CTk):
             tempo_poupado_str = f"{p_min} minutos"
 
         dash = ctk.CTkToplevel(self)
-        dash.title("Relatório de Produtividade AutoSIGA v1.0.1 🚀")
+        dash.title("Relatório de Produtividade AutoSIGA v1.0.3 🚀")
         dash.geometry("520x610")
         dash.transient(self)
         dash.attributes('-topmost', True)

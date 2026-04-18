@@ -1205,8 +1205,8 @@ class AutoSigaApp(ctk.CTk):
         if filepath:
             try:
                 # SIGA em geral aceita bem ISO-8859-1 (Latin1) ou UTF-8 nativo em importador web ASP.
-                # Como extratos OFX costumam trazer acentos mistos, usaremos utf-8
-                with open(filepath, 'w', encoding='utf-8') as f:
+                # Para evitar falhas de leitura no Bloco de Notas ou Excel do Windows, aplicamos utf-8-sig (com BOM).
+                with open(filepath, 'w', encoding='utf-8-sig') as f:
                     for l in linhas_limpas:
                         f.write(l + "\n")
                 

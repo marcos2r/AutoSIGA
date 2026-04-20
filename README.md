@@ -22,9 +22,9 @@ A conciliação bancária entre múltiplas jurisdições (como a de Administraç
 Se você realizar edições, gerar a compilação local (.exe) exige certificar-se que os módulos de interface rodem lisos:
 ```powershell
 # Usar o ambiente virtual ativo (venv)
-pyinstaller --noconfirm --onedir --windowed --add-data "venv/Lib/site-packages/customtkinter;customtkinter/" app.py
+pyinstaller --name AutoSiga --noconfirm --onedir --windowed --add-data "venv/Lib/site-packages/customtkinter;customtkinter/" app.py
 ```
-> O executável será salvo dentro de `dist/app/app.exe`.
+> O executável será salvo dentro de `dist/AutoSiga/AutoSiga.exe`.
 
 ## 📜 Licença e Origem
 Desenvolvido incansavelmente pela equipe técnica autônoma da **CCB Dourados/MS**, garantindo o sigilo, fidelidade de roteamento IP interno e segurança máxima.

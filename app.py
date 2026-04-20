@@ -55,7 +55,7 @@ class AutoSigaApp(ctk.CTk):
         self.localidade_selecionada = ""
 
         # Configurações da Janela
-        self.title("AutoSIGA v1.0.3 - Importação de Lançamentos")
+        self.title("AutoSIGA v1.1.0 - Importação de Lançamentos")
         self.geometry("600x680")
         self.configure(fg_color="#F1F5F9") # Fundo cinza clarinho (estilo SIGA)
         
@@ -138,7 +138,7 @@ class AutoSigaApp(ctk.CTk):
         self.label_localidade = ctk.CTkLabel(self.frame_localidade, text="Localidade:", font=self.fonte_padrao, text_color="#333333")
         self.label_localidade.grid(row=0, column=0, padx=5)
 
-        self.combo_tipo_adm = ctk.CTkComboBox(self.frame_localidade, values=["ADM", "DR", "PIA"], width=70)
+        self.combo_tipo_adm = ctk.CTkComboBox(self.frame_localidade, values=["ADM", "DR", "PIA"], width=70, command=self._ao_alterar_localidade)
         self.combo_tipo_adm.grid(row=0, column=1, padx=5)
         
         self.label_hifen = ctk.CTkLabel(self.frame_localidade, text="-", font=self.fonte_padrao, text_color="#333333")
@@ -146,6 +146,7 @@ class AutoSigaApp(ctk.CTk):
 
         self.entry_nome_adm = ctk.CTkEntry(self.frame_localidade, placeholder_text="Ex: SÃO PAULO", width=180)
         self.entry_nome_adm.grid(row=0, column=3, padx=5)
+        self.entry_nome_adm.bind("<FocusOut>", lambda e: self._ao_alterar_localidade())
         
         # --- Configuração das Contas SIGA ---
         self.frame_contas = ctk.CTkFrame(self.frame_card, fg_color="transparent")
@@ -210,7 +211,7 @@ class AutoSigaApp(ctk.CTk):
         self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 10))
         
-        texto_rodape = "AutoSIGA v1.0.3 | Desenvolvido na CCB Dourados/MS sob licença GNU GPL v3.0"
+        texto_rodape = "AutoSIGA v1.1.0 | Desenvolvido na CCB Dourados/MS sob licença GNU GPL v3.0"
         self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=("Open Sans", 11), text_color="#999999")
         self.label_rodape.pack()
 
@@ -287,6 +288,11 @@ class AutoSigaApp(ctk.CTk):
         config["nome_adm"] = nome_adm
         self.save_config_data(config)
 
+    def _ao_alterar_localidade(self, *args):
+        # Disparado quando o usuário altera o dropdown de ADM/PIA ou nome de adm.
+        if self.dados_processados and "conta_id" in self.dados_processados:
+            self.carregar_mapeamento_conta(self.dados_processados["conta_id"])
+
     def carregar_mapeamento_conta(self, conta_id):
         """Acopla na UI as contas do SIGA vinculadas ao arquivo OFX que foi lido.
         
@@ -305,7 +311,40 @@ class AutoSigaApp(ctk.CTk):
         
         config = self.get_config_data()
         mapeamentos = config.get("contas_mapeadas", {})
-        dados = mapeamentos.get(conta_id, {"corrente": "", "aplicacao": ""})
+        
+        # Gera a super-chave baseada na localidade atual
+        tipo_adm = self.combo_tipo_adm.get().strip().upper()
+        nome_adm = self.entry_nome_adm.get().strip().upper()
+        chave = f"{tipo_adm}-{nome_adm}-{conta_id}"
+        
+        # MÁGICA: PROCURA REVERSA E AUTO-PREENCHIMENTO
+        # Se a conta_id lida no OFX não pertencer ao Tipo_Adm selecionado na tela, o robô procura em seu DB
+        # a quem ela pertence. Ex: Usuário está na ADM, mas sobe um OFX da PIA. O robô muda a chave de ADM pra PIA sozinho!
+        if chave not in mapeamentos:
+            for db_chave in mapeamentos.keys():
+                if db_chave.endswith(f"-{conta_id}"):
+                    partes = db_chave.split('-')
+                    if len(partes) >= 3:
+                        novo_tipo = partes[0]
+                        novo_nome = "-".join(partes[1:-1])
+                        
+                        # Vira a chave do combo_box na tela para o usuário ver
+                        self.combo_tipo_adm.set(novo_tipo)
+                        self.entry_nome_adm.delete(0, 'end')
+                        self.entry_nome_adm.insert(0, novo_nome)
+                        
+                        # Força o save do config local com a nova preferência recém assumida
+                        config["tipo_adm"] = novo_tipo
+                        config["nome_adm"] = novo_nome
+                        self.save_config_data(config)
+                        
+                        # Atualiza a chave corrente
+                        chave = db_chave
+                        break
+
+        dados = mapeamentos.get(chave)
+        if not dados: # Fallback de segurança para configurações de versões anteriores
+            dados = mapeamentos.get(conta_id, {"corrente": "", "aplicacao": ""})
         
         self.entry_conta_corrente.delete(0, 'end')
         self.entry_conta_corrente.insert(0, dados.get("corrente", ""))
@@ -318,7 +357,11 @@ class AutoSigaApp(ctk.CTk):
         if "contas_mapeadas" not in config:
             config["contas_mapeadas"] = {}
             
-        config["contas_mapeadas"][conta_id] = {
+        tipo_adm = self.combo_tipo_adm.get().upper()
+        nome_adm = self.entry_nome_adm.get().strip().upper()
+        chave = f"{tipo_adm}-{nome_adm}-{conta_id}"
+            
+        config["contas_mapeadas"][chave] = {
             "corrente": corrente,
             "aplicacao": aplicacao
         }
@@ -333,11 +376,15 @@ class AutoSigaApp(ctk.CTk):
         self.entry_conta_aplicacao.delete(0, 'end')
         
         config = self.get_config_data()
-        if "contas_mapeadas" in config and conta_id in config["contas_mapeadas"]:
-            del config["contas_mapeadas"][conta_id]
+        tipo_adm = self.combo_tipo_adm.get().upper()
+        nome_adm = self.entry_nome_adm.get().strip().upper()
+        chave = f"{tipo_adm}-{nome_adm}-{conta_id}"
+        
+        if "contas_mapeadas" in config and chave in config["contas_mapeadas"]:
+            del config["contas_mapeadas"][chave]
             self.save_config_data(config)
             
-        messagebox.showinfo("Limpeza", "O lembrete dessas contas apagadas.")
+        messagebox.showinfo("Limpeza", "O lembrete das contas desta localidade foi apagado.")
 
     def selecionar_arquivo(self):
         """Abre a caixa de diálogo nativa do SO local para o usuário buscar o extrato."""
@@ -420,22 +467,33 @@ class AutoSigaApp(ctk.CTk):
         
         siga_txs = []
         for entry in siga_txs_raw:
-            val_str = entry.get('entrada', '-').strip()
+            ent_str = entry.get('entrada', '').strip()
+            sai_str = entry.get('saida', '').strip()
+            
+            # Limpa marcadores nulos do HTML manual ou preenchido
+            if ent_str in ['-', '', '0,00', '0.00']: ent_str = None
+            if sai_str in ['-', '', '0,00', '0.00']: sai_str = None
+            
             is_saida = False
-            if val_str == '-':
-                val_str = entry.get('saida', '-').strip()
+            val_str = None
+            
+            if ent_str:
+                val_str = ent_str
+            elif sai_str:
+                val_str = sai_str
                 is_saida = True
                 
-            if not val_str or val_str == '-':
+            if not val_str:
                 continue
                 
             try:
-                # Transforma 3.000,00 ou 150,00 em float
-                val_float = float(val_str.replace('.', '').replace(',', '.'))
+                # Transforma 3.000,00 ou -150,00 em float
+                val_str_limpo = val_str.replace('.', '').replace(',', '.')
+                # Adiciona prevenção extra caso SIGA apresente números negativos nativamente na string
+                val_float = abs(float(val_str_limpo))
+                
                 if is_saida:
-                    val_float = -abs(val_float)
-                else:
-                    val_float = abs(val_float)
+                    val_float = -val_float
                     
                 siga_txs.append({
                     'data': entry.get('data', '').strip(),
@@ -729,15 +787,18 @@ class AutoSigaApp(ctk.CTk):
                 page.wait_for_load_state("domcontentloaded")
                 
                 # O SIGA joga um modal de "Informação: armazenada com sucesso!"
+                # Aumentado o timeout drasticamente, pois servidores do SIGA podem engasgar com múltiplas requisições (Salvar e Novo).
                 try:
-                    btn_sucesso = page.locator('.bootbox button:has-text("Ok"), .bootbox button[data-bb-handler="botao"]').first
-                    btn_sucesso.wait_for(state="visible", timeout=6000)
-                    btn_sucesso.click()
+                    # Procura por qualquer botão 'Ok' dentro de uma modal Bootstrap que esteja ativamente aberta na tela (.in)
+                    btn_sucesso = page.locator('.modal.in button:text-matches("Ok", "i")').first
+                    btn_sucesso.wait_for(state="attached", timeout=25000)
+                    time.sleep(1) # Aguarda a animação fade
+                    btn_sucesso.evaluate("el => el.click()") # Javascript Click perfura o backdrop bugado
                 except Exception:
-                    # Se salvou de forma transparente sem popup, apenas segue
+                    # Se salvou de forma transparente sem popup, apenas segue (raro no SIGA moderno, mas legacy safe)
                     pass
                     
-                time.sleep(1) # Aguarda o modal sumir completamente
+                time.sleep(1.5) # Aguarda o modal sumir completamente e o DOM se re-estabilizar para a proxima iteracao do loop
                 
             self._qtd_injecoes_efetuadas = len(lanc_ordenados)
             self.atualizar_status(self.label_status_siga, f"✅ Finalizado! {len(lanc_ordenados)} registros injetados no SIGA.", "#3C763D")
@@ -782,6 +843,15 @@ class AutoSigaApp(ctk.CTk):
         self.dados_processados["conta_siga_aplicacao"] = aplicacao
         
         self.botao_conectar.configure(state="disabled")
+        
+        # Blindagem: se o botão foi apertado de novo mas já existia um navegador aberto de outra run pendurado
+        if getattr(self, 'browser_aberto', False):
+            self.atualizar_status(self.label_status_siga, "Encerrando janela antiga do SIGA...", "#F89406")
+            self.browser_aberto = False
+            # Pausa pro Playwright fechar as portas de background do Chromium gracefulmente
+            self.update()
+            time.sleep(2)
+            
         self.atualizar_status(self.label_status_siga, f"Abrindo SIGA para {self.localidade_selecionada}...", "#F89406")
         
         # Inicia a automação em uma thread separada para não travar a interface
@@ -863,82 +933,88 @@ class AutoSigaApp(ctk.CTk):
                     precisa_fazer_login = False
                 
                 if precisa_fazer_login:
-                    self.atualizar_status(self.label_status_siga, f"Sessão não detectada.\nFaça o login na janela aberta...", "#F89406")
+                    self.atualizar_status(self.label_status_siga, f"Login Mestre de Hoje: não esqueça de marcar a caixa 'Lembrar me' para a próxima!", "#D9534F")
+                    
+                    # Tenta ticar ativamente a caixinha de Lembrar a Senha para gerar o Cookie longo pro Chromium
+                    try:
+                        page.evaluate("() => { let cbs = document.querySelectorAll('input[type=\"checkbox\"]'); for(let cb of cbs) { if(cb.parentElement.innerText.match(/Lembrar/i) || cb.id.indexOf('lembr') > -1) { cb.checked = true; } } }")
+                    except:
+                        pass
+                        
                     # Congela o loop até que a box de senha não seja mais visível na página (ex: clicou em Entrar)
                     senha_locator.wait_for(state="hidden", timeout=0)
                 
                 # A partir desse ponto sabemos que o sistema autenticou e trocou de tela
                 self.atualizar_status(self.label_status_siga, f"Sessão Validada. Verificando localidade...", "#428BCA")
                 
-                # Aguarda o elemento de perfil carregar no menu superior (indica que a home carregou por completo)
-                page.locator('.informacao-local').first.wait_for(state="visible", timeout=15000)
-                
-                # Encontra todas as localidades no dropdown (mesmo oculto)
+                # O painel renderizado pode estar em resolução menor acionando o hidden-xs do Bootstrap.
+                # Portanto, pulamos a checagem visual e aguardamos direto a estrutura de localidades ser anexada ao DOM.
                 locais_locator = page.locator('ul#dropdown_localidades > li')
-                locais_locator.first.wait_for(state="attached", timeout=10000)
+                self.atualizar_status(self.label_status_siga, f"Ajustando configurações de Localidade e Mês de Trabalho...", "#428BCA")
                 
-                quantidade = locais_locator.count()
-                precisa_trocar = True
-                linha_alvo = None
+                mes_ano_alvo = self.dados_processados.get("data_final", "")
+                if len(mes_ano_alvo) >= 10:
+                    mes_ano_alvo = mes_ano_alvo[3:] # Extrai MM/AAAA
+                else:
+                    mes_ano_alvo = ""
+
+                # Aciona a barra superior usando caminho natural
+                page.locator('#a_competencia').click()
+                time.sleep(1)
+                
+                # Clica na âncora visual para invocar o painel de Locais/Meses
+                page.locator('a.showModal:has-text("Outros Meses")').click()
+                
+                # Exige que o robô aguarde o botão principal da modal nascer, blindando contra assincronismos
+                btn_confirmar = page.locator('form.modal-form button[type="submit"]:has-text("Confirmar")').first
+                btn_confirmar.wait_for(state="attached", timeout=15000)
+                time.sleep(1.5) # Tempo extra para o efeito "Fade IN" do Bootstrap renderizar a modal visualmente
                 
                 tipo_alvo = self.combo_tipo_adm.get().upper()
                 nome_alvo = self.entry_nome_adm.get().strip().upper()
                 
-                for i in range(quantidade):
-                    li = locais_locator.nth(i)
-                    texto_li = li.text_content().upper()
+                # Injeta a seleção da Localidade e da Competência nativamente nos selects embutidos e ocultos do Select2 do modal
+                js_select2 = f"""() => {{
+                    // 1. Localidade
+                    var selectLoc = jQuery('select[name="f_estabelecimento"]');
+                    if (selectLoc.length > 0) {{
+                        var optLoc = selectLoc.find('option').filter(function() {{
+                            var text = jQuery(this).text().toUpperCase();
+                            return text.indexOf("{tipo_alvo}") > -1 && text.indexOf("{nome_alvo}") > -1;
+                        }});
+                        if (optLoc.length > 0) {{
+                            selectLoc.val(optLoc.val()).trigger('change');
+                        }}
+                    }}
                     
-                    if tipo_alvo in texto_li and nome_alvo in texto_li:
-                        linha_alvo = li
-                        classe_li = li.get_attribute("class") or ""
-                        if "active" in classe_li.lower():
-                            precisa_trocar = False
-                        break
-                        
-                if not linha_alvo:
-                    # Se não achou na lista
-                    self.atualizar_status(self.label_status_siga, f"⚠️ Localidade '{self.localidade_selecionada}' não encontrada no seu menu!", "#D9534F")
-                else:
-                    if precisa_trocar:
-                        self.atualizar_status(self.label_status_siga, f"Trocando perfil do SIGA para {self.localidade_selecionada}...", "#F89406")
-                        # Usa o JS nativo para forçar o clique, pois links de dropdown ficam invisíveis (display: none)
-                        linha_alvo.locator('a').evaluate("el => el.click()")
-                        page.wait_for_load_state("domcontentloaded")
-                        time.sleep(2) # Aguarda atualizar a página da nova localidade
+                    // 2. Mês de Trabalho
+                    if ("{mes_ano_alvo}" !== "") {{
+                        var selectMes = jQuery('select[name="f_competencia"]');
+                        if (selectMes.length > 0) {{
+                            var optMes = selectMes.find('option:contains("{mes_ano_alvo}")');
+                            if (optMes.length > 0) {{
+                                selectMes.val(optMes.val()).trigger('change');
+                            }}
+                        }}
+                    }}
                     
-                # 4. Verificação do Mês de Trabalho (Competência)
-                self.atualizar_status(self.label_status_siga, f"Verificando Mês de Trabalho...", "#428BCA")
-                data_final_ofx = self.dados_processados.get("data_final", "")
+                    // Dispara a checkbox 'Lembrar escolha'
+                    jQuery('#f-mudarpadrao').prop('checked', true);
+                }}"""
                 
-                if data_final_ofx and len(data_final_ofx) == 10: # No formato DD/MM/YYYY
-                    mes_ano_alvo = data_final_ofx[3:] # Ex: captura "02/2026" de "28/02/2026"
-                    
-                    mes_trabalho_locator = page.locator('#f_competencianome')
-                    if mes_trabalho_locator.count() > 0:
-                        mes_trabalho_atual = mes_trabalho_locator.text_content().strip()
-                        
-                        if mes_trabalho_atual != mes_ano_alvo:
-                            self.atualizar_status(self.label_status_siga, f"Trocando Mês de {mes_trabalho_atual} para {mes_ano_alvo}...", "#F89406")
-                            
-                            # Clica no botão dropdown do menu superior para revelar as opções
-                            page.locator('#a_competencia').click()
-                            time.sleep(0.5) # aguarda animação da listinha descendo
-                            
-                            link_mes = page.locator(f'a.f_competencia_master:has-text("{mes_ano_alvo}")')
-                            
-                            if link_mes.count() > 0:
-                                # Usa clique nativo do Playwright agora que o menu está aberto
-                                link_mes.first.click()
-                                page.wait_for_load_state("domcontentloaded")
-                                time.sleep(2) # Aguarda página recarregar com novo mês
-                            else:
-                                self.atualizar_status(self.label_status_siga, f"⚠️ Mês {mes_ano_alvo} precisa ser trocado manualmente!", "#D9534F")
-                                time.sleep(3) # Pausa pro usuario ler e poder agir
-                        else:
-                            self.atualizar_status(self.label_status_siga, f"Mês de competência ({mes_ano_alvo}) já está correto.", "#3C763D")
-                            time.sleep(1.5)
-                                
-                self.atualizar_status(self.label_status_siga, f"✅ Pronto e Logado em: {self.localidade_selecionada}", "#3C763D")
+                page.evaluate(js_select2)
+                time.sleep(1.5) # Intervalo para o DOM digerir o trigger change
+                
+                # Clica usando o motor do navegador nativo para acionar submissão
+                btn_confirmar.evaluate("el => el.click()")
+                
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(3) # Aguarda o redirecionamento absoluto principal do servidor (POST)
+                
+                if mes_ano_alvo:
+                    self.atualizar_status(self.label_status_siga, f"✅ Logado em: {self.localidade_selecionada} ({mes_ano_alvo})", "#3C763D")
+                else:
+                    self.atualizar_status(self.label_status_siga, f"✅ Logado em: {self.localidade_selecionada}", "#3C763D")
                 
                 # 5. Navegação para a Tela Operacional (TES01701 - Caixas e Bancos)
                 self.atualizar_status(self.label_status_siga, f"Acessando rotina TES01701...", "#428BCA")
@@ -1118,9 +1194,15 @@ class AutoSigaApp(ctk.CTk):
                     # Pop-up de Estatisticas
                     self.after(0, lambda: self.mostrar_dashboard_produtividade(telemetria, tempo_inicio))
                     
-                # Mantém o navegador aberto num loop
+                # Mantém o navegador aberto monitorando de forma ativa
                 self.browser_aberto = True
                 while self.browser_aberto:
+                    try:
+                        # Se o usuário clicar no(X) do Edge ele rompe as paginas e mata o Context local
+                        if not context.pages:
+                            break
+                    except Exception:
+                        break
                     time.sleep(1)
                     
         except Exception as e:

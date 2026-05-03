@@ -55,7 +55,7 @@ class AutoSigaApp(ctk.CTk):
         self.localidade_selecionada = ""
 
         # Configurações da Janela
-        self.title("AutoSIGA v1.1.0 - Importação de Lançamentos")
+        self.title("AutoSIGA v1.1.1 - Importação de Lançamentos")
         self.geometry("600x680")
         self.configure(fg_color="#F1F5F9") # Fundo cinza clarinho (estilo SIGA)
         
@@ -211,7 +211,7 @@ class AutoSigaApp(ctk.CTk):
         self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 10))
         
-        texto_rodape = "AutoSIGA v1.1.0 | Desenvolvido na CCB Dourados/MS sob licença GNU GPL v3.0"
+        texto_rodape = "AutoSIGA v1.1.1 | Desenvolvido na CCB Dourados/MS sob licença GNU GPL v3.0"
         self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=("Open Sans", 11), text_color="#999999")
         self.label_rodape.pack()
 
@@ -1286,9 +1286,9 @@ class AutoSigaApp(ctk.CTk):
 
         if filepath:
             try:
-                # SIGA em geral aceita bem ISO-8859-1 (Latin1) ou UTF-8 nativo em importador web ASP.
-                # Para evitar falhas de leitura no Bloco de Notas ou Excel do Windows, aplicamos utf-8-sig (com BOM).
-                with open(filepath, 'w', encoding='utf-8-sig') as f:
+                # Utiliza utf-8 padrão (sem BOM) para evitar que o importador web ASP do SIGA
+                # leia a assinatura invisível do arquivo como os caracteres 'ï»¿' na primeira linha.
+                with open(filepath, 'w', encoding='utf-8') as f:
                     for l in linhas_limpas:
                         f.write(l + "\n")
                 

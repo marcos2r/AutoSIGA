@@ -1,12 +1,16 @@
-# AutoSIGA v1.1.1 🚀
+# AutoSIGA v1.2.0 🚀
 
 **AutoSIGA** é um motor avançado de RPA (Robotic Process Automation) construído em Python, voltado para a automatização e conciliação de tesourarias baseadas nas regras IT.TES.05. Ele cruza digitalmente extratos bancários brutos (`.OFX`) com o painel contábil administrativo SIGA (Sistema de Informação e Gestão), injetando dados, poupando centenas de horas humanas e reduzindo a taxa de erros a zero.
 
 ## 🎯 Por que o AutoSIGA existe?
 A conciliação bancária entre múltiplas jurisdições (como a de Administração/Conta Corrente e de Ponto de Pregação/Fundo de Aplicação) no SIGA era uma tarefa manual, exaustiva e suscetível à desorganização humana. O AutoSIGA atua como um robô que enxerga o sistema exatamente como você.
 
-## ✨ Destaques da Versão v1.1.1
-- **Unificação Dinâmica de Telas Web**: O Bot abstrai atrasos do SIGA acessando portas nativas Javascript do sistema e fundindo escolhas de localidade e competência de uma vez só!
+## ✨ Destaques da Versão v1.2.0
+
+- **Arquitetura MVC:** Refatoração completa do código-fonte para o padrão Model-View-Controller, separando lógica de negócio, automação e interface.
+- **Módulo de Automação Independente:** Robô Playwright agora isolado em `siga_bot.py`.
+- **Melhoria na Manutenibilidade:** Código modularizado e documentado para facilitar futuras atualizações.
+- **Estabilidade:** Correção de bugs menores e melhorias na performance da UI.
 - **Mapeamento Cérebro Reverso**: Detecta qual Administração possui a conta bancária do seu arquivo OFX e **corrige a interface gráfica automática pra você** caso esbarre nos botões.
 - **Leitura Extrema de Invisibilidade**: Tolerância absurda contra renderização corrompida de HTML do portal (ex: lançamentos manuais passados onde "Saídas" e "Entradas" viram fantasmas nulos na tela). Tudo mapeado, módulo matematicamente convertido e fechado.
 - **Prevenção Interceptiva Contra Timeouts**: Se os clusters de banco de dados do SIGA demorarem a engolir "Salvar e Novo", o robô perfura bloqueios de transparência preta do backend usando força de evaluate.

@@ -44,7 +44,7 @@ class MainWindow(ctk.CTk):
         self.config_manager = ConfigManager()
 
         # Configurações nativas da Janela
-        self.title("AutoSIGA v1.1.1 - Importação de Lançamentos")
+        self.title("AutoSIGA v1.2.0 - Importação de Lançamentos")
         self.geometry("600x680")
         self.configure(fg_color="#F1F5F9")
         
@@ -185,7 +185,7 @@ class MainWindow(ctk.CTk):
         self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 10))
         
-        texto_rodape = "AutoSIGA v1.1.1 | Arquitetura MVC"
+        texto_rodape = "AutoSIGA v1.2.0 | Arquitetura MVC"
         self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=("Open Sans", 11), text_color="#999999")
         self.label_rodape.pack()
 

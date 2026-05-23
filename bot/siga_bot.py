@@ -89,22 +89,35 @@ class SigaBot:
                 # Campo bloqueado via JS (somente leitura), abortamos a injeção.
                 return
                 
-            container.click(timeout=3000)
+            container.click(timeout=3000, force=True)
             time.sleep(0.5)
             
             # 2. Digita no input temporário que nasce dinamicamente no final do <body>
             input_search = page.locator('#select2-drop:visible .select2-input')
             input_search.fill(str(termo_busca), timeout=3000)
             
+            # Verifica dinamicamente se o Select2 exige pressionar Enter para disparar a busca AJAX
+            try:
+                msg_busca = page.locator('#select2-drop:visible .select2-searching').first
+                if msg_busca.count() > 0:
+                    texto_msg = msg_busca.text_content() or ""
+                    texto_msg_lower = texto_msg.lower()
+                    if "tecle enter" in texto_msg_lower or "enter para" in texto_msg_lower:
+                        input_search.press("Enter")
+                        # Dá um tempo extra para a busca AJAX do servidor responder
+                        time.sleep(1.8)
+            except Exception:
+                pass
+            
             if dropdown_is_ajax:
-                time.sleep(2.0) # Espera o SIGA buscar no servidor
+                time.sleep(1.2) # Espera o SIGA carregar
             else:
-                time.sleep(0.5) # O filtro é puramente local (JS Regex)
+                time.sleep(0.5) # Filtro local instantâneo
                 
             # 3. Clica no primeiro item resultante
             opcao_li = page.locator('#select2-drop:visible .select2-results li.select2-result-selectable').first
             opcao_li.wait_for(state="visible", timeout=3000)
-            opcao_li.click()
+            opcao_li.click(force=True)
             time.sleep(0.5)
         except Exception as e:
             logging.error(f"Falha ao usar Select2 {select_id} para o termo {termo_busca}: {e}")
@@ -251,6 +264,144 @@ class SigaBot:
             
         except Exception as e:
             logging.error(f"Erro inserindo lançamentos: {e}", exc_info=True)
+            self.update_status(f"Falha na inserção: {e}", "#D9534F")
+
+    def inserir_rendimentos_siga(self, page, lancamentos):
+        """
+        Preenche autonomamente os formulários de receita para injeção final de rendimentos.
+        
+        Args:
+            page (Page): Página ativa no navegador.
+            lancamentos (list): A lista consolidada final expurgada de pendências.
+        """
+        try:
+            # Ordenação por data (crescente)
+            lanc_ordenados = sorted(lancamentos, key=lambda tx: tuple(map(int, reversed(tx.get("data", "").split("/")))) if "/" in tx.get("data", "") else tx.get("data", ""))
+            conta_aplicacao = self.dados_processados.get("conta_siga_aplicacao", "")
+            
+            for i, tx in enumerate(lanc_ordenados):
+                if not self.browser_aberto:
+                    break
+                    
+                data_tx = tx.get("data", "")
+                valor_tx = tx.get("valor", 0.0)
+                desc_tx = tx.get("descricao", "Rendimento")
+                
+                self.update_status(f"Lançando Rendimento {i+1}/{len(lanc_ordenados)}: R$ {valor_tx:.2f} ({data_tx})", "#F89406")
+                
+                # Apenas necessita carregar a rotina no primeiro loop.
+                # Nos demais, o SIGA zera o formulário sozinho por causa do 'Salvar e Novo'.
+                if i == 0:
+                    page.locator('#f_executar_programa').fill("TES01703")
+                    page.locator('#btn_executar_programa').click()
+                    page.wait_for_load_state("domcontentloaded")
+                    time.sleep(2)
+                else:
+                    self.update_status("Preparando novo registro na tela atual...", "#F89406")
+                    time.sleep(1.5)
+                
+                # 1. Origem (Pessoa): Campo opcional ignorado para maior agilidade e portabilidade contábil
+                # (Não é preenchido para evitar divergências de cadastro entre cooperativas regionais do Sicredi)
+                
+                # 2. Receita (Crédito): Selecionar "4100 - RENDA SOBRE APLICAÇÃO FINANCEIRA"
+                self.selecionar_select2(page, "f_receita", "4100", dropdown_is_ajax=True)
+                time.sleep(1.2) # Estabiliza reatividade AJAX da Receita
+                
+                # 3. Histórico (Crédito): Selecionar "029 - RENDAS BANCÁRIAS"
+                self.selecionar_select2(page, "f_historico_credito", "029", dropdown_is_ajax=True)
+                time.sleep(1.0)
+                
+                # 4. Injeta a data driblando o calendário visual (Datepicker Bootstrap)
+                page.evaluate(f'''() => {{
+                    let inp = document.getElementById("f_data");
+                    if (inp) {{
+                        inp.value = "{data_tx}";
+                        if (window.jQuery) {{
+                            window.jQuery(inp).datepicker('update', "{data_tx}");
+                            window.jQuery(inp).trigger('change');
+                            window.jQuery('.datepicker').hide();
+                        }} else {{
+                            inp.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        }}
+                    }}
+                }}''')
+                
+                time.sleep(1)
+                # Popup de competência bootbox
+                try:
+                    btn_sim = page.locator('.bootbox button:has-text("Sim")').first
+                    btn_sim.wait_for(state="visible", timeout=2000)
+                    btn_sim.click()
+                    time.sleep(0.5)
+                except Exception:
+                    pass
+                
+                # 5. Forma de Recebimento: "CRÉDITO EM CONTA" (opção '10')
+                self.selecionar_select2(page, "f_formapagamento", "CRÉDITO EM CONTA", dropdown_is_ajax=False)
+                
+                # 6. Nº Documento: Pegar do extrato ou "0"
+                doc_val = tx.get("documento", "0")
+                if not doc_val or str(doc_val).strip() == "":
+                    doc_val = "0"
+                input_doc = page.locator('#f_documento')
+                input_doc.click()
+                input_doc.fill("")
+                input_doc.type(str(doc_val))
+                time.sleep(0.5)
+                
+                # 7. Valor Numérico
+                valor_str = f"{abs(valor_tx):.2f}".replace('.', ',')
+                input_valor = page.locator('#f_valor')
+                input_valor.click()
+                input_valor.fill("")
+                input_valor.type(valor_str)
+                time.sleep(0.5)
+                
+                # 8. Conta (Débito): Selecionar a Conta de Aplicação mapeada
+                self.selecionar_select2(page, "f_conta", conta_aplicacao, dropdown_is_ajax=True)
+                
+                # 9. Histórico (Débito): Selecionar "029 - RENDAS BANCÁRIAS"
+                self.selecionar_select2(page, "f_historico_debito", "029", dropdown_is_ajax=True)
+                
+                # 10. Complemento
+                msg_comp = f"RENDIMENTO - {desc_tx}"
+                page.evaluate(f'''
+                    if (document.getElementById("f_complemento")) document.getElementById("f_complemento").value = "{msg_comp}";
+                ''')
+                time.sleep(1)
+                
+                # 11. Salvar ou Salvar e Novo
+                is_ultimo = (i == len(lanc_ordenados) - 1)
+                if is_ultimo:
+                    btn_gravar = page.locator('button.btn-salvar[data-comando="F"]')
+                else:
+                    btn_gravar = page.locator('button.btn-salvar[data-comando="N"]')
+                    
+                if btn_gravar.count() > 0:
+                    btn_gravar.first.click()
+                else:
+                    page.locator('button.btn-success:has(i.icon-ok)').first.click()
+                
+                page.wait_for_load_state("domcontentloaded")
+                
+                # Bypassa a modal de confirmação de gravação bem sucedida
+                try:
+                    btn_sucesso = page.locator('.modal.in button:text-matches("Ok", "i")').first
+                    btn_sucesso.wait_for(state="attached", timeout=25000)
+                    time.sleep(1.2)
+                    btn_sucesso.evaluate("el => el.click()")
+                except Exception:
+                    pass
+                    
+                time.sleep(1.5)
+                
+            self._qtd_injecoes_efetuadas = len(lanc_ordenados)
+            self.update_status(f"✅ Finalizado! {len(lanc_ordenados)} rendimentos injetados no SIGA.", "#3C763D")
+            if "show_message" in self.callbacks:
+                self.callbacks["show_message"]("info", "AutoSIGA", "Todos os rendimentos foram importados com sucesso! O robô agora fará a validação.")
+            
+        except Exception as e:
+            logging.error(f"Erro inserindo rendimentos: {e}", exc_info=True)
             self.update_status(f"Falha na inserção: {e}", "#D9534F")
 
     def fluxo_automacao(self):
@@ -412,9 +563,11 @@ class SigaBot:
                 btn_extrato.click()
                 time.sleep(1.5)
                 
-                self.update_status("Preenchendo Conta e Datas...", "#428BCA")
-                
-                conta_alvo = self.dados_processados.get("conta_siga_corrente", "")
+                is_aplicacao = (self.dados_processados.get("tipo_extrato") == "APLICACAO")
+                if is_aplicacao:
+                    conta_alvo = self.dados_processados.get("conta_siga_aplicacao", "")
+                else:
+                    conta_alvo = self.dados_processados.get("conta_siga_corrente", "")
                 achou_conta = False
                 
                 # Varre a lista de contas na tela e dispara jQuery ao achar match
@@ -499,7 +652,10 @@ class SigaBot:
                         
                     if self.autorizou_importacao:
                         self.update_status("🚀 Lançamentos autorizados! Iniciando inserção...", "#428BCA")
-                        self.inserir_lancamentos_siga(page, novos_lancamentos)
+                        if is_aplicacao:
+                            self.inserir_rendimentos_siga(page, novos_lancamentos)
+                        else:
+                            self.inserir_lancamentos_siga(page, novos_lancamentos)
                         
                         self.update_status("Realizando conferência final no servidor...", "#428BCA")
                         time.sleep(2)
@@ -541,6 +697,7 @@ class SigaBot:
                             else:
                                 self.update_status(f"⚠️ Alerta: {len(pendentes)} itens não bateram no SIGA.", "#D9534F")
                                 
+                            telemetria["injecoes"] = self._qtd_injecoes_efetuadas
                             if "show_dashboard" in self.callbacks:
                                 self.callbacks["show_dashboard"](telemetria, tempo_inicio)
                                 
@@ -553,6 +710,7 @@ class SigaBot:
                         
                 else:
                     self.update_status("✅ Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
+                    telemetria["injecoes"] = self._qtd_injecoes_efetuadas
                     if "show_dashboard" in self.callbacks:
                         self.callbacks["show_dashboard"](telemetria, tempo_inicio)
                         

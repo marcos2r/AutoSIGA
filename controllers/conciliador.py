@@ -92,7 +92,7 @@ class Conciliador:
         
         # Filtro de negócio: O robô só assume responsabilidade por transferências interbancárias
         # de investimento. Depósitos em espécie e transferências PIX normais são ignorados.
-        kw_investimentos = ['APLIC', 'RESG', 'RDC', 'CDB', 'POUP', 'INVEST']
+        kw_investimentos = ['APLIC', 'RESG', 'RDC', 'CDB', 'POUP', 'INVEST', 'REND', 'CAPITALIZ']
         
         for tx in ofx_txs:
             tx_data = tx.get("data", "")

@@ -16,6 +16,7 @@ import logging
 
 from models.config_manager import ConfigManager
 from models.ofx_reader import OfxReader
+from models.xls_reader import XlsReader
 from controllers.exportador import Exportador
 from bot.siga_bot import SigaBot
 
@@ -228,12 +229,16 @@ class MainWindow(ctk.CTk):
         self.entry_conta_aplicacao.configure(state="normal")
         self.btn_limpar_conta.configure(state="normal")
         
-        self.label_info_conta.configure(text=f"Mapeamento para Conta OFX Nº {conta_id}", text_color="#3D71A8")
+        produto = self.dados_processados.get("produto") if self.dados_processados else None
+        if produto:
+            self.label_info_conta.configure(text=f"Mapeamento para {produto} (Conta {conta_id})", text_color="#3D71A8")
+        else:
+            self.label_info_conta.configure(text=f"Mapeamento para Conta OFX Nº {conta_id}", text_color="#3D71A8")
         
         tipo_adm = self.combo_tipo_adm.get()
         nome_adm = self.entry_nome_adm.get()
         
-        novo_tipo, novo_nome, dados = self.config_manager.get_mapeamento_conta(conta_id, tipo_adm, nome_adm)
+        novo_tipo, novo_nome, dados = self.config_manager.get_mapeamento_conta(conta_id, tipo_adm, nome_adm, produto=produto)
         
         self.combo_tipo_adm.set(novo_tipo)
         self.entry_nome_adm.delete(0, 'end')
@@ -256,14 +261,20 @@ class MainWindow(ctk.CTk):
         
         tipo_adm = self.combo_tipo_adm.get()
         nome_adm = self.entry_nome_adm.get()
-        if self.config_manager.limpar_conta(conta_id, tipo_adm, nome_adm):
+        produto = self.dados_processados.get("produto")
+        if self.config_manager.limpar_conta(conta_id, tipo_adm, nome_adm, produto=produto):
             messagebox.showinfo("Limpeza", "O lembrete das contas desta localidade foi apagado.")
 
     def selecionar_arquivo(self):
-        """Diálogo do sistema operacional para capturar o caminho do OFX."""
+        """Diálogo do sistema operacional para capturar o extrato (OFX ou XLS)."""
         caminho_arquivo = filedialog.askopenfilename(
-            title="Selecione o arquivo do extrato",
-            filetypes=[("Arquivos OFX", "*.ofx"), ("Todos os Arquivos", "*.*")]
+            title="Selecione o arquivo do extrato (OFX ou XLS)",
+            filetypes=[
+                ("Extratos Bancários", "*.ofx;*.xls;*.xlsx"),
+                ("Arquivos OFX (*.ofx)", "*.ofx"),
+                ("Arquivos Excel (*.xls, *.xlsx)", "*.xls;*.xlsx"),
+                ("Todos os Arquivos", "*.*")
+            ]
         )
 
         if caminho_arquivo:
@@ -272,19 +283,33 @@ class MainWindow(ctk.CTk):
             self.processar_ofx(caminho_arquivo)
 
     def processar_ofx(self, caminho):
-        """Delega a leitura do OFX ao Model OfxReader e destrava os botões da UI."""
+        """Delega a leitura do extrato (OFX ou XLS) ao model correto e destrava os botões da UI."""
         try:
-            self.dados_processados = OfxReader.parse_file(caminho)
+            extensao = os.path.splitext(caminho)[1].lower()
+            if extensao in ['.xls', '.xlsx']:
+                self.dados_processados = XlsReader.parse_file(caminho)
+                tipo_desc = f"Extrato XLS ({self.dados_processados.get('produto', 'Aplicação')})"
+            else:
+                self.dados_processados = OfxReader.parse_file(caminho)
+                tipo_desc = "Extrato OFX (Conta Corrente)"
+                
             self.carregar_mapeamento_conta(self.dados_processados["conta_id"])
             
-            # Libera o uso das rotinas principais do programa
+            # Libera as rotinas da UI baseando-se no tipo do extrato
             self.botao_conectar.configure(state="normal")
-            self.botao_gerar_txt.configure(state="normal")
-            self.atualizar_status("Extrato lido! Escolha uma das opções acima.", "#F89406")
+            
+            if self.dados_processados.get("tipo_extrato") == "APLICACAO":
+                # Desabilita o gerador de TXT de ofertas para extratos de aplicação
+                self.botao_gerar_txt.configure(state="disabled")
+                self.atualizar_status(f"{tipo_desc} lido! Pronto para conciliar no SIGA.", "#3C763D")
+            else:
+                self.botao_gerar_txt.configure(state="normal")
+                self.atualizar_status(f"{tipo_desc} lido! Escolha uma das opções acima.", "#F89406")
+                
         except Exception as e:
             self.dados_processados = None
-            logging.error(f"Erro ao ler OFX: {e}")
-            messagebox.showerror("Erro de Leitura", f"Não foi possível processar o arquivo OFX.\n\nDetalhes:\n{e}")
+            logging.error(f"Erro ao processar extrato: {e}")
+            messagebox.showerror("Erro de Leitura", f"Não foi possível processar o extrato.\n\nDetalhes:\n{e}")
 
     def gerar_txt_ofertas(self):
         """Delega a geração de TXT do SIGA ao Controller Exportador."""
@@ -325,9 +350,16 @@ class MainWindow(ctk.CTk):
         corrente = self.entry_conta_corrente.get().strip()
         aplicacao = self.entry_conta_aplicacao.get().strip()
         
-        if not corrente or not aplicacao:
-            messagebox.showwarning("Atenção", "Preencha a 'Conta Corrente' e a 'Conta Aplicação' do SIGA.")
-            return
+        is_aplicacao = (self.dados_processados.get("tipo_extrato") == "APLICACAO") if self.dados_processados else False
+        
+        if is_aplicacao:
+            if not aplicacao:
+                messagebox.showwarning("Atenção", "Por favor, preencha a 'Conta Aplicação' do SIGA para esta localidade.")
+                return
+        else:
+            if not corrente or not aplicacao:
+                messagebox.showwarning("Atenção", "Preencha a 'Conta Corrente' e a 'Conta Aplicação' do SIGA para esta localidade.")
+                return
             
         tipo_adm = self.combo_tipo_adm.get()
         localidade_selecionada = f"{tipo_adm} - {nome_adm}"
@@ -335,7 +367,8 @@ class MainWindow(ctk.CTk):
         # Persiste a intenção do usuário para as próximas runs
         self.config_manager.salvar_geral(tipo_adm, nome_adm)
         conta_id_ofx = self.dados_processados.get("conta_id", "")
-        self.config_manager.salvar_mapeamento_conta(conta_id_ofx, tipo_adm, nome_adm, corrente, aplicacao)
+        produto = self.dados_processados.get("produto")
+        self.config_manager.salvar_mapeamento_conta(conta_id_ofx, tipo_adm, nome_adm, corrente, aplicacao, produto=produto)
         
         self.dados_processados["conta_siga_corrente"] = corrente
         self.dados_processados["conta_siga_aplicacao"] = aplicacao
@@ -375,6 +408,9 @@ class MainWindow(ctk.CTk):
         janela.title("Ação Necessária: Lançamentos Pendentes")
         janela.geometry("650x500")
         janela.configure(fg_color="#FFFFFF")
+        janela.lift()
+        janela.focus_force()
+        janela.attributes('-topmost', True)
         janela.grab_set() # Foca os cliques apenas neste modal
         
         lbl_titulo = ctk.CTkLabel(janela, text=f"Lançamentos a Importar ({len(lancamentos)})", font=self.fonte_titulo, text_color=self.cor_azul_header)
@@ -420,21 +456,76 @@ class MainWindow(ctk.CTk):
         janela.destroy()
 
     def mostrar_dashboard_produtividade(self, telemetria, tempo_inicio):
-        """Exibe o popup parabenizando a finalização dos trabalhos."""
+        """Exibe o popup parabenizando a finalização dos trabalhos com métricas de ROI."""
         janela = ctk.CTkToplevel(self)
-        janela.title("Relatório de Produtividade AutoSIGA")
-        janela.geometry("500x350")
+        janela.title("Métricas de Produtividade AutoSIGA")
+        janela.geometry("520x430")
         janela.configure(fg_color="#F1F5F9")
+        janela.lift()
+        janela.focus_force()
+        janela.attributes('-topmost', True)
         janela.grab_set()
         
         tempo_total = time.time() - tempo_inicio
         minutos = int(tempo_total // 60)
         segundos = int(tempo_total % 60)
         
-        frame = ctk.CTkFrame(janela, fg_color="#FFFFFF", corner_radius=8)
+        ofx_itens = telemetria.get("ofx_itens", 0)
+        injecoes = telemetria.get("injecoes", 0)
+        
+        # Métrica de ROI Humano:
+        # 30 segundos para checagem manual por item do extrato (conciliação visual)
+        # + 60 segundos para digitação manual, cliques no select2 e gravação de cada novo lançamento
+        tempo_humano_segundos = (ofx_itens * 30) + (injecoes * 60)
+        if tempo_humano_segundos < 60:
+            tempo_humano_segundos = 60
+            
+        h_minutos = int(tempo_humano_segundos // 60)
+        h_segundos = int(tempo_humano_segundos % 60)
+        
+        economia_segundos = max(0, tempo_humano_segundos - tempo_total)
+        e_minutos = int(economia_segundos // 60)
+        e_segundos = int(economia_segundos % 60)
+        
+        frame = ctk.CTkFrame(janela, fg_color="#FFFFFF", corner_radius=8, border_width=1, border_color="#DDDDDD")
         frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        ctk.CTkLabel(frame, text="✅ Missão Cumprida!", font=("Open Sans", 24, "bold"), text_color="#3C763D").pack(pady=(20, 10))
-        ctk.CTkLabel(frame, text=f"Tempo gasto: {minutos}m {segundos}s", font=("Open Sans", 16)).pack()
+        ctk.CTkLabel(frame, text="✅ Missão Cumprida!", font=("Open Sans", 22, "bold"), text_color="#3C763D").pack(pady=(15, 5))
         
-        ctk.CTkButton(frame, text="Fechar", command=janela.destroy).pack(pady=30)
+        # Painel central de dados
+        frame_tabela = ctk.CTkFrame(frame, fg_color="#F8F9FA", corner_radius=6)
+        frame_tabela.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Auxiliar de linha
+        def add_linha(label, valor, cor_valor="#333333", negrito=False):
+            f_row = ctk.CTkFrame(frame_tabela, fg_color="transparent")
+            f_row.pack(fill="x", padx=15, pady=4)
+            font_lbl = ("Open Sans", 12)
+            font_val = ("Open Sans", 12, "bold") if negrito else ("Open Sans", 12)
+            
+            ctk.CTkLabel(f_row, text=label, font=font_lbl, text_color="#666666").pack(side="left")
+            ctk.CTkLabel(f_row, text=valor, font=font_val, text_color=cor_valor).pack(side="right")
+            
+        add_linha("Itens verificados no extrato:", f"{ofx_itens}")
+        add_linha("Lançamentos novos efetuados:", f"{injecoes}")
+        
+        # Divisor
+        div = ctk.CTkFrame(frame_tabela, height=1, fg_color="#E5E7EB")
+        div.pack(fill="x", padx=10, pady=6)
+        
+        add_linha("Tempo gasto (AutoSIGA):", f"{minutos}m {segundos}s", cor_valor="#428BCA", negrito=True)
+        add_linha("Tempo estimado (Manual):", f"{h_minutos}m {h_segundos}s", cor_valor="#D9534F")
+        
+        # Divisor de ROI
+        div2 = ctk.CTkFrame(frame_tabela, height=1, fg_color="#E5E7EB")
+        div2.pack(fill="x", padx=10, pady=6)
+        
+        # Destaca a economia de tempo
+        add_linha("Tempo economizado:", f"🔥 {e_minutos}m {e_segundos}s", cor_valor="#5CB85C", negrito=True)
+        
+        btn_fechar = ctk.CTkButton(
+            frame, text="Fechar", font=("Open Sans", 13, "bold"),
+            fg_color="#428BCA", hover_color="#3071A9", height=35, width=120,
+            command=janela.destroy
+        )
+        btn_fechar.pack(pady=(10, 15))

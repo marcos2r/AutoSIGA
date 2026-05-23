@@ -15,18 +15,22 @@ A conciliação bancária entre múltiplas jurisdições (como a de Administraç
 - **Leitura Extrema de Invisibilidade**: Tolerância absurda contra renderização corrompida de HTML do portal (ex: lançamentos manuais passados onde "Saídas" e "Entradas" viram fantasmas nulos na tela). Tudo mapeado, módulo matematicamente convertido e fechado.
 - **Prevenção Interceptiva Contra Timeouts**: Se os clusters de banco de dados do SIGA demorarem a engolir "Salvar e Novo", o robô perfura bloqueios de transparência preta do backend usando força de evaluate.
 - **Drenagem Órfã Chromium**: Trata o tráfego Playwright Edge para que nunca suba instâncias espelhadas e quebre os cookies se você clicar o botão múltiplas vezes num mesmo ciclo.
+- **Suporte a Rendimentos de Aplicação (XLS Sicredi):** Detecção inteligente e processamento automatizado de planilhas XLS de aplicação (Poupança e CDB/RDC), conciliando e injetando rendimentos em lote na rotina de Receitas (`TES01703`) de forma robusta e transparente.
+- **Isolamento de Contas por Produto de Investimento:** Segmentação inteligente no armazenamento local para que a mesma conta bancária possa ter mapeamentos de contas do SIGA totalmente independentes para diferentes produtos (ex: CDB vs. Poupança).
+- **Dashboard de Produtividade Avançado (ROI de Automação):** Apresentação interativa do tempo real economizado, calculando o esforço que um humano levaria manualmente para verificar o extrato e digitar cada lançamento em comparação com a execução veloz do robô.
 
 ## 🛠️ Tecnologias Principais
 * **`customtkinter` & `tkinter`**: Para proporcionar a face amigável (User Interface - Ui) do seu cockpit.
 * **`playwright` (`sync_api`)**: Os olhos, pernas e braços que disparam gatilhos simulados do browser (No nosso caso `msedge`, via persistent context!).
 * **`ofxparse`**: Canivete suíço de conversão estruturada de movimentações bancárias puras direto da agência.
+* **`xlrd`**: Módulo especialista em decodificar arquivos binários antigos (BIFF8) de planilhas do Excel.
 * **`pyinstaller`**: Motor que compacta, emoldura e transforma o algoritmo python numa execução standalone executável pra levar em qualquer Windows.
 
 ## 🚀 Como gerar um novo executável (PyInstaller)?
 Se você realizar edições, gerar a compilação local (.exe) exige certificar-se que os módulos de interface rodem lisos:
 ```powershell
 # Usar o ambiente virtual ativo (venv)
-pyinstaller --name AutoSiga --noconfirm --onedir --windowed --add-data "venv/Lib/site-packages/customtkinter;customtkinter/" app.py
+pyinstaller --name AutoSiga --noconfirm --onedir --windowed --add-data "venv/Lib/site-packages/customtkinter;customtkinter/" main.py
 ```
 > O executável será salvo dentro de `dist/AutoSiga/AutoSiga.exe`.
 

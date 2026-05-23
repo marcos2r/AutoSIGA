@@ -11,3 +11,5 @@ build/
 dist/
 *.spec
 *.exe
+temp/
+scratch_inspect.py

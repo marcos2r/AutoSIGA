@@ -82,7 +82,7 @@ class ConfigManager:
         config["nome_adm"] = nome_adm
         self.save_config_data(config)
 
-    def get_mapeamento_conta(self, conta_id, tipo_adm, nome_adm):
+    def get_mapeamento_conta(self, conta_id, tipo_adm, nome_adm, produto=None):
         """
         Busca as contas SIGA vinculadas a uma conta bancária (OFX).
         
@@ -94,6 +94,7 @@ class ConfigManager:
             conta_id (str): Número da conta bancária extraído do arquivo OFX.
             tipo_adm (str): Tipo da administração corrente na interface.
             nome_adm (str): Nome da administração corrente na interface.
+            produto (str): Opcional. Nome do produto de investimento (ex: POUPANCA TRADICIONAL).
             
         Returns:
             tuple: (tipo_adm, nome_adm, dados_contas) atualizados. Onde 
@@ -104,32 +105,71 @@ class ConfigManager:
         
         tipo_alvo = tipo_adm.strip().upper()
         nome_alvo = nome_adm.strip().upper()
-        chave = f"{tipo_alvo}-{nome_alvo}-{conta_id}"
         
-        # MÁGICA: PROCURA REVERSA E AUTO-PREENCHIMENTO
-        # Varre as chaves existentes no config em busca de um sufixo que dê match
-        # com a conta do banco (OFX), independentemente da filial selecionada na tela.
-        if chave not in mapeamentos:
-            for db_chave in mapeamentos.keys():
-                if db_chave.endswith(f"-{conta_id}"):
-                    partes = db_chave.split('-')
-                    if len(partes) >= 3:
-                        novo_tipo = partes[0]
-                        novo_nome = "-".join(partes[1:-1])
+        prod_alvo = produto.strip().upper() if produto else None
+        conta_com_prod = f"{conta_id}#{prod_alvo}" if prod_alvo else conta_id
+        
+        chave = f"{tipo_alvo}-{nome_alvo}-{conta_com_prod}"
+        
+        # MÁGICA: PROCURA REVERSA E AUTO-PREENCHIMENTO COM NORMALIZAÇÃO INTELIGENTE
+        def norm(c_id):
+            return "".join(c for c in str(c_id) if c.isdigit()).lstrip("0")
+            
+        conta_id_norm = norm(conta_id)
+        chave_encontrada = None
+        
+        # Varre as chaves mapeadas para encontrar matches normativos de conta
+        for db_chave in mapeamentos.keys():
+            partes = db_chave.split('-')
+            if len(partes) >= 3:
+                db_tipo = partes[0]
+                db_nome = "-".join(partes[1:-1])
+                db_conta_raw = partes[-1]
+                
+                if '#' in db_conta_raw:
+                    db_conta, db_prod = db_conta_raw.split('#', 1)
+                else:
+                    db_conta = db_conta_raw
+                    db_prod = None
+                
+                # Se der match no número base da conta
+                if norm(db_conta).endswith(conta_id_norm):
+                    # Se estamos buscando um produto específico, o produto no banco deve corresponder
+                    if prod_alvo and db_prod != prod_alvo:
+                        continue
                         
-                        # Atualiza a configuração local com a nova preferência recém assumida
-                        self.salvar_geral(novo_tipo, novo_nome)
-                        chave = db_chave
-                        return novo_tipo, novo_nome, mapeamentos.get(chave)
-
+                    # Prioridade Absoluta: se der match na filial que já está selecionada na tela (UI)
+                    if db_tipo == tipo_alvo and db_nome == nome_alvo:
+                        chave_encontrada = db_chave
+                        break
+                    elif not chave_encontrada:
+                        # Fallback: guarda o primeiro match que achar em outra filial
+                        chave_encontrada = db_chave
+                        
+        if chave_encontrada:
+            partes = chave_encontrada.split('-')
+            novo_tipo = partes[0]
+            novo_nome = "-".join(partes[1:-1])
+            
+            # Se o match foi em outra filial, altera a preferência ativa de filial
+            if novo_tipo != tipo_alvo or novo_nome != nome_alvo:
+                self.salvar_geral(novo_tipo, novo_nome)
+                
+            return novo_tipo, novo_nome, mapeamentos.get(chave_encontrada)
+ 
         dados = mapeamentos.get(chave)
         # Fallback de compatibilidade caso o arquivo não tenha sido salvo ainda
         if not dados:
-            dados = mapeamentos.get(conta_id, {"corrente": "", "aplicacao": ""})
+            # Se for com produto, tenta buscar sem produto também como fallback genérico de compatibilidade
+            if prod_alvo:
+                chave_sem_prod = f"{tipo_alvo}-{nome_alvo}-{conta_id}"
+                dados = mapeamentos.get(chave_sem_prod)
+            if not dados:
+                dados = mapeamentos.get(conta_id, {"corrente": "", "aplicacao": ""})
             
         return tipo_alvo, nome_alvo, dados
 
-    def salvar_mapeamento_conta(self, conta_id, tipo_adm, nome_adm, corrente, aplicacao):
+    def salvar_mapeamento_conta(self, conta_id, tipo_adm, nome_adm, corrente, aplicacao, produto=None):
         """
         Vincula as IDs das contas do SIGA ao respectivo número de conta do OFX.
         
@@ -139,21 +179,30 @@ class ConfigManager:
             nome_adm (str): O nome da administração (ex: SÃO PAULO).
             corrente (str): O ID da conta corrente interna no SIGA.
             aplicacao (str): O ID da conta aplicação interna no SIGA.
+            produto (str): Opcional. Nome do produto de investimento.
         """
         config = self.get_config_data()
         if "contas_mapeadas" not in config:
             config["contas_mapeadas"] = {}
             
+        prod_alvo = produto.strip().upper() if produto else None
+        conta_com_prod = f"{conta_id}#{prod_alvo}" if prod_alvo else conta_id
+        
         # Cria uma chave única combinando os três parâmetros
-        chave = f"{tipo_adm.strip().upper()}-{nome_adm.strip().upper()}-{conta_id}"
+        chave = f"{tipo_adm.strip().upper()}-{nome_adm.strip().upper()}-{conta_com_prod}"
             
+        # Preserva dados anteriores caso venham campos em branco (ex: corrente vazia no XLS de aplicação)
+        dados_existentes = config["contas_mapeadas"].get(chave, {})
+        corr_final = corrente if corrente.strip() else dados_existentes.get("corrente", "")
+        apli_final = aplicacao if aplicacao.strip() else dados_existentes.get("aplicacao", "")
+        
         config["contas_mapeadas"][chave] = {
-            "corrente": corrente,
-            "aplicacao": aplicacao
+            "corrente": corr_final,
+            "aplicacao": apli_final
         }
         self.save_config_data(config)
 
-    def limpar_conta(self, conta_id, tipo_adm, nome_adm):
+    def limpar_conta(self, conta_id, tipo_adm, nome_adm, produto=None):
         """
         Remove o mapeamento em disco de uma conta salva.
         
@@ -164,12 +213,15 @@ class ConfigManager:
             conta_id (str): A conta do OFX.
             tipo_adm (str): O tipo de administração.
             nome_adm (str): O nome da administração.
+            produto (str): Opcional. Nome do produto de investimento.
             
         Returns:
             bool: True se removeu com sucesso, False caso o mapeamento não exista.
         """
         config = self.get_config_data()
-        chave = f"{tipo_adm.strip().upper()}-{nome_adm.strip().upper()}-{conta_id}"
+        prod_alvo = produto.strip().upper() if produto else None
+        conta_com_prod = f"{conta_id}#{prod_alvo}" if prod_alvo else conta_id
+        chave = f"{tipo_adm.strip().upper()}-{nome_adm.strip().upper()}-{conta_com_prod}"
         
         if "contas_mapeadas" in config and chave in config["contas_mapeadas"]:
             del config["contas_mapeadas"][chave]

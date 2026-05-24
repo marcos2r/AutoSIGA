@@ -96,12 +96,12 @@ class MainWindow(ctk.CTk):
         self.frame_card = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#DDDDDD")
         self.frame_card.pack(pady=40, padx=40, fill="both", expand=True)
 
-        # Sessão 1: Leitura do OFX
-        self.label_instrucao = ctk.CTkLabel(self.frame_card, text="1. Importe o seu arquivo OFX", font=("Open Sans", 16, "bold"), text_color="#3D71A8")
+        # Sessão 1: Leitura do Extrato
+        self.label_instrucao = ctk.CTkLabel(self.frame_card, text="1. Importe o seu Extrato (OFX ou XLS)", font=("Open Sans", 16, "bold"), text_color="#3D71A8")
         self.label_instrucao.pack(pady=(25, 10))
 
         self.botao_carregar = ctk.CTkButton(
-            self.frame_card, text="Selecionar Arquivo OFX", font=("Open Sans", 14, "bold"),
+            self.frame_card, text="Selecionar Extrato (OFX / XLS)", font=("Open Sans", 14, "bold"),
             fg_color=self.cor_azul_botao, hover_color=self.cor_azul_hover, text_color="#FFFFFF",
             corner_radius=4, height=40, command=self.selecionar_arquivo
         )
@@ -177,7 +177,7 @@ class MainWindow(ctk.CTk):
         self.botao_gerar_txt.grid(row=0, column=1, padx=5)
         
         # Barra de Status do Rodapé do Card
-        self.label_status_siga = ctk.CTkLabel(self.frame_card, text="Aguardando arquivo OFX...", font=self.fonte_padrao, text_color="#666666")
+        self.label_status_siga = ctk.CTkLabel(self.frame_card, text="Aguardando extrato (OFX ou XLS)...", font=self.fonte_padrao, text_color="#666666")
         self.label_status_siga.pack(pady=(0, 10))
 
         # ==========================================
@@ -233,7 +233,7 @@ class MainWindow(ctk.CTk):
         if produto:
             self.label_info_conta.configure(text=f"Mapeamento para {produto} (Conta {conta_id})", text_color="#3D71A8")
         else:
-            self.label_info_conta.configure(text=f"Mapeamento para Conta OFX Nº {conta_id}", text_color="#3D71A8")
+            self.label_info_conta.configure(text=f"Mapeamento para Conta Bancária Nº {conta_id}", text_color="#3D71A8")
         
         tipo_adm = self.combo_tipo_adm.get()
         nome_adm = self.entry_nome_adm.get()

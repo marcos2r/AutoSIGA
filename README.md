@@ -1,23 +1,25 @@
-# AutoSIGA v1.2.0 🚀
+# AutoSIGA v1.2.1 🚀
 
 **AutoSIGA** é um motor avançado de RPA (Robotic Process Automation) construído em Python, voltado para a automatização e conciliação de tesourarias baseadas nas regras IT.TES.05. Ele cruza digitalmente extratos bancários brutos (`.OFX`) com o painel contábil administrativo SIGA (Sistema de Informação e Gestão), injetando dados, poupando centenas de horas humanas e reduzindo a taxa de erros a zero.
 
 ## 🎯 Por que o AutoSIGA existe?
 A conciliação bancária entre múltiplas jurisdições (como a de Administração/Conta Corrente e de Ponto de Pregação/Fundo de Aplicação) no SIGA era uma tarefa manual, exaustiva e suscetível à desorganização humana. O AutoSIGA atua como um robô que enxerga o sistema exatamente como você.
 
+## ✨ Destaques da Versão v1.2.1
+
+- **Refatoração do Mapeamento**: Migração completa do armazenamento de mapeamentos no `config.json` para uma lista de objetos JSON estruturada, eliminando bugs de parse em contas que contêm caracteres especiais como hífens (ex: `58308-2`). Inclui migração automatizada e transparente do banco de dados legado.
+- **Otimização de UI Responsiva para Lotes**: Melhoria de layout na interface gráfica que resume a exibição de lotes com mais de 3 arquivos (exibindo `... + X outros` em uma única linha), impedindo a quebra de proporções da janela e o estrangulamento do scroll de cards.
+- **Posicionamento e Geometria Persistentes**: O aplicativo agora detecta a resolução do monitor do usuário para se centralizar e dimensionar proporcionalmente no primeiro uso, além de salvar e restaurar automaticamente a última posição e tamanho utilizados ao ser fechado e reaberto.
+- **Prevenção de Gravação Prematura**: Correção de bug no ciclo de vida do Tkinter no qual a inicialização de componentes dropdown disparava gravações parciais incorretas com localidade vazia no banco.
+
 ## ✨ Destaques da Versão v1.2.0
 
 - **Arquitetura MVC:** Refatoração completa do código-fonte para o padrão Model-View-Controller, separando lógica de negócio, automação e interface.
 - **Módulo de Automação Independente:** Robô Playwright agora isolado em `siga_bot.py`.
-- **Melhoria na Manutenibilidade:** Código modularizado e documentado para facilitar futuras atualizações.
-- **Estabilidade:** Correção de bugs menores e melhorias na performance da UI.
-- **Mapeamento Cérebro Reverso**: Detecta qual Administração possui a conta bancária do seu arquivo OFX e **corrige a interface gráfica automática pra você** caso esbarre nos botões.
-- **Leitura Extrema de Invisibilidade**: Tolerância absurda contra renderização corrompida de HTML do portal (ex: lançamentos manuais passados onde "Saídas" e "Entradas" viram fantasmas nulos na tela). Tudo mapeado, módulo matematicamente convertido e fechado.
-- **Prevenção Interceptiva Contra Timeouts**: Se os clusters de banco de dados do SIGA demorarem a engolir "Salvar e Novo", o robô perfura bloqueios de transparência preta do backend usando força de evaluate.
-- **Drenagem Órfã Chromium**: Trata o tráfego Playwright Edge para que nunca suba instâncias espelhadas e quebre os cookies se você clicar o botão múltiplas vezes num mesmo ciclo.
+- **Melhoria na Manutenibilidade:** Código modularizado e documentado para facilitar futuras updates.
 - **Suporte a Rendimentos de Aplicação (XLS Sicredi):** Detecção inteligente e processamento automatizado de planilhas XLS de aplicação (Poupança e CDB/RDC), conciliando e injetando rendimentos em lote na rotina de Receitas (`TES01703`) de forma robusta e transparente.
-- **Isolamento de Contas por Produto de Investimento:** Segmentação inteligente no armazenamento local para que a mesma conta bancária possa ter mapeamentos de contas do SIGA totalmente independentes para diferentes produtos (ex: CDB vs. Poupança).
-- **Dashboard de Produtividade Avançado (ROI de Automação):** Apresentação interativa do tempo real economizado, calculando o esforço que um humano levaria manualmente para verificar o extrato e digitar cada lançamento em comparação com a execução veloz do robô.
+- **Isolamento de Contas por Produto de Investimento:** Segmentação inteligente no armazenamento local para que a mesma conta bancária possa ter mapeamentos de contas do SIGA totalmente independente para diferentes produtos (ex: CDB vs. Poupança).
+- **Dashboard de Produtividade Avançado (ROI de Automação):** Apresentação interativa do tempo real economizado em conciliação.
 
 ## 🛠️ Tecnologias Principais
 * **`customtkinter` & `tkinter`**: Para proporcionar a face amigável (User Interface - Ui) do seu cockpit.

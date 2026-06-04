@@ -22,15 +22,12 @@ class SigaBot:
     perguntas/alertas para a View (via callbacks), sem nunca importar nada de GUI.
     """
     
-    def __init__(self, dados_processados, localidade_selecionada, tipo_alvo, nome_alvo, callbacks):
+    def __init__(self, lote_processados, callbacks):
         """
-        Inicializa a configuração do bot de automação.
+        Inicializa a configuração do bot de automação em lote.
         
         Args:
-            dados_processados (dict): O extrato OFX mapeado e filtrado.
-            localidade_selecionada (str): String amigável da filial (para os logs).
-            tipo_alvo (str): Sigla da filial alvo (ex: ADM, DR, PIA).
-            nome_alvo (str): Nome da filial alvo (ex: SAO PAULO).
+            lote_processados (list): Lista de extratos mapeados e filtrados.
             callbacks (dict): Dicionário de funções para acionar a UI. Possui:
                 - update_status(msg, color)
                 - show_message(tipo, titulo, msg)
@@ -38,21 +35,51 @@ class SigaBot:
                 - show_dashboard(telemetria, tempo_inicio)
                 - on_finish()
         """
-        self.dados_processados = dados_processados
-        self.localidade_selecionada = localidade_selecionada
-        self.tipo_alvo = tipo_alvo
-        self.nome_alvo = nome_alvo
+        # Ordena o lote por localidade_selecionada para agrupar os lançamentos da mesma filial,
+        # minimizando as trocas de localidade no portal SIGA.
+        self.lote_processados = sorted(
+            lote_processados, 
+            key=lambda x: f"{x.get('tipo_adm', '').strip().upper()} - {x.get('nome_adm', '').strip().upper()}"
+        )
         self.callbacks = callbacks
         self.browser_aberto = False
         self._qtd_injecoes_efetuadas = 0
         self.esperando_autorizacao = False
         self.autorizou_importacao = False
+        
+        # Atributos reativos que serão setados a cada iteração do lote:
+        self.dados_processados = None
+        self.localidade_selecionada = ""
+        self.tipo_alvo = ""
+        self.nome_alvo = ""
 
     def update_status(self, msg, color="#666666"):
         """Envia um log de texto simples para o painel da interface."""
         logging.info(f"[STATUS] {msg}")
+        if "update_progress" in self.callbacks:
+            # Mantém a reatividade do terminal Windows limpa
+            pass
         if "update_status" in self.callbacks:
             self.callbacks["update_status"](msg, color)
+
+    @staticmethod
+    def sanitizar_descricao(texto):
+        """
+        Sanitiza a descrição removendo aspas duplas, simples e outros caracteres
+        que possam quebrar a injeção via código JavaScript ou causar erros no ASP.
+        """
+        if not texto:
+            return ""
+        # Remove caracteres de controle de quebra de linha
+        t = str(texto).replace("\n", " ").replace("\r", " ")
+        # Substitui aspas por aspas simples ou as remove
+        t = t.replace('"', '').replace("'", "")
+        # Remove caracteres de barra invertida que escapam injeções de string js
+        t = t.replace("\\", "/")
+        # Remove outros caracteres perigosos comuns
+        for char in ["&", "<", ">", "%", "*", ";", "`", "$"]:
+            t = t.replace(char, "")
+        return t.strip()
 
     def show_message(self, tipo, titulo, msg):
         """Aciona um popup na interface para alertas e erros genéricos."""
@@ -220,7 +247,8 @@ class SigaBot:
                 self.selecionar_select2(page, "f_historico", codigo_historico, dropdown_is_ajax=True)
                 
                 # Dispara preenchimento em lote por JavaScript nos textareas de complemento
-                msg_comp = f"{tipo_nome} - {desc_tx}"
+                desc_sanitizada = self.sanitizar_descricao(desc_tx)
+                msg_comp = f"{tipo_nome} - {desc_sanitizada}"
                 page.evaluate(f'''
                     if (document.getElementById("f_complementoorigem")) document.getElementById("f_complementoorigem").value = "{msg_comp}";
                     if (document.getElementById("f_complementodestino")) document.getElementById("f_complementodestino").value = "{msg_comp}";
@@ -259,8 +287,6 @@ class SigaBot:
                 
             self._qtd_injecoes_efetuadas = len(lanc_ordenados)
             self.update_status(f"✅ Finalizado! {len(lanc_ordenados)} registros injetados no SIGA.", "#3C763D")
-            if "show_message" in self.callbacks:
-                self.callbacks["show_message"]("info", "AutoSIGA", "Todos os lançamentos foram importados com sucesso! O robô agora fará a validação.")
             
         except Exception as e:
             logging.error(f"Erro inserindo lançamentos: {e}", exc_info=True)
@@ -364,7 +390,8 @@ class SigaBot:
                 self.selecionar_select2(page, "f_historico_debito", "029", dropdown_is_ajax=True)
                 
                 # 10. Complemento
-                msg_comp = f"RENDIMENTO - {desc_tx}"
+                desc_sanitizada = self.sanitizar_descricao(desc_tx)
+                msg_comp = f"RENDIMENTO - {desc_sanitizada}"
                 page.evaluate(f'''
                     if (document.getElementById("f_complemento")) document.getElementById("f_complemento").value = "{msg_comp}";
                 ''')
@@ -406,31 +433,26 @@ class SigaBot:
 
     def fluxo_automacao(self):
         """
-        Coração assíncrono do bot. Roteiriza a abertura do navegador, injeção, e encerramento.
-        
-        Etapas:
-        1. Contexto do Edge persistente (puxa os cookies de login).
-        2. Tenta fazer login, caso o cookie tenha expirado.
-        3. Entra na aba de seleção da Localidade e preenche os dropdowns invisíveis.
-        4. Lê a rotina TES01701 e extrai o extrato HTML da empresa.
-        5. Passa para o Conciliador fazer a matemática.
-        6. Aguarda o Humano autorizar a injeção (caso existam pendências).
-        7. Realiza nova conferência de sucesso após injeções e solta relatório de produtividade.
+        Coração assíncrono do bot. Roteiriza a abertura do navegador, injeção em lote e encerramento.
         """
         self.browser_aberto = True
         tempo_inicio = time.time()
-        telemetria = {
-            "ofx_itens": len(self.dados_processados.get("transacoes", [])),
+        
+        # Telemetria acumulada de todo o lote
+        telemetria_lote = {
+            "ofx_itens": sum(len(d.get("transacoes", [])) for d in self.lote_processados),
             "siga_itens": 0,
             "injecoes": 0,
-            "pendentes": 0
+            "pendentes": 0,
+            "total_contas": len(self.lote_processados),
+            "volume_financeiro": 0.0
         }
+        
         try:
             with sync_playwright() as p:
                 user_data_dir = os.path.join(os.getcwd(), 'siga_browser_data')
                 
-                # Utiliza o Microsoft Edge nativo do sistema para fugir de problemas
-                # de incompatibilidade do Webkit quando buildado em .exe (PyInstaller)
+                # Utiliza o Microsoft Edge nativo
                 context = p.chromium.launch_persistent_context(
                     user_data_dir=user_data_dir,
                     headless=False,
@@ -441,8 +463,6 @@ class SigaBot:
                 
                 page = context.pages[0] if context.pages else context.new_page()
                 
-                # Ferramenta para Logar no terminal python onde quer que o mouse clique
-                # (Extremamente útil para o dev atualizar o bot se o sistema SIGA sofrer atualizações)
                 page.on("console", lambda msg: logging.info(msg.text) if "SIGA-CLIQUE" in msg.text else None)
                 page.add_init_script('''
                     document.addEventListener('click', function(e) {
@@ -474,251 +494,292 @@ class SigaBot:
                     precisa_fazer_login = False
                 
                 if precisa_fazer_login:
-                    self.update_status("Login Mestre de Hoje: não esqueça de marcar a caixa 'Lembrar me' para a próxima!", "#D9534F")
-                    try:
-                        # Assinala checkbox "Lembrar Senha" forçadamente se o usuário a ignorou
-                        page.evaluate("() => { let cbs = document.querySelectorAll('input[type=\"checkbox\"]'); for(let cb of cbs) { if(cb.parentElement.innerText.match(/Lembrar/i) || cb.id.indexOf('lembr') > -1) { cb.checked = true; } } }")
-                    except:
-                        pass
-                    # Trava o loop do bot até que a janela de senha não exista mais (Sinal de Logon validado)
+                    # Tenta efetuar o login automatizado caso o usuário tenha configurado o .env
+                    usuario_env = os.getenv("SIGA_USUARIO", "")
+                    senha_env = os.getenv("SIGA_SENHA", "")
+                    
+                    if usuario_env and senha_env:
+                        self.update_status("Realizando login automático com credenciais do .env...", "#428BCA")
+                        try:
+                            # Preenche o login (geralmente e-mail ou CPF, campo de texto perto da senha)
+                            input_user = page.locator('input[type="text"], input[type="email"]').first
+                            input_user.fill(usuario_env)
+                            page.locator('input[type="password"]').fill(senha_env)
+                            
+                            # Marca a caixa 'Lembrar me'
+                            page.evaluate("() => { let cbs = document.querySelectorAll('input[type=\"checkbox\"]'); for(let cb of cbs) { if(cb.parentElement.innerText.match(/Lembrar/i) || cb.id.indexOf('lembr') > -1) { cb.checked = true; } } }")
+                            
+                            # Submete o formulário
+                            btn_entrar = page.locator('button[type="submit"], input[type="submit"]').first
+                            btn_entrar.click()
+                            page.wait_for_load_state("domcontentloaded")
+                        except Exception as login_err:
+                            logging.warning(f"Falha na tentativa de login automático: {login_err}")
+                    else:
+                        self.update_status("Login Mestre de Hoje: não esqueça de marcar a caixa 'Lembrar me' para a próxima!", "#D9534F")
+                        try:
+                            page.evaluate("() => { let cbs = document.querySelectorAll('input[type=\"checkbox\"]'); for(let cb of cbs) { if(cb.parentElement.innerText.match(/Lembrar/i) || cb.id.indexOf('lembr') > -1) { cb.checked = true; } } }")
+                        except:
+                            pass
+                    
+                    # Aguarda o login manual do usuário ou a conclusão do automático
                     senha_locator.wait_for(state="hidden", timeout=0)
                 
-                self.update_status("Sessão Validada. Verificando localidade...", "#428BCA")
+                self.update_status("Sessão Validada. Iniciando processamento do lote...", "#428BCA")
                 
-                self.update_status("Ajustando configurações de Localidade e Mês de Trabalho...", "#428BCA")
+                localidade_anterior = None
+                competencia_anterior = None
                 
-                mes_ano_alvo = self.dados_processados.get("data_final", "")
-                if len(mes_ano_alvo) >= 10:
-                    mes_ano_alvo = mes_ano_alvo[3:] # Corta pro formato 'MM/YYYY'
-                else:
-                    mes_ano_alvo = ""
-
-                page.locator('#a_competencia').click()
-                time.sleep(1)
-                
-                page.locator('a.showModal:has-text("Outros Meses")').click()
-                
-                btn_confirmar = page.locator('form.modal-form button[type="submit"]:has-text("Confirmar")').first
-                btn_confirmar.wait_for(state="attached", timeout=15000)
-                time.sleep(1.5)
-                
-                js_select2 = f'''() => {{
-                    var selectLoc = jQuery('select[name="f_estabelecimento"]');
-                    if (selectLoc.length > 0) {{
-                        var optLoc = selectLoc.find('option').filter(function() {{
-                            var text = jQuery(this).text().toUpperCase();
-                            return text.indexOf("{self.tipo_alvo}") > -1 && text.indexOf("{self.nome_alvo}") > -1;
-                        }});
-                        if (optLoc.length > 0) {{
-                            selectLoc.val(optLoc.val()).trigger('change');
-                        }}
-                    }}
-                    
-                    if ("{mes_ano_alvo}" !== "") {{
-                        var selectMes = jQuery('select[name="f_competencia"]');
-                        if (selectMes.length > 0) {{
-                            var optMes = selectMes.find('option:contains("{mes_ano_alvo}")');
-                            if (optMes.length > 0) {{
-                                selectMes.val(optMes.val()).trigger('change');
-                            }}
-                        }}
-                    }}
-                    
-                    jQuery('#f-mudarpadrao').prop('checked', true);
-                }}'''
-                
-                page.evaluate(js_select2)
-                time.sleep(1.5)
-                
-                btn_confirmar.evaluate("el => el.click()")
-                
-                page.wait_for_load_state("domcontentloaded")
-                time.sleep(3)
-                
-                if mes_ano_alvo:
-                    self.update_status(f"✅ Logado em: {self.localidade_selecionada} ({mes_ano_alvo})", "#3C763D")
-                else:
-                    self.update_status(f"✅ Logado em: {self.localidade_selecionada}", "#3C763D")
-                
-                self.update_status("Acessando rotina TES01701...", "#428BCA")
-                
-                input_programa = page.locator('#f_executar_programa')
-                btn_executar = page.locator('#btn_executar_programa')
-                
-                input_programa.wait_for(state="visible", timeout=10000)
-                input_programa.fill("TES01701")
-                time.sleep(0.5)
-                
-                # Exclui popups nativos que atrapalham a área de clique
-                page.evaluate("document.querySelectorAll('.notificacao').forEach(e => e.remove());")
-                
-                btn_executar.click(force=True)
-                page.wait_for_load_state("domcontentloaded")
-                time.sleep(2)
-                
-                self.update_status("Abrindo menu do Extrato...", "#428BCA")
-                
-                btn_extrato = page.locator('#btn-filtro')
-                btn_extrato.wait_for(state="visible", timeout=10000)
-                btn_extrato.click()
-                time.sleep(1.5)
-                
-                is_aplicacao = (self.dados_processados.get("tipo_extrato") == "APLICACAO")
-                if is_aplicacao:
-                    conta_alvo = self.dados_processados.get("conta_siga_aplicacao", "")
-                else:
-                    conta_alvo = self.dados_processados.get("conta_siga_corrente", "")
-                achou_conta = False
-                
-                # Varre a lista de contas na tela e dispara jQuery ao achar match
-                if conta_alvo:
-                    opcoes = page.locator('#f_conta option')
-                    for i in range(opcoes.count()):
-                        texto_opt = opcoes.nth(i).text_content()
-                        if conta_alvo in texto_opt:
-                            valor_id = opcoes.nth(i).get_attribute('value')
-                            page.evaluate(f'$("#f_conta").val("{valor_id}").trigger("change")')
-                            achou_conta = True
-                            break
-                            
-                if not achou_conta:
-                    self.update_status(f"⚠️ Conta '{conta_alvo}' não encontrada na lista!", "#D9534F")
-                    time.sleep(3)
-                    
-                data_in = self.dados_processados.get("data_inicial", "")
-                data_fim = self.dados_processados.get("data_final", "")
-                
-                if data_in:
-                    page.locator('#f_data1').fill(data_in)
-                if data_fim:
-                    page.locator('#f_data2').fill(data_fim)
-                    
-                time.sleep(0.5)
-                
-                self.update_status("Consultando movimentações no banco...", "#F89406")
-                page.locator('#f_main button[type="submit"].btn-success').click()
-                
-                page.wait_for_load_state("domcontentloaded")
-                time.sleep(3)
-                
-                self.update_status("Lendo dados da tabela do SIGA...", "#428BCA")
-                page.locator('#grid1').wait_for(state="visible", timeout=10000)
-                
-                # Extrai grid principal (Web Scraper)
-                extrato_siga = page.evaluate('''() => {
-                    let rows = document.querySelectorAll('#grid1 tbody tr');
-                    let result = [];
-                    for (let tr of rows) {
-                        let tds = tr.querySelectorAll('td');
-                        // Garante que é uma linha de valor (não ignorar cabeçalhos em <th>)
-                        if (tds.length >= 8) {
-                            result.push({
-                                data: tds[0].innerText.trim(),
-                                lote: tds[1].innerText.trim(),
-                                documento: tds[2].innerText.trim(),
-                                historico: tds[3].innerText.trim(),
-                                origem: tds[4].innerText.trim(),
-                                entrada: tds[5].innerText.trim(),
-                                saida: tds[6].innerText.trim(),
-                                saldo: tds[7].innerText.trim()
-                            });
-                        }
-                    }
-                    return result;
-                }''')
-                
-                self.dados_processados["extrato_siga"] = extrato_siga
-                qtd_siga = len(extrato_siga)
-                
-                self.update_status(f"Cruzando {qtd_siga} itens do SIGA com o OFX...", "#428BCA")
-                
-                novos_lancamentos = Conciliador.conciliar(self.dados_processados.get("transacoes", []), extrato_siga)
-                
-                if novos_lancamentos:
-                    self.update_status(f"⚠️ Há {len(novos_lancamentos)} lançamentos para importar! Aguardando sua ação...", "#F89406")
-                    
-                    self.esperando_autorizacao = True
-                    self.autorizou_importacao = False
-                    
-                    # Interrompe o processo e aciona a UI para apresentar o modal para o humano
-                    if "request_authorization" in self.callbacks:
-                        self.callbacks["request_authorization"](novos_lancamentos)
+                for idx, dados_atual in enumerate(self.lote_processados):
+                    if not self.browser_aberto:
+                        break
                         
-                    # Busy Wait elegante aguardando a resposta humana na UI
-                    while self.esperando_autorizacao:
-                        if not self.browser_aberto:
-                            break
+                    self.dados_processados = dados_atual
+                    self.localidade_selecionada = dados_atual["localidade_selecionada"]
+                    self.tipo_alvo = dados_atual["tipo_adm"]
+                    self.nome_alvo = dados_atual["nome_adm"]
+                    
+                    # Soma o valor absoluto de cada transação do extrato no volume financeiro
+                    for tx in self.dados_processados.get("transacoes", []):
+                        telemetria_lote["volume_financeiro"] += abs(tx.get("valor", 0.0))
+                        
+                    self.update_status(f"[{idx+1}/{len(self.lote_processados)}] Processando {self.localidade_selecionada}...", "#428BCA")
+                    
+                    mes_ano_alvo = self.dados_processados.get("data_final", "")
+                    if len(mes_ano_alvo) >= 10:
+                        mes_ano_alvo = mes_ano_alvo[3:]
+                    else:
+                        mes_ano_alvo = ""
+
+                    localidade_atual = f"{self.tipo_alvo}-{self.nome_alvo}"
+                    
+                    # Só troca de localidade e competência se for diferente do extrato anterior
+                    if localidade_atual != localidade_anterior or mes_ano_alvo != competencia_anterior:
+                        self.update_status("Ajustando configurações de Localidade e Mês de Trabalho...", "#428BCA")
+                        
+                        page.locator('#a_competencia').click()
                         time.sleep(1)
                         
-                    if self.autorizou_importacao:
-                        self.update_status("🚀 Lançamentos autorizados! Iniciando inserção...", "#428BCA")
-                        if is_aplicacao:
-                            self.inserir_rendimentos_siga(page, novos_lancamentos)
-                        else:
-                            self.inserir_lancamentos_siga(page, novos_lancamentos)
+                        page.locator('a.showModal:has-text("Outros Meses")').click()
                         
-                        self.update_status("Realizando conferência final no servidor...", "#428BCA")
-                        time.sleep(2)
+                        btn_confirmar = page.locator('form.modal-form button[type="submit"]:has-text("Confirmar")').first
+                        btn_confirmar.wait_for(state="attached", timeout=15000)
+                        time.sleep(1.5)
                         
-                        try:
-                            if page.locator('#btn-filtro').is_visible():
-                                page.locator('#btn-filtro').click()
-                                time.sleep(1)
+                        js_select2 = f'''() => {{
+                            var selectLoc = jQuery('select[name="f_estabelecimento"]');
+                            if (selectLoc.length > 0) {{
+                                var optLoc = selectLoc.find('option').filter(function() {{
+                                    var text = jQuery(this).text().toUpperCase();
+                                    return text.indexOf("{self.tipo_alvo}") > -1 && text.indexOf("{self.nome_alvo}") > -1;
+                                }});
+                                if (optLoc.length > 0) {{
+                                    selectLoc.val(optLoc.val()).trigger('change');
+                                }}
+                            }}
+                            
+                            if ("{mes_ano_alvo}" !== "") {{
+                                var selectMes = jQuery('select[name="f_competencia"]');
+                                if (selectMes.length > 0) {{
+                                    var optMes = selectMes.find('option:contains("{mes_ano_alvo}")');
+                                    if (optMes.length > 0) {{
+                                        selectMes.val(optMes.val()).trigger('change');
+                                    }}
+                                }}
+                            }}
+                            
+                            jQuery('#f-mudarpadrao').prop('checked', true);
+                        }}'''
+                        
+                        page.evaluate(js_select2)
+                        time.sleep(1.5)
+                        
+                        btn_confirmar.evaluate("el => el.click()")
+                        
+                        page.wait_for_load_state("domcontentloaded")
+                        time.sleep(3)
+                        
+                        localidade_anterior = localidade_atual
+                        competencia_anterior = mes_ano_alvo
+                        
+                    if mes_ano_alvo:
+                        self.update_status(f"✅ Logado em: {self.localidade_selecionada} ({mes_ano_alvo})", "#3C763D")
+                    else:
+                        self.update_status(f"✅ Logado em: {self.localidade_selecionada}", "#3C763D")
+                    
+                    self.update_status("Acessando rotina TES01701...", "#428BCA")
+                    
+                    input_programa = page.locator('#f_executar_programa')
+                    btn_executar = page.locator('#btn_executar_programa')
+                    
+                    input_programa.wait_for(state="visible", timeout=10000)
+                    input_programa.fill("TES01701")
+                    time.sleep(0.5)
+                    
+                    page.evaluate("document.querySelectorAll('.notificacao').forEach(e => e.remove());")
+                    
+                    btn_executar.click(force=True)
+                    page.wait_for_load_state("domcontentloaded")
+                    time.sleep(2)
+                    
+                    self.update_status("Abrindo menu do Extrato...", "#428BCA")
+                    
+                    btn_extrato = page.locator('#btn-filtro')
+                    btn_extrato.wait_for(state="visible", timeout=10000)
+                    btn_extrato.click()
+                    time.sleep(1.5)
+                    
+                    is_aplicacao = (self.dados_processados.get("tipo_extrato") == "APLICACAO")
+                    if is_aplicacao:
+                        conta_alvo = self.dados_processados.get("conta_siga_aplicacao", "")
+                    else:
+                        conta_alvo = self.dados_processados.get("conta_siga_corrente", "")
+                    achou_conta = False
+                    
+                    if conta_alvo:
+                        opcoes = page.locator('#f_conta option')
+                        for i in range(opcoes.count()):
+                            texto_opt = opcoes.nth(i).text_content()
+                            if conta_alvo in texto_opt:
+                                valor_id = opcoes.nth(i).get_attribute('value')
+                                page.evaluate(f'$("#f_conta").val("{valor_id}").trigger("change")')
+                                achou_conta = True
+                                break
                                 
-                            page.locator('#modal-filtro form#f_main button.btn-success').first.click()
-                            page.wait_for_load_state("domcontentloaded")
-                            time.sleep(4)
-                            
-                            extrato_recente = page.evaluate('''() => {
-                                let rows = document.querySelectorAll('#grid1 tbody tr');
-                                let r = [];
-                                for (let tr of rows) {
-                                    let tds = tr.querySelectorAll('td');
-                                    if (tds.length >= 8) {
-                                        r.push({
-                                            data: tds[0].innerText.trim(), lote: tds[1].innerText.trim(),
-                                            documento: tds[2].innerText.trim(), historico: tds[3].innerText.trim(),
-                                            origem: tds[4].innerText.trim(), entrada: tds[5].innerText.trim(),
-                                            saida: tds[6].innerText.trim(), saldo: tds[7].innerText.trim()
-                                        });
-                                    }
-                                }
-                                return r;
-                            }''')
-                            
-                            self.dados_processados["extrato_siga"] = extrato_recente
-                            pendentes = Conciliador.conciliar(self.dados_processados.get("transacoes", []), extrato_recente)
-                            
-                            telemetria["siga_itens"] = len(extrato_recente)
-                            telemetria["pendentes"] = len(pendentes)
-                            
-                            if not pendentes:
-                                self.update_status("✅ Conferência 100%: Nenhum item para trás!", "#3C763D")
+                    if not achou_conta:
+                        self.update_status(f"⚠️ Conta '{conta_alvo}' não encontrada na lista!", "#D9534F")
+                        time.sleep(3)
+                        
+                    data_in = self.dados_processados.get("data_inicial", "")
+                    data_fim = self.dados_processados.get("data_final", "")
+                    
+                    if data_in:
+                        page.locator('#f_data1').fill(data_in)
+                    if data_fim:
+                        page.locator('#f_data2').fill(data_fim)
+                        
+                    time.sleep(0.5)
+                    
+                    self.update_status("Consultando movimentações no banco...", "#F89406")
+                    page.locator('#f_main button[type="submit"].btn-success').click()
+                    
+                    page.wait_for_load_state("domcontentloaded")
+                    time.sleep(3)
+                    
+                    self.update_status("Lendo dados da tabela do SIGA...", "#428BCA")
+                    page.locator('#grid1').wait_for(state="visible", timeout=10000)
+                    
+                    extrato_siga = page.evaluate('''() => {
+                        let rows = document.querySelectorAll('#grid1 tbody tr');
+                        let result = [];
+                        for (let tr of rows) {
+                            let tds = tr.querySelectorAll('td');
+                            if (tds.length >= 8) {
+                                result.push({
+                                    data: tds[0].innerText.trim(),
+                                    lote: tds[1].innerText.trim(),
+                                    documento: tds[2].innerText.trim(),
+                                    historico: tds[3].innerText.trim(),
+                                    origem: tds[4].innerText.trim(),
+                                    entrada: tds[5].innerText.trim(),
+                                    saida: tds[6].innerText.trim(),
+                                    saldo: tds[7].innerText.trim()
+                                });
+                            }
+                        }
+                        return result;
+                    }''')
+                    
+                    self.dados_processados["extrato_siga"] = extrato_siga
+                    qtd_siga = len(extrato_siga)
+                    telemetria_lote["siga_itens"] += qtd_siga
+                    
+                    self.update_status(f"Cruzando {qtd_siga} itens do SIGA com o OFX...", "#428BCA")
+                    
+                    novos_lancamentos = Conciliador.conciliar(self.dados_processados.get("transacoes", []), extrato_siga)
+                    
+                    if novos_lancamentos:
+                        limite_tentativas = 3
+                        tentativa = 1
+                        pendentes = novos_lancamentos
+                        
+                        while pendentes and tentativa <= limite_tentativas:
+                            if tentativa > 1:
+                                self.update_status(f"🔄 Re-tentativa {tentativa}/{limite_tentativas}: Injetando {len(pendentes)} lançamentos restantes...", "#F89406")
                             else:
-                                self.update_status(f"⚠️ Alerta: {len(pendentes)} itens não bateram no SIGA.", "#D9534F")
+                                self.update_status(f"🚀 Importando automaticamente {len(pendentes)} lançamentos em {self.localidade_selecionada}...", "#428BCA")
                                 
-                            telemetria["injecoes"] = self._qtd_injecoes_efetuadas
-                            if "show_dashboard" in self.callbacks:
-                                self.callbacks["show_dashboard"](telemetria, tempo_inicio)
+                            self._qtd_injecoes_efetuadas = 0
+                            if is_aplicacao:
+                                self.inserir_rendimentos_siga(page, pendentes)
+                            else:
+                                self.inserir_lancamentos_siga(page, pendentes)
+                            
+                            telemetria_lote["injecoes"] += self._qtd_injecoes_efetuadas
+                            
+                            self.update_status("Realizando conferência pós-lançamento...", "#428BCA")
+                            time.sleep(2.5)
+                            
+                            try:
+                                if page.locator('#btn-filtro').is_visible():
+                                    page.locator('#btn-filtro').click()
+                                    time.sleep(1)
+                                    
+                                page.locator('#modal-filtro form#f_main button.btn-success').first.click()
+                                page.wait_for_load_state("domcontentloaded")
+                                time.sleep(4)
                                 
-                        except Exception as e:
-                            logging.error(f"Erro na conferência final: {e}")
-                            self.update_status("✅ Lançamentos finalizados (sem prova real)", "#3C763D")
+                                extrato_recente = page.evaluate('''() => {
+                                    let rows = document.querySelectorAll('#grid1 tbody tr');
+                                    let r = [];
+                                    for (let tr of rows) {
+                                        let tds = tr.querySelectorAll('td');
+                                        if (tds.length >= 8) {
+                                            r.push({
+                                                data: tds[0].innerText.trim(), lote: tds[1].innerText.trim(),
+                                                documento: tds[2].innerText.trim(), historico: tds[3].innerText.trim(),
+                                                origem: tds[4].innerText.trim(), entrada: tds[5].innerText.trim(),
+                                                saida: tds[6].innerText.trim(), saldo: tds[7].innerText.trim()
+                                            });
+                                        }
+                                    }
+                                    return r;
+                                }''')
+                                
+                                self.dados_processados["extrato_siga"] = extrato_recente
+                                pendentes = Conciliador.conciliar(self.dados_processados.get("transacoes", []), extrato_recente)
+                                
+                                if not pendentes:
+                                    self.update_status(f"✅ [{self.localidade_selecionada}] Conferência 100%: Nenhum item para trás!", "#3C763D")
+                                    break
+                            except Exception as e:
+                                logging.error(f"Erro na conferência final: {e}")
+                                self.update_status(f"✅ [{self.localidade_selecionada}] Finalizado sem prova real.", "#3C763D")
+                                break
+                                
+                            tentativa += 1
+                        
+                        if pendentes:
+                            telemetria_lote["pendentes"] += len(pendentes)
+                            self.update_status(f"⚠️ [{self.localidade_selecionada}] Alerta: {len(pendentes)} itens não bateram após {limite_tentativas} tentativas.", "#D9534F")
                             
                     else:
-                        self.update_status("❌ Importação cancelada pelo usuário.", "#D9534F")
+                        self.update_status(f"✅ [{self.localidade_selecionada}] Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
                         
-                else:
-                    self.update_status("✅ Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
-                    telemetria["injecoes"] = self._qtd_injecoes_efetuadas
-                    if "show_dashboard" in self.callbacks:
-                        self.callbacks["show_dashboard"](telemetria, tempo_inicio)
+                    # Atualiza a barra de progresso na UI
+                    if "update_progress" in self.callbacks:
+                        progresso = (idx + 1) / len(self.lote_processados)
+                        self.callbacks["update_progress"](progresso)
                         
-                # Mantém o Contexto aberto na tela para que o usuário avalie com seus próprios olhos
+                    time.sleep(2)
+                
+                self.update_status("✅ Todos os extratos do lote foram processados!", "#3C763D")
+                if "show_dashboard" in self.callbacks:
+                    self.callbacks["show_dashboard"](telemetria_lote, tempo_inicio)
+                    
                 self.browser_aberto = True
                 while self.browser_aberto:
                     try:
-                        # Se o navegador for fechado brutalmente via "X" da janela
                         if not context.pages:
                             break
                     except Exception:
@@ -727,7 +788,10 @@ class SigaBot:
                     
         except Exception as e:
             msg_erro = f"Erro inesperado na automação do SIGA: {e}"
-            print(f"⚠️ {msg_erro}")
+            try:
+                print(f"⚠️ {msg_erro}")
+            except UnicodeEncodeError:
+                print(f"[!] {msg_erro.encode('ascii', errors='replace').decode('ascii')}")
             logging.error(msg_erro, exc_info=True)
             traceback.print_exc()
             

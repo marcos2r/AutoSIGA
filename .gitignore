@@ -13,3 +13,7 @@ dist/
 *.exe
 temp/
 scratch_inspect.py
+
+# Credenciais e logs locais
+.env
+logs/

@@ -53,11 +53,19 @@ class OfxReader:
         """
         # Abre em modo binário ('rb') porque a biblioteca ofxparse espera bytes, 
         # para lidar de forma nativa com as quebras de linha e encodes do XML bancário.
-        with open(caminho, 'rb') as f:
-            ofx = OfxParser.parse(f)
+        try:
+            with open(caminho, 'rb') as f:
+                ofx = OfxParser.parse(f)
+        except Exception as e:
+            raise ValueError(f"O arquivo não é um extrato OFX válido ou está corrompido. Detalhe: {e}")
         
+        if not ofx or not hasattr(ofx, 'account') or not ofx.account:
+            raise ValueError("O extrato OFX não contém dados de conta válidos.")
+            
         conta = ofx.account
         extrato = conta.statement
+        if not extrato:
+            raise ValueError("O extrato OFX não contém bloco de movimentações financeiras.")
         
         # Consolida os cabeçalhos (metadados gerais da conta) em um dicionário simples
         dados_ofx = {

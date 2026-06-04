@@ -90,3 +90,122 @@ class Exportador:
         except Exception as e:
             logging.error(f"Erro ao salvar arquivo TXT das ofertas: {e}", exc_info=True)
             raise e
+
+    @staticmethod
+    def gerar_excel_lote(telemetria, dados_lote, filepath):
+        """
+        Gera uma planilha Excel formatada (.xlsx) com o resumo do lote de conciliação,
+        incluindo transações processadas, status de conferência e pendências.
+        """
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        
+        wb = openpyxl.Workbook()
+        
+        # 1. Planilha de Resumo Geral
+        ws_resumo = wb.active
+        ws_resumo.title = "Resumo do Lote"
+        ws_resumo.views.sheetView[0].showGridLines = True
+        
+        # Cores e Estilos (Alinhado com a identidade visual)
+        cor_header = PatternFill(start_color="438EB9", end_color="438EB9", fill_type="solid")
+        cor_zebra = PatternFill(start_color="F9FBFD", end_color="F9FBFD", fill_type="solid")
+        fonte_titulo = Font(name="Segoe UI", size=16, bold=True, color="438EB9")
+        fonte_header = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+        fonte_normal = Font(name="Segoe UI", size=10)
+        fonte_bold = Font(name="Segoe UI", size=10, bold=True)
+        
+        # Título
+        ws_resumo["A1"] = "AutoSIGA - Relatório de Produtividade do Lote"
+        ws_resumo["A1"].font = fonte_titulo
+        ws_resumo.row_dimensions[1].height = 30
+        
+        # Métricas Gerais
+        ws_resumo["A3"] = "Métrica"
+        ws_resumo["B3"] = "Valor"
+        for col in ["A", "B"]:
+            ws_resumo[f"{col}3"].fill = cor_header
+            ws_resumo[f"{col}3"].font = fonte_header
+            ws_resumo[f"{col}3"].alignment = Alignment(horizontal="center")
+            
+        dados_metrica = [
+            ("Total de Extratos Processados", telemetria.get("total_contas", 0)),
+            ("Transações no Extrato (OFX)", telemetria.get("ofx_itens", 0)),
+            ("Transações Localizadas no SIGA", telemetria.get("siga_itens", 0)),
+            ("Lançamentos Injetados", telemetria.get("injecoes", 0)),
+            ("Pendências Finais não Conciliadas", telemetria.get("pendentes", 0)),
+            ("Volume Financeiro Conciliado (R$)", telemetria.get("volume_financeiro", 0.0)),
+        ]
+        
+        for idx, (m, v) in enumerate(dados_metrica, start=4):
+            ws_resumo[f"A{idx}"] = m
+            ws_resumo[f"B{idx}"] = v
+            ws_resumo[f"A{idx}"].font = fonte_normal
+            ws_resumo[f"B{idx}"].font = fonte_bold
+            if "Volume" in m:
+                ws_resumo[f"B{idx}"].number_format = 'R$ #,##0.00'
+                ws_resumo[f"B{idx}"].alignment = Alignment(horizontal="right")
+            else:
+                ws_resumo[f"B{idx}"].alignment = Alignment(horizontal="right")
+            
+            # Linha zebrada
+            if idx % 2 == 0:
+                ws_resumo[f"A{idx}"].fill = cor_zebra
+                ws_resumo[f"B{idx}"].fill = cor_zebra
+                
+        # 2. Planilha de Detalhamento por Extrato
+        ws_detalhe = wb.create_sheet(title="Detalhamento")
+        ws_detalhe.views.sheetView[0].showGridLines = True
+        
+        headers_det = ["Localidade", "Tipo Extrato", "Conta Bancária", "Total Transações", "Transações SIGA", "Injetados", "Status Final"]
+        ws_detalhe.row_dimensions[1].height = 25
+        for col_idx, text in enumerate(headers_det, start=1):
+            cell = ws_detalhe.cell(row=1, column=col_idx, value=text)
+            cell.fill = cor_header
+            cell.font = fonte_header
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+        for row_idx, d in enumerate(dados_lote, start=2):
+            ws_detalhe.row_dimensions[row_idx].height = 20
+            loc = f"{d.get('tipo_adm', '')} - {d.get('nome_adm', '')}"
+            tipo = d.get('tipo_extrato', 'CONTA CORRENTE')
+            conta = d.get('conta_id', '')
+            total_tx = len(d.get('transacoes', []))
+            total_siga = len(d.get('extrato_siga', []))
+            
+            # Tenta pegar a quantidade injetada de forma condicional se existirem pendências
+            inj = total_tx - len(d.get('pendentes', [])) if 'pendentes' in d else total_tx
+            status = "Conciliado 100%" if not d.get('pendentes') else f"{len(d.get('pendentes'))} pendentes"
+            
+            ws_detalhe.cell(row=row_idx, column=1, value=loc).font = fonte_normal
+            ws_detalhe.cell(row=row_idx, column=2, value=tipo).font = fonte_normal
+            ws_detalhe.cell(row=row_idx, column=3, value=conta).font = fonte_normal
+            ws_detalhe.cell(row=row_idx, column=4, value=total_tx).font = fonte_normal
+            ws_detalhe.cell(row=row_idx, column=5, value=total_siga).font = fonte_normal
+            ws_detalhe.cell(row=row_idx, column=6, value=inj).font = fonte_normal
+            
+            status_cell = ws_detalhe.cell(row=row_idx, column=7, value=status)
+            status_cell.font = fonte_bold
+            if "100%" in status:
+                status_cell.fill = PatternFill(start_color="DFF0D8", end_color="DFF0D8", fill_type="solid")
+                status_cell.font = Font(name="Segoe UI", size=10, bold=True, color="3C763D")
+            else:
+                status_cell.fill = PatternFill(start_color="F2DEDE", end_color="F2DEDE", fill_type="solid")
+                status_cell.font = Font(name="Segoe UI", size=10, bold=True, color="A94442")
+                
+            if row_idx % 2 == 0:
+                for c in range(1, 7):
+                    ws_detalhe.cell(row=row_idx, column=c).fill = cor_zebra
+                    
+        # Redimensionamento dinâmico das colunas
+        for sheet in [ws_resumo, ws_detalhe]:
+            for col in sheet.columns:
+                max_len = 0
+                for cell in col:
+                    if cell.value:
+                        max_len = max(max_len, len(str(cell.value)))
+                col_letter = openpyxl.utils.get_column_letter(col[0].column)
+                sheet.column_dimensions[col_letter].width = max(max_len + 3, 12)
+                
+        wb.save(filepath)
+

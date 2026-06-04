@@ -65,13 +65,15 @@ class XlsReader:
         try:
             workbook = xlrd.open_workbook(caminho)
         except Exception as e:
-            raise IOError(f"Falha ao abrir a planilha Excel. Verifique se o arquivo está corrompido: {e}")
+            raise ValueError(f"O arquivo não pôde ser aberto como planilha Excel (XLS/XLSX) válida. Erro: {e}")
             
         # O extrato do Sicredi gera os dados sempre na primeira aba (normalmente chamada 'Relatorio')
         if not workbook.sheet_names():
-            raise ValueError("O arquivo de extrato não contém nenhuma planilha ativa.")
+            raise ValueError("A planilha de extrato carregada não contém abas ativas.")
             
         sheet = workbook.sheet_by_index(0)
+        if sheet.nrows < 5:
+            raise ValueError("A planilha carregada contém poucas linhas para ser um extrato Sicredi válido.")
         
         # 1. Varredura Inicial de Metadados (Cabeçalho da Planilha)
         conta_id = ""

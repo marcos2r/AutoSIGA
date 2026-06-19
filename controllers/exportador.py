@@ -47,7 +47,7 @@ class Exportador:
         # Palavras bloqueadas que categorizam lançamentos que NÃO são Ofertas puras.
         # Por exemplo: Rendimentos de aplicação, saques aplicados e dinheiro em 
         # caixa já lançado direto (depositos ou congregação).
-        palavras_bloqueadas = ["APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "RESG.", "DEP ", "CONGREGACAO"]
+        palavras_bloqueadas = ["APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "RESG.", "DEP ", "CONGREGACAO", "TRANSFERENCIA"]
 
         linhas_limpas = []
         qtd_descartadas = 0

@@ -1,9 +1,13 @@
-# AutoSIGA v1.2.1 🚀
+# AutoSIGA v1.2.2 🚀
 
 **AutoSIGA** é um motor avançado de RPA (Robotic Process Automation) construído em Python, voltado para a automatização e conciliação de tesourarias baseadas nas regras IT.TES.05. Ele cruza digitalmente extratos bancários brutos (`.OFX`) com o painel contábil administrativo SIGA (Sistema de Informação e Gestão), injetando dados, poupando centenas de horas humanas e reduzindo a taxa de erros a zero.
 
 ## 🎯 Por que o AutoSIGA existe?
 A conciliação bancária entre múltiplas jurisdições (como a de Administração/Conta Corrente e de Ponto de Pregação/Fundo de Aplicação) no SIGA era uma tarefa manual, exaustiva e suscetível à desorganização humana. O AutoSIGA atua como um robô que enxerga o sistema exatamente como você.
+
+## ✨ Destaques da Versão v1.2.2
+
+- **Bloqueio de Transferências**: Adicionada a palavra-chave `"TRANSFERENCIA"` à blacklist do exportador de ofertas no arquivo `.txt`, impedindo que movimentações identificadas como transferências sejam indevidamente processadas como ofertas puras de igreja no SIGA.
 
 ## ✨ Destaques da Versão v1.2.1
 

@@ -197,12 +197,21 @@ class MainWindow(ctk.CTk):
         self.config_manager = ConfigManager()
 
         # Configurações nativas da Janela
-        self.title("AutoSIGA v1.2.2 - Importação de Lançamentos")
+        self.title("AutoSIGA v1.3.0 - Importação de Lançamentos")
         self.aplicar_geometria()
         self.configure(fg_color="#F1F5F9")
         
         # Intercepta o botão "X" da janela para fechamento gracioso
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+        # Binds do teclado para acessibilidade (atalhos rápidos)
+        self.bind("<Control-o>", self.selecionar_arquivo)
+        self.bind("<Control-O>", self.selecionar_arquivo)
+        self.bind("<Control-e>", lambda e: self.gerar_txt_ofertas() if self.botao_gerar_txt.cget("state") != "disabled" else None)
+        self.bind("<Control-E>", lambda e: self.gerar_txt_ofertas() if self.botao_gerar_txt.cget("state") != "disabled" else None)
+        self.bind("<Control-i>", lambda e: self.iniciar_conexao_siga() if self.botao_conectar.cget("state") != "disabled" else None)
+        self.bind("<Control-I>", lambda e: self.iniciar_conexao_siga() if self.botao_conectar.cget("state") != "disabled" else None)
+        self.bind("<Escape>", self.resetar_lote)
         
         # Paleta de Cores e Tipografia (Bootstrap Theme like)
         self.fonte_padrao = ("Open Sans", 14)
@@ -374,7 +383,7 @@ class MainWindow(ctk.CTk):
         self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 5))
         
-        texto_rodape = "AutoSIGA v1.2.2 | Arquitetura MVC"
+        texto_rodape = "AutoSIGA v1.3.0 | Arquitetura MVC"
         self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=("Open Sans", 11), text_color="#999999")
         self.label_rodape.pack()
 
@@ -400,7 +409,7 @@ class MainWindow(ctk.CTk):
 
 
 
-    def selecionar_arquivo(self):
+    def selecionar_arquivo(self, event=None):
         """Diálogo do sistema operacional para capturar múltiplos extratos (OFX ou XLS)."""
         caminhos_arquivos = filedialog.askopenfilenames(
             title="Selecione os arquivos de extrato (OFX ou XLS)",
@@ -492,6 +501,19 @@ class MainWindow(ctk.CTk):
             self.botao_gerar_txt.configure(state="disabled")
             self.atualizar_status("Nenhum arquivo carregado com sucesso.", "#D9534F")
 
+    def resetar_lote(self, event=None):
+        """Limpa toda a seleção de arquivos e reseta o estado da janela principal (atalho Esc)."""
+        self.dados_processados_lote = []
+        for card in self.cards_lote:
+            card.destroy()
+        self.cards_lote = []
+        self.lbl_no_data.pack(pady=40)
+        self.label_arquivo.configure(text="Nenhum arquivo selecionado.", text_color="#666666")
+        self.botao_conectar.configure(state="disabled")
+        self.botao_gerar_txt.configure(state="disabled")
+        self.progress_bar.set(0.0)
+        self.atualizar_status("Lote limpo com sucesso. Aguardando novos arquivos.", "#666666")
+
     def processar_ofx(self, caminho):
         """Mantido para compatibilidade, delega para processar_multiplos_arquivos."""
         self.processar_multiplos_arquivos([caminho])
@@ -523,7 +545,7 @@ class MainWindow(ctk.CTk):
         else:
             self.botao_gerar_txt.configure(state="disabled")
 
-    def gerar_txt_ofertas(self):
+    def gerar_txt_ofertas(self, event=None):
         """Delega a geração de TXT das transações de Conta Corrente do lote ao Controller Exportador."""
         if not self.dados_processados_lote:
             messagebox.showerror("Erro", "Nenhum arquivo processado.")
@@ -563,7 +585,7 @@ class MainWindow(ctk.CTk):
             except Exception as e:
                 messagebox.showerror("Erro ao Salvar", str(e))
 
-    def iniciar_conexao_siga(self):
+    def iniciar_conexao_siga(self, event=None):
         """
         Valida os dados de todos os cards da tela e instiga a Thread de automação web.
         """

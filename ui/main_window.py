@@ -197,7 +197,7 @@ class MainWindow(ctk.CTk):
         self.config_manager = ConfigManager()
 
         # Configurações nativas da Janela
-        self.title("AutoSIGA v1.3.0 - Importação de Lançamentos")
+        self.title("AutoSIGA v1.4.0 - Importação de Lançamentos")
         self.aplicar_geometria()
         self.configure(fg_color="#F1F5F9")
         
@@ -223,6 +223,9 @@ class MainWindow(ctk.CTk):
 
         # Inicializa a UI e restaura estado local
         self.construir_interface()
+        
+        # Verifica se há credenciais configuradas e abre a modal se ausente
+        self.after(500, self.verificar_credenciais_iniciais)
 
     def aplicar_geometria(self):
         """
@@ -294,6 +297,13 @@ class MainWindow(ctk.CTk):
         
         self.label_titulo = ctk.CTkLabel(self.frame_header, text="AutoSIGA", font=self.fonte_titulo, text_color="#FFFFFF")
         self.label_titulo.pack(side="left", pady=15)
+
+        self.btn_credenciais = ctk.CTkButton(
+            self.frame_header, text="Credenciais 🔑", font=("Open Sans", 11, "bold"),
+            fg_color="#F89406", hover_color="#DF8505", text_color="#FFFFFF",
+            width=100, height=28, corner_radius=4, command=self.abrir_modal_credenciais
+        )
+        self.btn_credenciais.pack(side="right", padx=20, pady=21)
 
         # ==========================================
         # MAIN CARD (Corpo Central Branco)
@@ -383,7 +393,7 @@ class MainWindow(ctk.CTk):
         self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 5))
         
-        texto_rodape = "AutoSIGA v1.3.0 | Arquitetura MVC"
+        texto_rodape = "AutoSIGA v1.4.0 | Arquitetura MVC"
         self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=("Open Sans", 11), text_color="#999999")
         self.label_rodape.pack()
 
@@ -408,6 +418,24 @@ class MainWindow(ctk.CTk):
         self.attributes('-topmost', False)
 
 
+
+    def verificar_credenciais_iniciais(self):
+        """Verifica se existem credenciais salvas no Keyring ou .env. Caso contrário, abre a modal."""
+        import keyring
+        usuario = self.config_manager.get_usuario_siga()
+        senha = keyring.get_password("AutoSIGA", usuario) if usuario else None
+        
+        # Fallback legado de desenvolvedor .env
+        usuario_env = os.getenv("SIGA_USUARIO", "")
+        senha_env = os.getenv("SIGA_SENHA", "")
+        
+        if not (usuario and senha) and not (usuario_env and senha_env):
+            self.abrir_modal_credenciais()
+
+    def abrir_modal_credenciais(self):
+        """Abre a modal de cadastro de credenciais seguras."""
+        modal = ModalCredenciais(self, self.config_manager)
+        modal.grab_set() # Foca a interação na modal
 
     def selecionar_arquivo(self, event=None):
         """Diálogo do sistema operacional para capturar múltiplos extratos (OFX ou XLS)."""
@@ -865,4 +893,92 @@ class MainWindow(ctk.CTk):
             command=janela.destroy
         )
         btn_fechar.grid(row=0, column=1, padx=5)
+
+
+class ModalCredenciais(ctk.CTkToplevel):
+    """
+    Janela modal para cadastro e edição segura de credenciais do SIGA no Keyring do Windows.
+    """
+    def __init__(self, parent, config_manager):
+        super().__init__(parent)
+        self.parent = parent
+        self.config_manager = config_manager
+        
+        self.title("Configurar Credenciais Seguras")
+        self.geometry("380x250")
+        self.resizable(False, False)
+        self.configure(fg_color="#FFFFFF")
+        
+        # Centraliza na janela pai
+        self.transient(parent)
+        
+        # Força o topo
+        self.attributes("-topmost", True)
+        
+        self.construir_widgets()
+        self.carregar_dados()
+        
+    def construir_widgets(self):
+        # Título interno
+        lbl_titulo = ctk.CTkLabel(self, text="Credenciais de Acesso ao SIGA", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
+        lbl_titulo.pack(pady=(15, 10))
+        
+        lbl_info = ctk.CTkLabel(
+            self, 
+            text="Sua senha será salva de forma encriptada no Windows Credential Manager.",
+            font=("Open Sans", 9), text_color="#666666", wraplength=340
+        )
+        lbl_info.pack(pady=(0, 15))
+        
+        # Usuário
+        self.entry_usuario = ctk.CTkEntry(self, placeholder_text="Usuário (CPF ou E-mail)", width=280, height=30, font=("Open Sans", 11))
+        self.entry_usuario.pack(pady=5)
+        
+        # Senha
+        self.entry_senha = ctk.CTkEntry(self, placeholder_text="Senha do SIGA", show="*", width=280, height=30, font=("Open Sans", 11))
+        self.entry_senha.pack(pady=5)
+        
+        # Botões
+        self.frame_botoes = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_botoes.pack(pady=20)
+        
+        self.btn_salvar = ctk.CTkButton(
+            self.frame_botoes, text="Gravar", width=100, height=30, font=("Open Sans", 12, "bold"),
+            fg_color="#5CB85C", hover_color="#4CAE4C", command=self.salvar_credenciais
+        )
+        self.btn_salvar.grid(row=0, column=0, padx=5)
+        
+        self.btn_cancelar = ctk.CTkButton(
+            self.frame_botoes, text="Cancelar", width=100, height=30, font=("Open Sans", 12, "bold"),
+            fg_color="#D9534F", hover_color="#C9302C", command=self.destroy
+        )
+        self.btn_cancelar.grid(row=0, column=1, padx=5)
+        
+    def carregar_dados(self):
+        import keyring
+        usuario = self.config_manager.get_usuario_siga()
+        senha = keyring.get_password("AutoSIGA", usuario) if usuario else ""
+        
+        self.entry_usuario.insert(0, usuario)
+        self.entry_senha.insert(0, senha)
+        
+    def salvar_credenciais(self):
+        import keyring
+        usuario = self.entry_usuario.get().strip()
+        senha = self.entry_senha.get().strip()
+        
+        if not usuario or not senha:
+            messagebox.showerror("Erro", "Por favor, preencha o usuário e a senha do SIGA.", parent=self)
+            return
+            
+        try:
+            # Salva o usuário no config.json
+            self.config_manager.salvar_usuario_siga(usuario)
+            # Salva a senha de forma encriptada no Windows Credential Manager
+            keyring.set_password("AutoSIGA", usuario, senha)
+            
+            messagebox.showinfo("Sucesso", "Credenciais gravadas com segurança no Windows Keyring!", parent=self)
+            self.destroy()
+        except Exception as e:
+            messagebox.showerror("Erro de Gravação", f"Não foi possível salvar no keyring: {e}", parent=self)
 

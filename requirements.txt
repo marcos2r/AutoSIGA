@@ -5,3 +5,4 @@ xlrd
 openpyxl
 python-dotenv
 pytest
+keyring

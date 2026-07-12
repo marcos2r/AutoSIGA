@@ -315,3 +315,18 @@ class ConfigManager:
         config = self.get_config_data()
         config["geometry"] = geometry
         self.save_config_data(config)
+
+    def get_usuario_siga(self):
+        """
+        Retorna o usuário do SIGA salvo publicamente para consulta no Keyring.
+        """
+        config = self.get_config_data()
+        return config.get("usuario_siga", "")
+
+    def salvar_usuario_siga(self, usuario):
+        """
+        Persiste o nome do usuário do SIGA de forma pública para atrelar a consulta do Keyring.
+        """
+        config = self.get_config_data()
+        config["usuario_siga"] = str(usuario).strip()
+        self.save_config_data(config)

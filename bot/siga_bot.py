@@ -90,6 +90,50 @@ class SigaBot:
         """Força a finalização do loop principal do Playwright."""
         self.browser_aberto = False
 
+    def _capturar_tela_e_log(self, page, identificador):
+        """
+        Tira um screenshot da página ativa e grava no diretório de logs.
+        
+        Args:
+            page (Page): Instância da página ativa do Playwright.
+            identificador (str): Nome descritivo para compor o nome do arquivo.
+        """
+        try:
+            log_dir = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), "logs")
+            screenshot_dir = os.path.join(log_dir, "screenshots")
+            os.makedirs(screenshot_dir, exist_ok=True)
+            
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y_%m_%d_%H%M%S")
+            filename = f"erro_{identificador}_{timestamp}.png"
+            filepath = os.path.join(screenshot_dir, filename)
+            
+            # Tira o screenshot da página inteira
+            page.screenshot(path=filepath, full_page=True)
+            logging.info(f"[AUDITORIA] Screenshot de erro salvo em: {filepath}")
+        except Exception as e:
+            logging.warning(f"Falha ao realizar captura de tela para auditoria: {e}")
+
+    def _verificar_sessao_ativa(self, page):
+        """
+        Inspeciona a aba do navegador para verificar se a sessão do SIGA continua ativa.
+        
+        Caso tenha sido deslogado ou redirecionado para a tela de login, lança um erro.
+        """
+        try:
+            url_atual = page.url
+            if "/login" in url_atual or "login.php" in url_atual:
+                raise ConnectionError("A sessão do SIGA expirou e foi redirecionada para a tela de login.")
+            
+            # Se o campo de senha do login principal reaparecer no DOM e estiver visível
+            senha_locator = page.locator('input[type="password"]')
+            if senha_locator.count() > 0 and senha_locator.first.is_visible():
+                raise ConnectionError("A tela de autenticação do SIGA foi detectada. Sessão inativa.")
+        except Exception as e:
+            if isinstance(e, ConnectionError):
+                raise e
+
+
 
     def selecionar_select2(self, page, select_id, termo_busca, dropdown_is_ajax=True):
         """
@@ -147,7 +191,10 @@ class SigaBot:
             opcao_li.click(force=True)
             time.sleep(0.5)
         except Exception as e:
-            logging.error(f"Falha ao usar Select2 {select_id} para o termo {termo_busca}: {e}")
+            erro_msg = f"Falha ao usar Select2 {select_id} para o termo {termo_busca}: {e}"
+            logging.error(erro_msg)
+            self._capturar_tela_e_log(page, f"select2_{select_id}")
+            raise ValueError(erro_msg) from e
 
     def inserir_lancamentos_siga(self, page, lancamentos):
         """
@@ -172,6 +219,8 @@ class SigaBot:
             for i, tx in enumerate(lanc_ordenados):
                 if not self.browser_aberto:
                     break
+                    
+                self._verificar_sessao_ativa(page)
                     
                 data_tx = tx.get("data", "")
                 valor_tx = tx.get("valor", 0.0)
@@ -290,6 +339,7 @@ class SigaBot:
             
         except Exception as e:
             logging.error(f"Erro inserindo lançamentos: {e}", exc_info=True)
+            self._capturar_tela_e_log(page, "erro_inserir_lancamentos")
             self.update_status(f"Falha na inserção: {e}", "#D9534F")
 
     def inserir_rendimentos_siga(self, page, lancamentos):
@@ -308,6 +358,8 @@ class SigaBot:
             for i, tx in enumerate(lanc_ordenados):
                 if not self.browser_aberto:
                     break
+                    
+                self._verificar_sessao_ativa(page)
                     
                 data_tx = tx.get("data", "")
                 valor_tx = tx.get("valor", 0.0)
@@ -429,6 +481,7 @@ class SigaBot:
             
         except Exception as e:
             logging.error(f"Erro inserindo rendimentos: {e}", exc_info=True)
+            self._capturar_tela_e_log(page, "erro_inserir_rendimentos")
             self.update_status(f"Falha na inserção: {e}", "#D9534F")
 
     def fluxo_automacao(self):
@@ -533,6 +586,8 @@ class SigaBot:
                 for idx, dados_atual in enumerate(self.lote_processados):
                     if not self.browser_aberto:
                         break
+                        
+                    self._verificar_sessao_ativa(page)
                         
                     self.dados_processados = dados_atual
                     self.localidade_selecionada = dados_atual["localidade_selecionada"]
@@ -795,6 +850,13 @@ class SigaBot:
             logging.error(msg_erro, exc_info=True)
             traceback.print_exc()
             
+            # Tenta capturar screenshot se page estiver acessível
+            try:
+                if 'page' in locals() and page:
+                    self._capturar_tela_e_log(page, "erro_global")
+            except Exception as ss_err:
+                logging.warning(f"Não foi possível salvar o screenshot do erro global: {ss_err}")
+                
             erro_resumido = str(e).split('\n')[0][:50]
             self.update_status(f"Erro no navegador: {erro_resumido}...", "#D9534F")
         finally:

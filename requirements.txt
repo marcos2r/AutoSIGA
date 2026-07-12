@@ -1,0 +1,7 @@
+customtkinter
+playwright
+ofxparse
+xlrd
+openpyxl
+python-dotenv
+pytest

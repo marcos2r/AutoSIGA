@@ -1,9 +1,14 @@
-# AutoSIGA v1.2.2 🚀
+# AutoSIGA v1.3.0 🚀
 
 **AutoSIGA** é um motor avançado de RPA (Robotic Process Automation) construído em Python, voltado para a automatização e conciliação de tesourarias baseadas nas regras IT.TES.05. Ele cruza digitalmente extratos bancários brutos (`.OFX`) com o painel contábil administrativo SIGA (Sistema de Informação e Gestão), injetando dados, poupando centenas de horas humanas e reduzindo a taxa de erros a zero.
 
 ## 🎯 Por que o AutoSIGA existe?
 A conciliação bancária entre múltiplas jurisdições (como a de Administração/Conta Corrente e de Ponto de Pregação/Fundo de Aplicação) no SIGA era uma tarefa manual, exaustiva e suscetível à desorganização humana. O AutoSIGA atua como um robô que enxerga o sistema exatamente como você.
+
+## ✨ Destaques da Versão v1.3.0
+
+- **Suíte de Testes Automatizados**: Cobertura de testes unitários robusta com `pytest` para os módulos de negócio e leitores contábeis (`Conciliador`, `Exportador`, `OfxReader`, `XlsReader`).
+- **Resiliência e Auditoria**: Registro de fotos da tela em caso de falha na pasta `logs/screenshots/`, detecção ativa de sessão expirada no SIGA e fail-fast robusto com Select2.
 
 ## ✨ Destaques da Versão v1.2.2
 
@@ -39,6 +44,16 @@ Se você realizar edições, gerar a compilação local (.exe) exige certificar-
 pyinstaller --name AutoSiga --noconfirm --onedir --windowed --add-data "venv/Lib/site-packages/customtkinter;customtkinter/" main.py
 ```
 > O executável será salvo dentro de `dist/AutoSiga/AutoSiga.exe`.
+
+## 🧪 Como rodar os testes automatizados (Pytest)?
+Para rodar a suíte de testes unitários locais, utilize o pytest sob o ambiente virtual:
+```powershell
+# Instalar dependências
+venv\Scripts\pip install -r requirements.txt
+
+# Executar a suíte de testes
+venv\Scripts\python -m pytest tests/
+```
 
 ## 📜 Licença e Origem
 Desenvolvido incansavelmente pela equipe técnica autônoma da **CCB Dourados/MS**, garantindo o sigilo, fidelidade de roteamento IP interno e segurança máxima.

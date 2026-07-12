@@ -20,6 +20,16 @@ from dotenv import load_dotenv
 # funcionem mesmo se o aplicativo for executado de outro diretório (ex: via cron ou atalhos).
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
+# Configura explicitamente o backend do keyring para o Windows Credential Manager
+try:
+    import keyring
+    from keyring.backends import Windows
+    keyring.set_keyring(Windows.WinVaultKeyring())
+except Exception as e:
+    import logging
+    logging.warning(f"Não foi possível definir o backend do keyring: {e}")
+
+
 # Tenta carregar variáveis do .env se o arquivo existir para suporte legado
 raiz_dir = os.path.abspath(os.path.dirname(__file__))
 env_path = os.path.join(raiz_dir, ".env")

@@ -17,3 +17,8 @@ scratch_inspect.py
 # Credenciais e logs locais
 .env
 logs/
+credentials.json
+token.json
+faturas_energisa/
+siga_page.html
+siga_page_files/

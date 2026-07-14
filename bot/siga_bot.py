@@ -10,6 +10,7 @@ import os
 import time
 import logging
 import traceback
+import datetime
 from playwright.sync_api import sync_playwright
 from controllers.conciliador import Conciliador
 
@@ -22,7 +23,7 @@ class SigaBot:
     perguntas/alertas para a View (via callbacks), sem nunca importar nada de GUI.
     """
     
-    def __init__(self, lote_processados, callbacks):
+    def __init__(self, lote_processados, callbacks, tipo_lote="extrato"):
         """
         Inicializa a configuração do bot de automação em lote.
         
@@ -34,6 +35,7 @@ class SigaBot:
                 - request_authorization(lancamentos_pendentes)
                 - show_dashboard(telemetria, tempo_inicio)
                 - on_finish()
+            tipo_lote (str): Tipo de lote ("extrato" ou "energia").
         """
         # Ordena o lote por localidade_selecionada para agrupar os lançamentos da mesma filial,
         # minimizando as trocas de localidade no portal SIGA.
@@ -42,6 +44,7 @@ class SigaBot:
             key=lambda x: f"{x.get('tipo_adm', '').strip().upper()} - {x.get('nome_adm', '').strip().upper()}"
         )
         self.callbacks = callbacks
+        self.tipo_lote = tipo_lote
         self.browser_aberto = False
         self._qtd_injecoes_efetuadas = 0
         self.esperando_autorizacao = False
@@ -133,7 +136,34 @@ class SigaBot:
             if isinstance(e, ConnectionError):
                 raise e
 
+    def fechar_notificacoes(self, page):
+        """
+        Fecha popups de notificação e alertas globais que podem cobrir elementos da página e atrapalhar os cliques.
+        """
+        try:
+            page.evaluate('''() => {
+                var notificacoes = document.querySelectorAll('.notificacao');
+                if (notificacoes) {
+                    notificacoes.forEach(n => n.style.display = 'none');
+                }
+                var widgets = document.querySelectorAll('.widget-box.showNotificacao');
+                if (widgets) {
+                    widgets.forEach(w => w.remove());
+                }
+            }''')
+        except Exception:
+            pass
 
+    def esperar_loading(self, page):
+        """
+        Aguarda os overlays de loading/blockUI do SIGA desaparecerem.
+        """
+        try:
+            time.sleep(0.5)
+            page.locator('.blockUI').wait_for(state="hidden", timeout=15000)
+            self.fechar_notificacoes(page)
+        except Exception:
+            pass
 
     def selecionar_select2(self, page, select_id, termo_busca, dropdown_is_ajax=True):
         """
@@ -160,12 +190,18 @@ class SigaBot:
                 # Campo bloqueado via JS (somente leitura), abortamos a injeção.
                 return
                 
+            # Tenta abrir via API do Select2 nativo primeiro, fallback para click
+            try:
+                page.evaluate(f"if (window.jQuery) window.jQuery('#{select_id}').select2('open');")
+            except Exception:
+                pass
             container.click(timeout=3000, force=True)
-            time.sleep(0.5)
+            time.sleep(1.0)
             
             # 2. Digita no input temporário que nasce dinamicamente no final do <body>
             input_search = page.locator('#select2-drop:visible .select2-input')
-            input_search.fill(str(termo_busca), timeout=3000)
+            input_search.fill("", timeout=3000)
+            input_search.type(str(termo_busca), delay=10)
             
             # Verifica dinamicamente se o Select2 exige pressionar Enter para disparar a busca AJAX
             try:
@@ -185,11 +221,35 @@ class SigaBot:
             else:
                 time.sleep(0.5) # Filtro local instantâneo
                 
-            # 3. Clica no primeiro item resultante
-            opcao_li = page.locator('#select2-drop:visible .select2-results li.select2-result-selectable').first
-            opcao_li.wait_for(state="visible", timeout=3000)
-            opcao_li.click(force=True)
+            # 3. Pressiona Enter no input_search para garantir a seleção e fechamento nativo
+            input_search.press("Enter")
             time.sleep(0.5)
+
+            # Tenta clicar no LI caso o Enter não tenha sido suficiente
+            try:
+                opcao_li = page.locator('#select2-drop:visible .select2-results li.select2-result-selectable').first
+                if opcao_li.count() > 0:
+                    opcao_li.click(force=True)
+                    time.sleep(0.5)
+            except Exception:
+                pass
+            
+            # Limpa o mask e o dropdown usando a API nativa do Select2 para desvincular eventos de teclado globais
+            try:
+                page.evaluate(f'''() => {{
+                    if (window.jQuery) {{
+                        // Fecha via API nativa para limpar os listeners de teclado do document
+                        window.jQuery('#{select_id}').select2('close');
+                        
+                        // Garante a remoção visual por segurança
+                        let mask = document.getElementById('select2-drop-mask');
+                        if (mask) mask.style.display = 'none';
+                        window.jQuery('#select2-drop').css('display', 'none');
+                        window.jQuery('.select2-drop-active').removeClass('select2-drop-active');
+                    }}
+                }}''')
+            except Exception:
+                pass
         except Exception as e:
             erro_msg = f"Falha ao usar Select2 {select_id} para o termo {termo_busca}: {e}"
             logging.error(erro_msg)
@@ -482,7 +542,510 @@ class SigaBot:
         except Exception as e:
             logging.error(f"Erro inserindo rendimentos: {e}", exc_info=True)
             self._capturar_tela_e_log(page, "erro_inserir_rendimentos")
-            self.update_status(f"Falha na inserção: {e}", "#D9534F")
+            self.update_status(f"Falha na injeção: {e}", "#D9534F")
+
+    def verificar_fatura_ja_lancada(self, page, numero_fatura, emissao=None, vencimento=None):
+        """
+        Consulta na rotina TES01501 se a fatura já foi lançada anteriormente.
+        Retorna True se já existir lançamento, False caso contrário.
+        """
+        try:
+            self.update_status(f"Verificando no SIGA se fatura Nº {numero_fatura} já foi lançada...", "#428BCA")
+            
+            # Navega para a rotina de Consulta de Contas a Pagar (TES01501)
+            page.locator('#f_executar_programa').fill("TES01501")
+            page.locator('#btn_executar_programa').click()
+            page.wait_for_load_state("domcontentloaded")
+            time.sleep(2)
+            self.esperar_loading(page)
+            
+            # Ajusta o período de busca com base na data da fatura
+            data_ini = "01/01/2026"
+            data_fim = "31/12/2026"
+            ref_data = emissao or vencimento
+            if ref_data:
+                try:
+                    from datetime import datetime, timedelta
+                    dt_ref = datetime.strptime(ref_data, "%d/%m/%Y")
+                    data_ini = (dt_ref - timedelta(days=60)).strftime("%d/%m/%Y")
+                    data_fim = (dt_ref + timedelta(days=60)).strftime("%d/%m/%Y")
+                except Exception:
+                    pass
+
+            # Preenche as datas no formulário de filtro via JS para evitar erros de elemento invisível
+            try:
+                page.evaluate(f'''() => {{
+                    let inp1 = document.getElementById("f_data1");
+                    if (inp1) {{
+                        inp1.value = "{data_ini}";
+                        if (window.jQuery) window.jQuery(inp1).trigger('change');
+                    }}
+                    let inp2 = document.getElementById("f_data2");
+                    if (inp2) {{
+                        inp2.value = "{data_fim}";
+                        if (window.jQuery) window.jQuery(inp2).trigger('change');
+                    }}
+                }}''')
+            except Exception as e_datas:
+                logging.warning(f"Erro ao preencher datas de filtro: {e_datas}")
+            time.sleep(0.5)
+
+            # Se o modal de filtros f_main estiver aberto, clica em Consultar diretamente
+            btn_consultar = page.locator('form#f_main button[type="submit"]:has-text("Consultar")')
+            if btn_consultar.count() > 0 and btn_consultar.first.is_visible():
+                btn_consultar.first.click()
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(2)
+                self.esperar_loading(page)
+                
+            # Filtra pelo número do documento no campo de busca do datatable
+            search_input = page.locator('div#grid1_filter input[type="search"], input[aria-controls="grid1"], div#grid1_filter input')
+            if search_input.count() > 0:
+                search_input.first.fill(str(numero_fatura))
+                search_input.first.press("Enter")
+                time.sleep(1.5)
+                self.esperar_loading(page)
+                
+                # Verifica se há alguma linha na tabela contendo o número do documento exato na coluna de Nº Doc. (5ª coluna)
+                rows = page.locator('table#grid1 tbody tr')
+                for k in range(rows.count()):
+                    row = rows.nth(k)
+                    row_text = row.text_content() or ""
+                    if "nenhum registro" in row_text.lower() or "não encontrado" in row_text.lower():
+                        continue
+                        
+                    doc_cell = row.locator('td').nth(4) # 5ª coluna (index 4)
+                    if doc_cell.count() > 0:
+                        doc_val = doc_cell.text_content() or ""
+                        if str(numero_fatura).strip() in doc_val.strip():
+                            return True
+            return False
+        except Exception as e_check:
+            logging.error(f"Erro ao verificar se fatura {numero_fatura} já foi lançada: {e_check}", exc_info=True)
+            return False
+
+    def _garantir_localidade_competencia(self, page, uc, competencia_fatura):
+        """Garante que a localidade ativa é 'ADM - DOURADOS - MS' e a competência bate com a fatura"""
+        active_local = page.locator('li.green span.user-info').text_content() or ""
+        active_comp = page.locator('span#f_competencianome').text_content() or ""
+        
+        loc_incorreta = "ADM - DOURADOS" not in active_local
+        comp_incorreta = competencia_fatura and (active_comp.strip() != competencia_fatura.strip())
+        
+        if loc_incorreta or comp_incorreta:
+            self.update_status(f"Ajustando localidade/competência para ADM - DOURADOS - MS ({competencia_fatura})...", "#428BCA")
+            mes_encontrado = page.evaluate(f'''() => {{
+                if ("{competencia_fatura}" !== "") {{
+                    var selectMes = document.getElementById("f_competencia_webmaster");
+                    if (selectMes) {{
+                        for (let opt of selectMes.options) {{
+                            if (opt.text.indexOf("{competencia_fatura}") > -1) {{
+                                return true;
+                            }}
+                        }}
+                    }}
+                }}
+                return false;
+            }}''')
+            
+            if mes_encontrado:
+                js_submit = f'''() => {{
+                    var selectMes = document.getElementById("f_competencia_webmaster");
+                    for (let opt of selectMes.options) {{
+                        if (opt.text.indexOf("{competencia_fatura}") > -1) {{
+                            if (window.jQuery) {{
+                                window.jQuery("#form-competencia-competencia").val(opt.value);
+                                window.jQuery("#form-competencia").submit();
+                            }} else {{
+                                document.getElementById("form-competencia-competencia").value = opt.value;
+                                document.getElementById("form-competencia").submit();
+                            }}
+                            break;
+                        }}
+                    }}
+                }}'''
+                with page.expect_navigation(timeout=15000):
+                    page.evaluate(js_submit)
+                import time
+                time.sleep(1.5)
+                self.esperar_loading(page)
+            else:
+                self.update_status(f"⚠️ Mês de Trabalho {competencia_fatura} não encontrado no SIGA.", "#D9534F")
+                import time
+                time.sleep(1)
+
+    def inserir_faturas_energia_siga(self, page, faturas):
+        """
+        Preenche autonomamente a rotina de contas a pagar/provisão de energia no SIGA (TES01502).
+
+        Args:
+            page (Page): Página ativa no navegador.
+            faturas (list): Lista de faturas processadas e validadas (com UC, valor, vencimento, caminho_arquivo).
+        """
+        try:
+
+            qtd_injetada = 0
+            competencias_fechadas = set()
+            faturas_sucesso = []
+
+            for i, fat in enumerate(faturas):
+                if not self.browser_aberto:
+                    break
+
+                self._verificar_sessao_ativa(page)
+
+                vencimento = fat.get("vencimento", "")
+                emissao = fat.get("emissao", "")
+                numero_fatura = fat.get("numero_fatura", "")
+                valor = fat.get("valor", 0.0)
+                uc = fat.get("uc", "")
+                referencia = fat.get("referencia", "")
+                consumo = fat.get("consumo", "")
+                localidade_codigo = fat.get("localidade_codigo", "")
+                caminho_pdf = fat.get("caminho_arquivo", "")
+
+                from models.config_manager import ConfigManager
+                config_mgr = ConfigManager()
+                localidades_dict = {l["codigo"]: l["nome"] for l in config_mgr.get_localidades_energia()}
+                localidade_nome = localidades_dict.get(localidade_codigo, "")
+
+                self.update_status(f"Importando fatura {i+1}/{len(faturas)}: UC {uc} -> R$ {valor:.2f}", "#F89406")
+
+                # Extrai a competência correspondente ao mês de emissão (ex: "29/06/2026" -> "06/2026")
+                competencia_fatura = ""
+                if emissao and len(emissao.split('/')) == 3:
+                    partes = emissao.split('/')
+                    competencia_fatura = f"{partes[1]}/{partes[2]}"
+                    
+                if competencia_fatura and competencia_fatura in competencias_fechadas:
+                    self.update_status(f"⚠️ Competência {competencia_fatura} já mapeada como fechada. Pulando fatura {numero_fatura}...", "#D9534F")
+                    time.sleep(1)
+                    continue
+
+                # Garante que a localidade ativa do SIGA é "ADM - DOURADOS - MS" e a competência é a da fatura
+                try:
+                    self._garantir_localidade_competencia(page, uc, competencia_fatura)
+                except Exception as e_loc:
+                    logging.warning(f"Não foi possível garantir localidade/competência no cabeçalho: {e_loc}")
+
+                # --- PRÉ-CHECK DE DUPLICIDADE ---
+                if numero_fatura:
+                    ja_lancada = self.verificar_fatura_ja_lancada(page, numero_fatura, emissao=emissao, vencimento=vencimento)
+                    if ja_lancada:
+                        config_mgr.marcar_fatura_processada(numero_fatura)
+                        self.update_status(f"⚠️ Fatura Nº {numero_fatura} já foi lançada anteriormente. Pulando...", "#F89406")
+                        time.sleep(1.5)
+                        continue
+
+                # Navega para a rotina de lançamento de contas a pagar / provisão (TES01502)
+                page.locator('#f_executar_programa').fill("TES01502")
+                page.locator('#btn_executar_programa').click()
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(2.5)
+                self.esperar_loading(page)
+
+                # 1. Preenche a data do Lançamento e a data do Documento (Emissão) driblando o datepicker e overlays
+                if emissao:
+                    try:
+                        page.evaluate(f'''() => {{
+                            let dataEm = "{emissao}";
+                            
+                            // Data Lançamento e Data Documento idênticas (mesmo mês de competência agora ajustado)
+                            let inpLan = document.getElementById("f_lancamento");
+                            if (inpLan) {{
+                                inpLan.value = dataEm;
+                                if (window.jQuery) {{
+                                    window.jQuery(inpLan).datepicker('update', dataEm);
+                                    window.jQuery(inpLan).trigger('change');
+                                }}
+                            }}
+                            
+                            // Data Documento
+                            let inpEm = document.getElementById("f_emissao");
+                            if (inpEm) {{
+                                inpEm.value = dataEm;
+                                if (window.jQuery) {{
+                                    window.jQuery(inpEm).datepicker('update', dataEm);
+                                    window.jQuery(inpEm).trigger('change');
+                                }}
+                            }}
+                            
+                            if (window.jQuery) {{
+                                window.jQuery('.datepicker').hide();
+                            }}
+                        }}''')
+                    except Exception as e_datas:
+                        logging.warning(f"Erro ao preencher datas de lançamento/emissão: {e_datas}")
+                    
+                    time.sleep(1.5) # Aguarda o AJAX de validação de data do SIGA responder
+                    
+                    mes_fechado = page.evaluate('''() => {
+                        let hasError = false;
+                        let modals = document.querySelectorAll('.bootbox.modal');
+                        modals.forEach(m => {
+                            if (m.innerText.includes('Fechamento de competência já realizado') || 
+                                m.innerText.includes('fora da Competência') ||
+                                m.innerText.includes('Fechamento mensal')) {
+                                hasError = true;
+                            }
+                            let closeBtn = m.querySelector('.bootbox-close-button') || m.querySelector('.close') || m.querySelector('.btn-primary');
+                            if (closeBtn) closeBtn.click();
+                            else m.remove();
+                        });
+                        
+                        let backdrop = document.querySelector('.modal-backdrop');
+                        if (backdrop) backdrop.remove();
+                        
+                        return hasError;
+                    }''')
+                    
+                    if mes_fechado:
+                        competencias_fechadas.add(competencia_fatura)
+                        self.update_status(f"⚠️ Competência {competencia_fatura} fechada ou data inválida. Pulando fatura {numero_fatura}...", "#D9534F")
+                        time.sleep(2)
+                        continue
+
+                # 2. Tipo Documento (Select2): Seleciona "NOTA FISCAL"
+                self.selecionar_select2(page, "f_tipodocumento", "NOTA FISCAL", dropdown_is_ajax=False)
+                time.sleep(0.5)
+
+                # 3. Nº Documento
+                if numero_fatura:
+                    input_doc = page.locator('#f_documento')
+                    if input_doc.count() > 0:
+                        input_doc.fill("")
+                        input_doc.type(str(numero_fatura))
+                        time.sleep(0.5)
+
+                # 4. Valor
+                valor_str = f"{valor:.2f}".replace('.', ',')
+                input_valor = page.locator('#f_valor')
+                if input_valor.count() > 0:
+                    try:
+                        page.evaluate(f'''() => {{
+                            let el = document.getElementById("f_valor");
+                            if (el && window.jQuery) {{
+                                window.jQuery(el).autoNumeric("set", {valor});
+                                window.jQuery(el).trigger("change");
+                                window.jQuery(el).trigger("blur");
+                            }}
+                        }}''')
+                    except Exception as e_val:
+                        logging.warning(f"Erro ao injetar f_valor via autoNumeric: {e_val}")
+                    time.sleep(0.5)
+                    try:
+                        erro_fatal = page.evaluate('''() => {
+                            let hasError = false;
+                            let modals = document.querySelectorAll('.bootbox.modal');
+                            modals.forEach(m => {
+                                if (m.innerText.includes('Fechamento de competência já realizado') || 
+                                    m.innerText.includes('fora da Competência') ||
+                                    m.innerText.includes('Fechamento mensal')) {
+                                    hasError = true;
+                                }
+                                let closeBtn = m.querySelector('.bootbox-close-button') || m.querySelector('.close') || m.querySelector('.btn-primary');
+                                if (closeBtn) closeBtn.click();
+                                else m.remove();
+                            });
+                            let backdrop = document.querySelector('.modal-backdrop');
+                            if (backdrop) backdrop.remove();
+                            return hasError;
+                        }''')
+                        if erro_fatal:
+                            competencias_fechadas.add(competencia_fatura)
+                            self.update_status(f"⚠️ Competência fechada ou data inválida. Pulando fatura {numero_fatura}...", "#D9534F")
+                            time.sleep(2)
+                            continue
+                    except Exception:
+                        pass
+                    time.sleep(0.5)
+
+                # 5. Rateio - Despesas (Select2): Seleciona "3006"
+                self.selecionar_select2(page, "f_despesa_rateio", "3006", dropdown_is_ajax=False)
+                time.sleep(0.5)
+
+                # 6. Rateio - Centro de Custo (Select2): Mapeia baseado na localidade da UC
+                termo_cc = "ADM"
+                if localidade_nome:
+                    import re
+                    match_cod = re.search(r'\d{2}-\d{4}', localidade_nome)
+                    if match_cod:
+                        termo_cc = match_cod.group(0)
+                    elif "ADM" in localidade_nome.upper():
+                        termo_cc = "ADM"
+                    else:
+                        partes = localidade_nome.split('-')
+                        termo_cc = partes[-1].strip() if len(partes) > 1 else localidade_nome
+
+                self.selecionar_select2(page, "f_centrocusto_rateio", termo_cc, dropdown_is_ajax=False)
+                time.sleep(0.5)
+
+                # 7. Fornecedor (Select2): Busca e seleciona "ENERGISA"
+                self.selecionar_select2(page, "f_fornecedor", "ENERGISA", dropdown_is_ajax=True)
+                time.sleep(0.5)
+
+                # 8. Parcela 1 - Data Vencimento
+                if vencimento:
+                    try:
+                        page.evaluate(f'''() => {{
+                            let inp = document.getElementById("f_datavencimento_1");
+                            if (inp) {{
+                                inp.value = "{vencimento}";
+                                if (window.jQuery) {{
+                                    window.jQuery(inp).datepicker('update', "{vencimento}");
+                                    window.jQuery(inp).trigger('change');
+                                    window.jQuery('.datepicker').hide();
+                                }}
+                            }}
+                        }}''')
+                    except Exception as e_ven:
+                        logging.warning(f"Erro ao preencher f_datavencimento_1: {e_ven}")
+                    time.sleep(0.3)
+
+                # 9. Parcela 1 - Valor
+                input_valor_p = page.locator('#f_valor_1')
+                if input_valor_p.count() > 0:
+                    try:
+                        page.evaluate(f'''() => {{
+                            let el = document.getElementById("f_valor_1");
+                            if (el && window.jQuery) {{
+                                window.jQuery(el).autoNumeric("set", {valor});
+                                window.jQuery(el).trigger("change");
+                                window.jQuery(el).trigger("blur");
+                            }}
+                        }}''')
+                    except Exception as e_val_p:
+                        logging.warning(f"Erro ao injetar f_valor_1 via autoNumeric: {e_val_p}")
+                    time.sleep(0.5)
+
+                # 10. Parcela 1 - Observação
+                obs_texto = f"PROVISÃO ENERGIA ELÉTRICA - UC {uc} - REF {referencia}"
+                if consumo:
+                    obs_texto += f" - CONSUMO: {consumo} kWh"
+
+                input_obs = page.locator('input[name="f_observacao1"]')
+                if input_obs.count() > 0:
+                    input_obs.fill("")
+                    input_obs.type(obs_texto)
+                    time.sleep(0.5)
+
+                # 11. Provisionamento - Conta de Provisão / Crédito (Select2)
+                self.selecionar_select2(page, "f_credito", "2000 - FORNECEDORES MATERIAIS DIVERSOS", dropdown_is_ajax=False)
+                time.sleep(0.5)
+
+                # 12. Provisionamento - Histórico (Select2)
+                self.selecionar_select2(page, "f_historico", "021 - NF", dropdown_is_ajax=False)
+                time.sleep(0.5)
+
+                # 13. Anexo PDF
+                if caminho_pdf and os.path.exists(caminho_pdf):
+                    self.update_status("Anexando PDF da fatura...", "#F89406")
+                    try:
+                        input_file = page.locator('#f_anexos')
+                        if input_file.count() == 0:
+                            input_file = page.locator('input[type="file"]').first
+                        input_file.set_input_files(caminho_pdf)
+                        time.sleep(1.5)
+                    except Exception as e_upload:
+                        logging.warning(f"Não foi possível fazer upload do anexo: {e_upload}")
+
+                # Salvar (F para fechar no último/único, N para novo)
+                is_ultimo = (i == len(faturas) - 1)
+                if is_ultimo:
+                    btn_gravar = page.locator('button.btn-salvar[data-comando="F"]')
+                else:
+                    btn_gravar = page.locator('button.btn-salvar[data-comando="N"]')
+
+                # Antes de gravar, fecha qualquer modal de Atenção que possa ter brotado (ex: soma de parcelas)
+                try:
+                    erro_fatal_gravar = page.evaluate('''() => {
+                        let hasError = false;
+                        let modals = document.querySelectorAll('.bootbox.modal');
+                        modals.forEach(m => {
+                            if (m.innerText.includes('Fechamento de competência já realizado') || 
+                                m.innerText.includes('fora da Competência') ||
+                                m.innerText.includes('Fechamento mensal')) {
+                                hasError = true;
+                            }
+                            let closeBtn = m.querySelector('.bootbox-close-button') || m.querySelector('.close') || m.querySelector('.btn-primary');
+                            if (closeBtn) closeBtn.click();
+                            else m.remove();
+                        });
+                        let backdrop = document.querySelector('.modal-backdrop');
+                        if (backdrop) backdrop.remove();
+                        return hasError;
+                    }''')
+                    if erro_fatal_gravar:
+                        competencias_fechadas.add(competencia_fatura)
+                        self.update_status(f"⚠️ Competência fechada impediu a gravação. Pulando fatura {numero_fatura}...", "#D9534F")
+                        time.sleep(2)
+                        continue
+                except Exception:
+                    pass
+                time.sleep(0.5)
+
+                if btn_gravar.count() > 0:
+                    btn_gravar.first.click(force=True)
+                else:
+                    page.locator('button.btn-success:has(i.icon-ok)').first.click(force=True)
+
+                page.wait_for_load_state("domcontentloaded")
+
+                # Bypassa modal de sucesso
+                try:
+                    btn_sucesso = page.locator('.modal.in button:text-matches("Ok", "i")').first
+                    btn_sucesso.wait_for(state="attached", timeout=10000)
+                    time.sleep(1)
+                    btn_sucesso.evaluate("el => el.click()")
+                except Exception:
+                    pass
+                
+                # Marca como processada
+                config_mgr.marcar_fatura_processada(fat.get("numero_fatura", ""))
+                faturas_sucesso.append(fat)
+                qtd_injetada += 1
+                time.sleep(2)
+
+            # --- AUDITORIA FINAL ---
+            if faturas_sucesso:
+                self.update_status("🔍 Iniciando Auditoria Final no Banco do SIGA...", "#337AB7")
+                sucessos_auditados = 0
+                for fat_aud in faturas_sucesso:
+                    num_doc = fat_aud.get("numero_fatura", "")
+                    emissao_aud = fat_aud.get("emissao", "")
+                    venc_aud = fat_aud.get("vencimento", "")
+                    uc_aud = fat_aud.get("uc", "")
+
+                    if emissao_aud and len(emissao_aud.split('/')) == 3:
+                        partes = emissao_aud.split('/')
+                        comp_aud = f"{partes[1]}/{partes[2]}"
+                        try:
+                            self._garantir_localidade_competencia(page, uc_aud, comp_aud)
+                        except Exception as e:
+                            logging.warning(f"Auditoria: Erro ao ajustar competência para {comp_aud}: {e}")
+
+                    # O verificar_fatura_ja_lancada vai cuidar de ir para o TES01501 e buscar a nota
+                    existe = self.verificar_fatura_ja_lancada(page, num_doc, emissao=emissao_aud, vencimento=venc_aud)
+                    if existe:
+                        self.update_status(f"✅ Auditoria: Fatura {num_doc} confirmada com SUCESSO!", "#3C763D")
+                        sucessos_auditados += 1
+                    else:
+                        self.update_status(f"❌ Auditoria: ALERTA! Fatura {num_doc} NÃO encontrada no banco!", "#D9534F")
+                    time.sleep(1.5)
+
+                self._qtd_injecoes_efetuadas = sucessos_auditados
+                if sucessos_auditados == len(faturas_sucesso):
+                    self.update_status(f"✅ Auditoria Finalizada! {sucessos_auditados}/{len(faturas_sucesso)} faturas confirmadas no SIGA.", "#3C763D")
+                else:
+                    self.update_status(f"⚠️ Auditoria Finalizada! Apenas {sucessos_auditados}/{len(faturas_sucesso)} faturas foram validadas no SIGA.", "#F89406")
+            else:
+                self._qtd_injecoes_efetuadas = qtd_injetada
+                self.update_status(f"✅ Finalizado! 0 faturas de energia importadas no SIGA.", "#3C763D")
+
+        except Exception as e:
+            logging.error(f"Erro ao inserir faturas de energia: {e}", exc_info=True)
+            self._capturar_tela_e_log(page, "erro_faturas_energia")
+            self.update_status(f"Falha na injeção: {e}", "#D9534F")
 
     def fluxo_automacao(self):
         """
@@ -511,7 +1074,12 @@ class SigaBot:
                     headless=False,
                     no_viewport=True,
                     channel="msedge",
-                    args=["--start-maximized"]
+                    args=[
+                        "--start-maximized",
+                        "--disable-gpu",
+                        "--disable-software-rasterizer",
+                        "--disable-gpu-compositing"
+                    ]
                 )
                 
                 page = context.pages[0] if context.pages else context.new_page()
@@ -597,7 +1165,48 @@ class SigaBot:
                     # Aguarda o login manual do usuário ou a conclusão do automático
                     senha_locator.wait_for(state="hidden", timeout=0)
                 
+                self.update_status("Sessão Validada. Aguardando carregamento do sistema...", "#428BCA")
+                
+                # Aguarda o input de pesquisa do menu carregar, indicando que o dashboard principal apareceu
+                try:
+                    page.locator('#f_executar_programa').wait_for(state="visible", timeout=30000)
+                except Exception as e:
+                    logging.warning(f"O dashboard principal demorou a carregar ou não exibiu a barra de busca: {e}")
+                
+                # Agora sim, com o dashboard carregado, fechamos as notificações
+                self.fechar_notificacoes(page)
                 self.update_status("Sessão Validada. Iniciando processamento do lote...", "#428BCA")
+
+
+                if self.tipo_lote == "energia":
+                    self.update_status(f"Iniciando importação de {len(self.lote_processados)} faturas de energia...", "#428BCA")
+                    self.inserir_faturas_energia_siga(page, self.lote_processados)
+                    
+                    telemetria_lote = {
+                        "tipo_lote": "energia",
+                        "ofx_itens": len(self.lote_processados),
+                        "siga_itens": len(self.lote_processados),
+                        "injecoes": self._qtd_injecoes_efetuadas,
+                        "pendentes": len(self.lote_processados) - self._qtd_injecoes_efetuadas,
+                        "total_contas": len(self.lote_processados),
+                        "volume_financeiro": sum(f.get("valor", 0.0) for f in self.lote_processados[:self._qtd_injecoes_efetuadas])
+                    }
+                    if "update_progress" in self.callbacks:
+                        self.callbacks["update_progress"](1.0)
+                    
+                    self.update_status("✅ Processamento de faturas de energia concluído!", "#3C763D")
+                    if "show_dashboard" in self.callbacks:
+                        self.callbacks["show_dashboard"](telemetria_lote, tempo_inicio)
+                    
+                    self.browser_aberto = True
+                    while self.browser_aberto:
+                        try:
+                            if not context.pages:
+                                break
+                        except Exception:
+                            break
+                        time.sleep(1)
+                    return
                 
                 localidade_anterior = None
                 competencia_anterior = None

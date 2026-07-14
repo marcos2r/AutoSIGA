@@ -306,12 +306,27 @@ class MainWindow(ctk.CTk):
         self.btn_credenciais.pack(side="right", padx=20, pady=21)
 
         # ==========================================
-        # MAIN CARD (Corpo Central Branco)
+        # MAIN TABVIEW (Alternar entre Extratos e Energia)
         # ==========================================
-        self.frame_card = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#DDDDDD")
-        self.frame_card.pack(pady=20, padx=20, fill="both", expand=True)
+        self.tabview = ctk.CTkTabview(self, corner_radius=6, border_width=1, border_color="#DDDDDD", fg_color="#FFFFFF")
+        self.tabview.pack(pady=20, padx=20, fill="both", expand=True)
+        
+        self.tab_extratos = self.tabview.add("Conciliação de Extratos")
+        self.tab_energia = self.tabview.add("Contas de Energia")
 
-        # Sessão 1: Leitura do Extrato
+        # Configura a aba de faturas de energia
+        self.panel_energia = PanelEnergia(
+            self.tab_energia, 
+            self.config_manager, 
+            self.atualizar_status, 
+            lambda topmost: self.attributes('-topmost', topmost),
+            self.iniciar_importacao_energia
+        )
+        self.panel_energia.pack(fill="both", expand=True)
+
+        # Sessão 1: Leitura do Extrato (Instanciado na tab de extratos)
+        self.frame_card = self.tab_extratos # Redireciona a hierarquia dos widgets de extrato para a tab
+        
         self.label_instrucao = ctk.CTkLabel(self.frame_card, text="1. Importe seus Extratos (OFX ou XLS)", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
         self.label_instrucao.pack(pady=(15, 5))
 
@@ -379,12 +394,12 @@ class MainWindow(ctk.CTk):
         self.botao_gerar_txt.grid(row=0, column=1, padx=5)
         
         # Barra de Progresso Geral do Lote
-        self.progress_bar = ctk.CTkProgressBar(self.frame_card, width=400, height=8, corner_radius=4, progress_color="#5CB85C", fg_color="#E0E0E0")
+        self.progress_bar = ctk.CTkProgressBar(self, width=400, height=8, corner_radius=4, progress_color="#5CB85C", fg_color="#E0E0E0")
         self.progress_bar.pack(pady=(5, 5))
         self.progress_bar.set(0.0)
         
         # Barra de Status do Rodapé do Card
-        self.label_status_siga = ctk.CTkLabel(self.frame_card, text="Aguardando extratos (OFX ou XLS)...", font=("Open Sans", 12), text_color="#666666")
+        self.label_status_siga = ctk.CTkLabel(self, text="Aguardando extratos ou faturas...", font=("Open Sans", 12), text_color="#666666")
         self.label_status_siga.pack(pady=(0, 10))
 
         # ==========================================
@@ -711,6 +726,94 @@ class MainWindow(ctk.CTk):
         self.bot_instance = SigaBot(lote_valido, callbacks)
         threading.Thread(target=self.bot_instance.fluxo_automacao, daemon=True).start()
 
+    def iniciar_importacao_energia(self):
+        """
+        Coleta e valida as faturas de energia e inicia a thread do SigaBot para injeção.
+        """
+        self.atualizar_status("Obtendo faturas de energia do e-mail...", "#428BCA")
+        self.progress_bar.configure(mode="indeterminate")
+        self.progress_bar.start()
+        self.panel_energia.btn_importar.configure(state="disabled")
+
+        # Roda o processamento do controller em uma thread secundária para não travar a GUI
+        def rodar_thread_energia():
+            try:
+                from controllers.fatura_energia_controller import FaturaEnergiaController
+                lote_valido, lote_pendente = FaturaEnergiaController.processar_lote_energia(self.atualizar_status)
+
+                if not lote_valido and not lote_pendente:
+                    self.atualizar_status("Nenhuma fatura a processar.", "#F89406")
+                    self.after(0, lambda: self.progress_bar.stop())
+                    self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
+                    self.after(0, lambda: self.panel_energia.btn_importar.configure(state="normal"))
+                    return
+
+                # Se houver UCs pendentes de mapeamento, resolvemos de forma interativa (um a um)
+                if lote_pendente:
+                    self.atualizar_status("Resolvendo UCs não mapeadas...", "#F89406")
+                    for fat in lote_pendente:
+                        resposta_codigo = [None]
+                        thread_blocked = threading.Event()
+
+                        def cb_resposta(codigo):
+                            resposta_codigo[0] = codigo
+                            thread_blocked.set()
+
+                        # Abre o popup na main thread
+                        uc_num = fat.get("uc", "")
+                        caminho_pdf = fat.get("caminho_arquivo", "")
+                        self.after(0, lambda u=uc_num, path=caminho_pdf: ModalPerguntaMapeamentoUC(self, u, self.config_manager, cb_resposta, caminho_pdf=path))
+                        
+                        # Espera a resposta do usuário
+                        thread_blocked.wait()
+
+                        if resposta_codigo[0]:
+                            fat["localidade_codigo"] = resposta_codigo[0]
+                            # Recupera o nome da localidade recém-mapeada
+                            locs_dict = {l["codigo"]: l["nome"] for l in self.config_manager.get_localidades_energia()}
+                            fat["localidade_nome"] = locs_dict.get(resposta_codigo[0], "DESCONHECIDA")
+                            lote_valido.append(fat)
+                        else:
+                            self.atualizar_status(f"Fatura UC {uc_num} ignorada pelo usuário.", "#D9534F")
+
+                if not lote_valido:
+                    self.atualizar_status("Nenhuma fatura de energia restante para importar.", "#F89406")
+                    self.after(0, lambda: self.progress_bar.stop())
+                    self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
+                    self.after(0, lambda: self.panel_energia.btn_importar.configure(state="normal"))
+                    return
+            except Exception as e_thread:
+                logging.error(f"Erro na thread de energia: {e_thread}", exc_info=True)
+                self.atualizar_status(f"Erro: {e_thread}", "#D9534F")
+                self.after(0, lambda: self.progress_bar.stop())
+                self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
+                self.after(0, lambda: self.panel_energia.btn_importar.configure(state="normal"))
+                self.after(0, lambda: messagebox.showerror("Erro", f"Ocorreu um erro ao buscar faturas: {e_thread}", parent=self))
+                return
+
+            self.after(0, lambda: self.progress_bar.stop())
+            self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
+            self.atualizar_status(f"Preparando importação de {len(lote_valido)} faturas no SIGA...", "#428BCA")
+            
+            # Formata telemetria e inicia o SigaBot no modo energia
+            callbacks = {
+                "update_status": self.atualizar_status,
+                "update_progress": lambda val: self.after(0, lambda: self.progress_bar.set(val)),
+                "show_message": lambda t, tit, m: self.after(0, lambda: self.exibir_mensagem_topo(t, tit, m)),
+                "request_authorization": lambda pend: self.after(0, lambda: self.mostrar_janela_lancamentos(pend)),
+                "show_dashboard": lambda tel, t: self.after(0, lambda: self.mostrar_dashboard_produtividade(tel, t)),
+                "on_finish": lambda: self.after(0, lambda: [
+                    self.panel_energia.btn_importar.configure(state="normal"),
+                    self.progress_bar.set(0.0)
+                ])
+            }
+
+            # Dispara automação do SigaBot
+            self.bot_instance = SigaBot(lote_valido, callbacks, tipo_lote="energia")
+            threading.Thread(target=self.bot_instance.fluxo_automacao, daemon=True).start()
+
+        threading.Thread(target=rodar_thread_energia, daemon=True).start()
+
     def mostrar_janela_lancamentos(self, lancamentos):
         """
         Janela Modal que lista visualmente todas as pendências que o robô achou.
@@ -779,6 +882,8 @@ class MainWindow(ctk.CTk):
         janela.attributes('-topmost', True)
         janela.grab_set()
         
+        tipo_lote = telemetria.get("tipo_lote", "extrato")
+        
         tempo_total = time.time() - tempo_inicio
         minutos = int(tempo_total // 60)
         segundos = int(tempo_total % 60)
@@ -790,9 +895,14 @@ class MainWindow(ctk.CTk):
         pendentes = telemetria.get("pendentes", 0)
         
         # Métrica de ROI Humano:
-        # 30 segundos para checagem manual por item do extrato (conciliação visual)
-        # + 60 segundos para digitação manual, cliques no select2 e gravação de cada novo lançamento
-        tempo_humano_segundos = (ofx_itens * 30) + (injecoes * 60)
+        if tipo_lote == "energia":
+            # 120 segundos para preenchimento de provisão e upload manual de PDF por fatura
+            tempo_humano_segundos = injecoes * 120
+        else:
+            # 30 segundos para checagem manual por item do extrato (conciliação visual)
+            # + 60 segundos para digitação manual, cliques no select2 e gravação de cada novo lançamento
+            tempo_humano_segundos = (ofx_itens * 30) + (injecoes * 60)
+            
         if tempo_humano_segundos < 60:
             tempo_humano_segundos = 60
             
@@ -807,10 +917,14 @@ class MainWindow(ctk.CTk):
         roi_financeiro = (economia_segundos / 3600.0) * 30.0
         
         # Taxa de Assertividade
-        if ofx_itens > 0:
-            assertividade = max(0.0, min(100.0, ((ofx_itens - pendentes) / ofx_itens) * 100.0))
+        if tipo_lote == "energia":
+            total_acao = injecoes + pendentes
+            assertividade = (injecoes / total_acao) * 100.0 if total_acao > 0 else 100.0
         else:
-            assertividade = 100.0
+            if ofx_itens > 0:
+                assertividade = max(0.0, min(100.0, ((ofx_itens - pendentes) / ofx_itens) * 100.0))
+            else:
+                assertividade = 100.0
             
         # Formatações brasileiras
         volume_fmt = f"R$ {volume_fin:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -839,9 +953,14 @@ class MainWindow(ctk.CTk):
         lbl_secao1 = ctk.CTkLabel(frame_tabela, text="MÉTRICAS OPERACIONAIS", font=("Open Sans", 10, "bold"), text_color="#3D71A8")
         lbl_secao1.pack(anchor="w", padx=12, pady=(10, 4))
         
-        add_linha(frame_tabela, "Contas processadas no lote:", f"{total_contas}")
-        add_linha(frame_tabela, "Transações de extrato verificadas:", f"{ofx_itens}")
-        add_linha(frame_tabela, "Lançamentos importados no SIGA:", f"{injecoes}")
+        if tipo_lote == "energia":
+            add_linha(frame_tabela, "Total de faturas no lote:", f"{total_contas}")
+            add_linha(frame_tabela, "Faturas identificadas com UC mapeada:", f"{ofx_itens}")
+            add_linha(frame_tabela, "Faturas importadas com sucesso:", f"{injecoes}")
+        else:
+            add_linha(frame_tabela, "Contas processadas no lote:", f"{total_contas}")
+            add_linha(frame_tabela, "Transações de extrato verificadas:", f"{ofx_itens}")
+            add_linha(frame_tabela, "Lançamentos importados no SIGA:", f"{injecoes}")
         add_linha(frame_tabela, "Taxa de assertividade:", f"{assertividade:.1f}%", cor_valor="#3C763D" if assertividade > 95 else "#F89406", negrito=True)
         
         # Divisor
@@ -981,4 +1100,427 @@ class ModalCredenciais(ctk.CTkToplevel):
             self.destroy()
         except Exception as e:
             messagebox.showerror("Erro de Gravação", f"Não foi possível salvar no keyring: {e}", parent=self)
+
+
+class ModalLocalidades(ctk.CTkToplevel):
+    """
+    Janela modal para cadastro, listagem e manutenção de Localidades da Energisa.
+    """
+    def __init__(self, parent, config_manager):
+        super().__init__(parent)
+        self.parent = parent
+        self.config_manager = config_manager
+
+        self.title("Manutenção de Localidades")
+        self.geometry("450x420")
+        self.resizable(False, False)
+        self.configure(fg_color="#FFFFFF")
+        
+        self.transient(parent)
+        self.attributes("-topmost", True)
+        self.grab_set()
+
+        self.construir_widgets()
+        self.carregar_tabela()
+
+    def construir_widgets(self):
+        lbl_titulo = ctk.CTkLabel(self, text="Cadastro de Localidades", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
+        lbl_titulo.pack(pady=10)
+
+        # Campos de Cadastro
+        frame_inputs = ctk.CTkFrame(self, fg_color="transparent")
+        frame_inputs.pack(padx=20, pady=5, fill="x")
+
+        self.entry_codigo = ctk.CTkEntry(frame_inputs, placeholder_text="Código (Ex: BR 10-0516)", width=150, height=28, font=("Open Sans", 11))
+        self.entry_codigo.grid(row=0, column=0, padx=5, pady=5)
+
+        self.entry_nome = ctk.CTkEntry(frame_inputs, placeholder_text="Descrição/Nome da Localidade", width=230, height=28, font=("Open Sans", 11))
+        self.entry_nome.grid(row=0, column=1, padx=5, pady=5)
+
+        btn_salvar = ctk.CTkButton(
+            frame_inputs, text="Adicionar / Salvar", font=("Open Sans", 11, "bold"),
+            fg_color="#5CB85C", hover_color="#4CAE4C", height=28, command=self.salvar_localidade
+        )
+        btn_salvar.grid(row=1, column=0, columnspan=2, padx=5, pady=10, sticky="ew")
+
+        # Divisor
+        div = ctk.CTkFrame(self, height=1, fg_color="#EEEEEE")
+        div.pack(fill="x", padx=15, pady=5)
+
+        lbl_lista = ctk.CTkLabel(self, text="Localidades Cadastradas", font=("Open Sans", 12, "bold"), text_color="#3D71A8")
+        lbl_lista.pack(pady=(5, 2))
+
+        # Lista rolável
+        self.scroll_tabela = ctk.CTkScrollableFrame(self, fg_color="#F8F9FA", corner_radius=6, height=200)
+        self.scroll_tabela.pack(padx=20, pady=5, fill="both", expand=True)
+
+    def carregar_tabela(self):
+        # Limpa widgets na scrollable list
+        for widget in self.scroll_tabela.winfo_children():
+            widget.destroy()
+
+        localidades = self.config_manager.get_localidades_energia()
+        if not localidades:
+            lbl_empty = ctk.CTkLabel(self.scroll_tabela, text="Nenhuma localidade cadastrada.", font=("Open Sans", 11), text_color="#999999")
+            lbl_empty.pack(pady=40)
+            return
+
+        for idx, loc in enumerate(localidades):
+            item_frame = ctk.CTkFrame(self.scroll_tabela, fg_color="#FFFFFF", border_width=1, border_color="#DDDDDD", corner_radius=4)
+            item_frame.pack(fill="x", pady=2, padx=2)
+
+            cod = loc.get("codigo", "")
+            nome = loc.get("nome", "")
+
+            lbl_cod = ctk.CTkLabel(item_frame, text=cod, font=("Open Sans", 11, "bold"), text_color="#3D71A8", width=120, anchor="w")
+            lbl_cod.pack(side="left", padx=10, pady=5)
+
+            lbl_nome = ctk.CTkLabel(item_frame, text=nome[:25], font=("Open Sans", 11), anchor="w")
+            lbl_nome.pack(side="left", padx=5, pady=5, fill="x", expand=True)
+
+            btn_del = ctk.CTkButton(
+                item_frame, text="Excluir", font=("Open Sans", 10),
+                fg_color="#D9534F", hover_color="#C9302C", width=60, height=20,
+                command=lambda c=cod: self.excluir_localidade(c)
+            )
+            btn_del.pack(side="right", padx=10, pady=5)
+
+    def salvar_localidade(self):
+        codigo = self.entry_codigo.get().strip().upper()
+        nome = self.entry_nome.get().strip().upper()
+
+        if not codigo or not nome:
+            messagebox.showerror("Erro", "Preencha o Código e a Descrição.", parent=self)
+            return
+
+        # Padrão simples de formato "BR XX-XXXX"
+        if not codigo.startswith("BR ") or len(codigo) < 8:
+            messagebox.showwarning("Aviso", "O código deve seguir o padrão 'BR 10-0516'.", parent=self)
+
+        self.config_manager.salvar_localidade_energia(codigo, nome)
+        self.entry_codigo.delete(0, "end")
+        self.entry_nome.delete(0, "end")
+        self.carregar_tabela()
+        messagebox.showinfo("Sucesso", "Localidade gravada com sucesso!", parent=self)
+
+    def excluir_localidade(self, codigo):
+        if messagebox.askyesno("Confirmar", f"Deseja excluir a localidade {codigo}?", parent=self):
+            self.config_manager.remover_localidade_energia(codigo)
+            self.carregar_tabela()
+
+
+class ModalMapeamentoUC(ctk.CTkToplevel):
+    """
+    Janela modal para manutenção do mapeamento de Unidades Consumidoras para Localidades.
+    """
+    def __init__(self, parent, config_manager):
+        super().__init__(parent)
+        self.parent = parent
+        self.config_manager = config_manager
+
+        self.title("Manutenção de UCs")
+        self.geometry("450x420")
+        self.resizable(False, False)
+        self.configure(fg_color="#FFFFFF")
+        
+        self.transient(parent)
+        self.attributes("-topmost", True)
+        self.grab_set()
+
+        self.construir_widgets()
+        self.carregar_tabela()
+
+    def construir_widgets(self):
+        lbl_titulo = ctk.CTkLabel(self, text="Mapeamento UC -> Localidade", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
+        lbl_titulo.pack(pady=10)
+
+        # Cadastro
+        frame_inputs = ctk.CTkFrame(self, fg_color="transparent")
+        frame_inputs.pack(padx=20, pady=5, fill="x")
+
+        self.entry_uc = ctk.CTkEntry(frame_inputs, placeholder_text="Nº UC (Ex: 890.005.051-36)", width=170, height=28, font=("Open Sans", 11))
+        self.entry_uc.grid(row=0, column=0, padx=5, pady=5)
+
+        # Dropdown de localidades cadastradas
+        localidades = self.config_manager.get_localidades_energia()
+        self.combo_loc_values = [l['nome'] for l in localidades]
+        
+        self.combo_loc = ctk.CTkComboBox(
+            frame_inputs, values=self.combo_loc_values if self.combo_loc_values else ["Cadastre Localidades Primeiro"],
+            width=210, height=28, font=("Open Sans", 10)
+        )
+        self.combo_loc.grid(row=0, column=1, padx=5, pady=5)
+
+        btn_salvar = ctk.CTkButton(
+            frame_inputs, text="Relacionar UC", font=("Open Sans", 11, "bold"),
+            fg_color="#5CB85C", hover_color="#4CAE4C", height=28, command=self.salvar_mapeamento
+        )
+        btn_salvar.grid(row=1, column=0, columnspan=2, padx=5, pady=10, sticky="ew")
+
+        # Divisor
+        div = ctk.CTkFrame(self, height=1, fg_color="#EEEEEE")
+        div.pack(fill="x", padx=15, pady=5)
+
+        lbl_lista = ctk.CTkLabel(self, text="Mapeamentos UC Existentes", font=("Open Sans", 12, "bold"), text_color="#3D71A8")
+        lbl_lista.pack(pady=(5, 2))
+
+        # Lista rolável
+        self.scroll_tabela = ctk.CTkScrollableFrame(self, fg_color="#F8F9FA", corner_radius=6, height=200)
+        self.scroll_tabela.pack(padx=20, pady=5, fill="both", expand=True)
+
+    def carregar_tabela(self):
+        for widget in self.scroll_tabela.winfo_children():
+            widget.destroy()
+
+        mapeamentos = self.config_manager.get_mapeamentos_uc()
+        if not mapeamentos:
+            lbl_empty = ctk.CTkLabel(self.scroll_tabela, text="Nenhum mapeamento de UC cadastrado.", font=("Open Sans", 11), text_color="#999999")
+            lbl_empty.pack(pady=40)
+            return
+
+        for idx, m in enumerate(mapeamentos):
+            item_frame = ctk.CTkFrame(self.scroll_tabela, fg_color="#FFFFFF", border_width=1, border_color="#DDDDDD", corner_radius=4)
+            item_frame.pack(fill="x", pady=2, padx=2)
+
+            uc_num = m.get("uc", "")
+            loc_cod = m.get("localidade_codigo", "")
+
+            lbl_uc = ctk.CTkLabel(item_frame, text=uc_num, font=("Open Sans", 11, "bold"), text_color="#3D71A8", width=130, anchor="w")
+            lbl_uc.pack(side="left", padx=10, pady=5)
+
+            localidades_dict = {l["codigo"]: l["nome"] for l in self.config_manager.get_localidades_energia()}
+            loc_nome = localidades_dict.get(loc_cod, "")
+            texto_loc = f"{loc_cod} - {loc_nome}" if loc_nome else loc_cod
+
+            lbl_loc = ctk.CTkLabel(item_frame, text=texto_loc, font=("Open Sans", 11), anchor="w")
+            lbl_loc.pack(side="left", padx=5, pady=5, fill="x", expand=True)
+
+            btn_del = ctk.CTkButton(
+                item_frame, text="Excluir", font=("Open Sans", 10),
+                fg_color="#D9534F", hover_color="#C9302C", width=60, height=20,
+                command=lambda u=uc_num: self.excluir_mapeamento(u)
+            )
+            btn_del.pack(side="right", padx=10, pady=5)
+
+    def salvar_mapeamento(self):
+        uc = self.entry_uc.get().strip()
+        loc_texto = self.combo_loc.get().strip()
+
+        if not uc or not loc_texto or "Cadastre" in loc_texto:
+            messagebox.showerror("Erro", "Preencha a UC e selecione uma Localidade.", parent=self)
+            return
+
+        localidades = self.config_manager.get_localidades_energia()
+        codigo_loc = None
+        for l in localidades:
+            if l["nome"] == loc_texto:
+                codigo_loc = l["codigo"]
+                break
+
+        if not codigo_loc:
+            messagebox.showerror("Erro", "Localidade inválida.", parent=self)
+            return
+
+        self.config_manager.salvar_mapeamento_uc(uc, codigo_loc)
+        self.entry_uc.delete(0, "end")
+        self.carregar_tabela()
+        messagebox.showinfo("Sucesso", "Relação gravada com sucesso!", parent=self)
+
+    def excluir_mapeamento(self, uc):
+        if messagebox.askyesno("Confirmar", f"Deseja remover o relacionamento da UC {uc}?", parent=self):
+            self.config_manager.remover_mapeamento_uc(uc)
+            self.carregar_tabela()
+
+
+class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
+    """
+    Modal interativo aberto dinamicamente pelo bot para associar uma UC desconhecida.
+    """
+    def __init__(self, parent, uc, config_manager, callback_resposta, caminho_pdf=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.uc = uc
+        self.config_manager = config_manager
+        self.callback_resposta = callback_resposta
+        self.caminho_pdf = caminho_pdf
+
+        self.title("Mapear Unidade Consumidora")
+        self.geometry("380x320")
+        self.resizable(False, False)
+        self.configure(fg_color="#FFFFFF")
+        
+        self.transient(parent)
+        self.attributes("-topmost", True)
+        self.grab_set()
+
+        # Evita travamento da thread caso o usuário feche a janela pelo "X" do Windows
+        self.protocol("WM_DELETE_WINDOW", self.pular)
+
+        self.construir_widgets()
+
+    def construir_widgets(self):
+        lbl_titulo = ctk.CTkLabel(self, text="Nova UC Detectada!", font=("Open Sans", 14, "bold"), text_color="#D9534F")
+        lbl_titulo.pack(pady=8)
+
+        lbl_desc = ctk.CTkLabel(
+            self, text=f"Deseja relacionar a Unidade Consumidora {self.uc} a alguma localidade para lançar no SIGA?",
+            font=("Open Sans", 11), text_color="#333333", wraplength=320
+        )
+        lbl_desc.pack(pady=8)
+
+        # Botão para visualizar nota fiscal (PDF) se houver
+        if self.caminho_pdf and os.path.exists(self.caminho_pdf):
+            btn_ver_nota = ctk.CTkButton(
+                self, text="📄 Visualizar Fatura (Abrir PDF)", font=("Open Sans", 11, "underline"),
+                fg_color="transparent", text_color="#428BCA", hover_color="#EEEEEE",
+                width=280, height=25, command=self.abrir_nota
+            )
+            btn_ver_nota.pack(pady=5)
+
+        # Dropdown
+        localidades = self.config_manager.get_localidades_energia()
+        self.localidades_list = localidades
+        combo_values = [l['nome'] for l in localidades]
+
+        self.combo_loc = ctk.CTkComboBox(
+            self, values=combo_values if combo_values else ["Cadastre Localidades Primeiro"],
+            width=280, height=30, font=("Open Sans", 10)
+        )
+        self.combo_loc.pack(pady=8)
+
+        # Botões
+        frame_btn = ctk.CTkFrame(self, fg_color="transparent")
+        frame_btn.pack(pady=10)
+
+        btn_confirmar = ctk.CTkButton(
+            frame_btn, text="Mapear e Lançar", font=("Open Sans", 11, "bold"),
+            fg_color="#5CB85C", hover_color="#4CAE4C", width=140, height=35, command=self.confirmar
+        )
+        btn_confirmar.grid(row=0, column=0, padx=5)
+
+        btn_pular = ctk.CTkButton(
+            frame_btn, text="Ignorar Fatura", font=("Open Sans", 11, "bold"),
+            fg_color="#D9534F", hover_color="#C9302C", width=110, height=35, command=self.pular
+        )
+        btn_pular.grid(row=0, column=1, padx=5)
+
+    def abrir_nota(self):
+        if self.caminho_pdf and os.path.exists(self.caminho_pdf):
+            try:
+                os.startfile(self.caminho_pdf)
+            except Exception as e:
+                messagebox.showerror("Erro", f"Não foi possível abrir o PDF: {e}", parent=self)
+
+    def confirmar(self):
+        loc_txt = self.combo_loc.get().strip()
+        if "Cadastre" in loc_txt or not loc_txt:
+            messagebox.showerror("Erro", "Selecione uma localidade válida.", parent=self)
+            return
+
+        codigo_loc = None
+        for l in self.localidades_list:
+            if l["nome"] == loc_txt:
+                codigo_loc = l["codigo"]
+                break
+
+        if not codigo_loc:
+            messagebox.showerror("Erro", "Localidade inválida.", parent=self)
+            return
+
+        self.config_manager.salvar_mapeamento_uc(self.uc, codigo_loc)
+        
+        self.callback_resposta(codigo_loc)
+        self.destroy()
+
+    def pular(self):
+        self.callback_resposta(None)
+        self.destroy()
+
+
+class PanelEnergia(ctk.CTkFrame):
+    """
+    Aba dedicada para configuração, controle de e-mail e cadastro das Localidades da Energisa.
+    """
+    def __init__(self, parent, config_manager, callback_log, callback_topmost, trigger_bot_callback):
+        super().__init__(parent, fg_color="#FFFFFF")
+        self.config_manager = config_manager
+        self.callback_log = callback_log
+        self.callback_topmost = callback_topmost
+        self.trigger_bot_callback = trigger_bot_callback
+
+        self.construir_widgets()
+        self.carregar_dados()
+
+    def construir_widgets(self):
+        # Título
+        lbl_tit = ctk.CTkLabel(self, text="Provisionamento Automático de Energia (Energisa)", font=("Open Sans", 13, "bold"), text_color="#3D71A8")
+        lbl_tit.pack(pady=(10, 5))
+
+        # Configurações do E-mail (Grid)
+        frame_config = ctk.CTkFrame(self, fg_color="#F8F9FA", border_width=1, border_color="#DDDDDD", corner_radius=6)
+        frame_config.pack(padx=15, pady=5, fill="x")
+
+        ctk.CTkLabel(frame_config, text="E-mail (Gmail):", font=("Open Sans", 11)).grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        self.entry_email = ctk.CTkEntry(frame_config, placeholder_text="ccbdourados@gmail.com", width=250, height=24, font=("Open Sans", 11))
+        self.entry_email.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
+        ctk.CTkLabel(frame_config, text="Mês de Corte:", font=("Open Sans", 11)).grid(row=1, column=0, padx=5, pady=5, sticky="e")
+        self.entry_corte = ctk.CTkEntry(frame_config, placeholder_text="MM/AAAA (Ex: 06/2026)", width=130, height=24, font=("Open Sans", 11))
+        self.entry_corte.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+
+        btn_save_cfg = ctk.CTkButton(
+            frame_config, text="Salvar Configuração 💾", font=("Open Sans", 11, "bold"),
+            fg_color="#428BCA", hover_color="#3071A9", width=150, height=24, command=self.salvar_dados_email
+        )
+        btn_save_cfg.grid(row=1, column=2, padx=5, pady=5, sticky="e")
+
+        # Cadastro de Tabelas (Localidades e UCs)
+        frame_tabelas = ctk.CTkFrame(self, fg_color="transparent")
+        frame_tabelas.pack(padx=15, pady=10, fill="x")
+
+        self.btn_locs = ctk.CTkButton(
+            frame_tabelas, text="Cadastrar Localidades 🏢", font=("Open Sans", 12, "bold"),
+            fg_color="#F89406", hover_color="#DF8505", height=32, command=self.abrir_localidades
+        )
+        self.btn_locs.pack(side="left", fill="x", expand=True, padx=5)
+
+        self.btn_ucs = ctk.CTkButton(
+            frame_tabelas, text="Mapear UCs 🔌", font=("Open Sans", 12, "bold"),
+            fg_color="#F89406", hover_color="#DF8505", height=32, command=self.abrir_ucs
+        )
+        self.btn_ucs.pack(side="right", fill="x", expand=True, padx=5)
+
+        # Botão Importar Faturas
+        self.btn_importar = ctk.CTkButton(
+            self, text="⚡ BUSCAR E LANÇAR CONTAS DE ENERGIA ⚡", font=("Open Sans", 13, "bold"),
+            fg_color="#5CB85C", hover_color="#4CAE4C", height=40, command=self.iniciar_importacao_energia
+        )
+        self.btn_importar.pack(padx=15, pady=15, fill="x")
+
+    def carregar_dados(self):
+        cfg = self.config_manager.get_email_config()
+        self.entry_email.insert(0, cfg.get("email", ""))
+        self.entry_corte.insert(0, cfg.get("mes_corte", ""))
+
+    def salvar_dados_email(self):
+        email_str = self.entry_email.get().strip()
+        corte_str = self.entry_corte.get().strip()
+
+        if not email_str:
+            messagebox.showerror("Erro", "Informe o e-mail do Gmail.", parent=self)
+            return
+
+        self.config_manager.salvar_email_config(email_str, "imap.gmail.com", corte_str)
+
+        messagebox.showinfo("Sucesso", "Configurações de energia gravadas com sucesso!", parent=self)
+
+    def abrir_localidades(self):
+        ModalLocalidades(self.winfo_toplevel(), self.config_manager)
+
+    def abrir_ucs(self):
+        ModalMapeamentoUC(self.winfo_toplevel(), self.config_manager)
+
+    def iniciar_importacao_energia(self):
+        self.trigger_bot_callback()
+
 

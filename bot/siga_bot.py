@@ -898,8 +898,15 @@ class SigaBot:
 
                 # 6. Rateio - Centro de Custo (Select2): Mapeia baseado na localidade da UC
                 termo_cc = "ADM"
-                if localidade_nome:
-                    import re
+                # Tenta extrair primeiro do próprio código da localidade (caso o usuário tenha inserido no formato BR 10-XXXX)
+                import re
+                if localidade_codigo:
+                    match_cod = re.search(r'\d{2}-\d{4}', localidade_codigo)
+                    if match_cod:
+                        termo_cc = match_cod.group(0)
+
+                # Se não encontrou no código, tenta extrair do nome (para os casos pré-existentes como "BR 10-0244 - ...")
+                if termo_cc == "ADM" and localidade_nome:
                     match_cod = re.search(r'\d{2}-\d{4}', localidade_nome)
                     if match_cod:
                         termo_cc = match_cod.group(0)

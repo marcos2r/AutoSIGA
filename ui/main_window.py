@@ -1113,7 +1113,7 @@ class ModalLocalidades(ctk.CTkToplevel):
         self.config_manager = config_manager
 
         self.title("Manutenção de Localidades")
-        self.geometry("450x420")
+        self.geometry("580x420")
         self.resizable(False, False)
         self.configure(fg_color="#FFFFFF")
         
@@ -1135,7 +1135,7 @@ class ModalLocalidades(ctk.CTkToplevel):
         self.entry_codigo = ctk.CTkEntry(frame_inputs, placeholder_text="Código (Ex: BR 10-0516)", width=150, height=28, font=("Open Sans", 11))
         self.entry_codigo.grid(row=0, column=0, padx=5, pady=5)
 
-        self.entry_nome = ctk.CTkEntry(frame_inputs, placeholder_text="Descrição/Nome da Localidade", width=230, height=28, font=("Open Sans", 11))
+        self.entry_nome = ctk.CTkEntry(frame_inputs, placeholder_text="Descrição/Nome da Localidade", width=360, height=28, font=("Open Sans", 11))
         self.entry_nome.grid(row=0, column=1, padx=5, pady=5)
 
         btn_salvar = ctk.CTkButton(
@@ -1183,8 +1183,21 @@ class ModalLocalidades(ctk.CTkToplevel):
             )
             btn_del.pack(side="right", padx=10, pady=5)
 
-            lbl_nome = ctk.CTkLabel(item_frame, text=nome[:25], font=("Open Sans", 11), anchor="w")
+            btn_edit = ctk.CTkButton(
+                item_frame, text="Editar", font=("Open Sans", 10),
+                fg_color="#F0AD4E", hover_color="#EC971F", width=60, height=20,
+                command=lambda c=cod, n=nome: self.editar_localidade(c, n)
+            )
+            btn_edit.pack(side="right", padx=5, pady=5)
+
+            lbl_nome = ctk.CTkLabel(item_frame, text=nome, font=("Open Sans", 11), anchor="w")
             lbl_nome.pack(side="left", padx=5, pady=5, fill="x", expand=True)
+
+    def editar_localidade(self, codigo, nome):
+        self.entry_codigo.delete(0, "end")
+        self.entry_codigo.insert(0, codigo)
+        self.entry_nome.delete(0, "end")
+        self.entry_nome.insert(0, nome)
 
     def salvar_localidade(self):
         codigo = self.entry_codigo.get().strip().upper()
@@ -1220,7 +1233,7 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
         self.config_manager = config_manager
 
         self.title("Manutenção de UCs")
-        self.geometry("450x420")
+        self.geometry("580x420")
         self.resizable(False, False)
         self.configure(fg_color="#FFFFFF")
         
@@ -1244,11 +1257,11 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
 
         # Dropdown de localidades cadastradas
         localidades = self.config_manager.get_localidades_energia()
-        self.combo_loc_values = [l['nome'] for l in localidades]
+        self.combo_loc_values = [f"{l['codigo']} - {l['nome']}" if l['codigo'] != l['nome'] else l['nome'] for l in localidades]
         
         self.combo_loc = ctk.CTkComboBox(
             frame_inputs, values=self.combo_loc_values if self.combo_loc_values else ["Cadastre Localidades Primeiro"],
-            width=210, height=28, font=("Open Sans", 10)
+            width=340, height=28, font=("Open Sans", 10)
         )
         self.combo_loc.grid(row=0, column=1, padx=5, pady=5)
 
@@ -1300,8 +1313,26 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
             loc_nome = localidades_dict.get(loc_cod, "")
             texto_loc = f"{loc_cod} - {loc_nome}" if loc_nome else loc_cod
 
+            btn_edit = ctk.CTkButton(
+                item_frame, text="Editar", font=("Open Sans", 10),
+                fg_color="#F0AD4E", hover_color="#EC971F", width=60, height=20,
+                command=lambda u=uc_num, ln=loc_nome: self.editar_mapeamento(u, ln)
+            )
+            btn_edit.pack(side="right", padx=5, pady=5)
+
             lbl_loc = ctk.CTkLabel(item_frame, text=texto_loc, font=("Open Sans", 11), anchor="w")
             lbl_loc.pack(side="left", padx=5, pady=5, fill="x", expand=True)
+
+    def editar_mapeamento(self, uc, loc_nome):
+        self.entry_uc.delete(0, "end")
+        self.entry_uc.insert(0, uc)
+        if loc_nome:
+            localidades = self.config_manager.get_localidades_energia()
+            for l in localidades:
+                if l["nome"] == loc_nome or l["codigo"] == loc_nome:
+                    comb = f"{l['codigo']} - {l['nome']}" if l['codigo'] != l['nome'] else l['nome']
+                    self.combo_loc.set(comb)
+                    break
 
     def salvar_mapeamento(self):
         uc = self.entry_uc.get().strip()
@@ -1314,7 +1345,8 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
         localidades = self.config_manager.get_localidades_energia()
         codigo_loc = None
         for l in localidades:
-            if l["nome"] == loc_texto:
+            comb = f"{l['codigo']} - {l['nome']}" if l['codigo'] != l['nome'] else l['nome']
+            if comb == loc_texto or l["nome"] == loc_texto or l["codigo"] == loc_texto:
                 codigo_loc = l["codigo"]
                 break
 
@@ -1381,7 +1413,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         # Dropdown
         localidades = self.config_manager.get_localidades_energia()
         self.localidades_list = localidades
-        combo_values = [l['nome'] for l in localidades]
+        combo_values = [f"{l['codigo']} - {l['nome']}" if l['codigo'] != l['nome'] else l['nome'] for l in localidades]
 
         self.combo_loc = ctk.CTkComboBox(
             self, values=combo_values if combo_values else ["Cadastre Localidades Primeiro"],
@@ -1420,7 +1452,8 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
 
         codigo_loc = None
         for l in self.localidades_list:
-            if l["nome"] == loc_txt:
+            comb = f"{l['codigo']} - {l['nome']}" if l['codigo'] != l['nome'] else l['nome']
+            if comb == loc_txt or l["nome"] == loc_txt or l["codigo"] == loc_txt:
                 codigo_loc = l["codigo"]
                 break
 

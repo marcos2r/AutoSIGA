@@ -180,81 +180,113 @@ class SigaBot:
             termo_busca (str): Texto a ser pesquisado (ex: Código da Conta).
             dropdown_is_ajax (bool): Define se o script deve tolerar delay de rede.
         """
-        try:
-            # 1. Clica na caixa visual para acender o modal do dropdown
-            container = page.locator(f'#s2id_{select_id}')
-            container.wait_for(state="visible", timeout=3000)
-            
-            classes = container.get_attribute("class") or ""
-            if "select2-container-disabled" in classes:
-                # Campo bloqueado via JS (somente leitura), abortamos a injeção.
-                return
-                
-            # Tenta abrir via API do Select2 nativo primeiro, fallback para click
-            try:
-                page.evaluate(f"if (window.jQuery) window.jQuery('#{select_id}').select2('open');")
-            except Exception:
-                pass
-            container.click(timeout=3000, force=True)
-            time.sleep(1.0)
-            
-            # 2. Digita no input temporário que nasce dinamicamente no final do <body>
-            input_search = page.locator('#select2-drop:visible .select2-input')
-            input_search.fill("", timeout=3000)
-            input_search.type(str(termo_busca), delay=10)
-            
-            # Verifica dinamicamente se o Select2 exige pressionar Enter para disparar a busca AJAX
-            try:
-                msg_busca = page.locator('#select2-drop:visible .select2-searching').first
-                if msg_busca.count() > 0:
-                    texto_msg = msg_busca.text_content() or ""
-                    texto_msg_lower = texto_msg.lower()
-                    if "tecle enter" in texto_msg_lower or "enter para" in texto_msg_lower:
-                        input_search.press("Enter")
-                        # Dá um tempo extra para a busca AJAX do servidor responder
-                        time.sleep(1.8)
-            except Exception:
-                pass
-            
-            if dropdown_is_ajax:
-                time.sleep(1.2) # Espera o SIGA carregar
-            else:
-                time.sleep(0.5) # Filtro local instantâneo
-                
-            # 3. Pressiona Enter no input_search para garantir a seleção e fechamento nativo
-            input_search.press("Enter")
-            time.sleep(0.5)
+        import unicodedata
+        
+        def normalizar(t):
+            if not t:
+                return ""
+            t_clean = unicodedata.normalize('NFKD', str(t)).encode('ASCII', 'ignore').decode('ASCII')
+            return "".join(t_clean.lower().split())
 
-            # Tenta clicar no LI caso o Enter não tenha sido suficiente
+        tentativas = 3
+        ultimo_erro = None
+
+        # 1. Verifica se o Select2 já está com o valor correto para otimizar
+        try:
+            texto_inicial = page.locator(f'#s2id_{select_id} .select2-chosen').text_content() or ""
+            if normalizar(termo_busca) in normalizar(texto_inicial):
+                return
+        except Exception:
+            pass
+
+        for tentativa in range(1, tentativas + 1):
             try:
-                opcao_li = page.locator('#select2-drop:visible .select2-results li.select2-result-selectable').first
-                if opcao_li.count() > 0:
-                    opcao_li.click(force=True)
-                    time.sleep(0.5)
-            except Exception:
-                pass
-            
-            # Limpa o mask e o dropdown usando a API nativa do Select2 para desvincular eventos de teclado globais
-            try:
-                page.evaluate(f'''() => {{
-                    if (window.jQuery) {{
-                        // Fecha via API nativa para limpar os listeners de teclado do document
-                        window.jQuery('#{select_id}').select2('close');
-                        
-                        // Garante a remoção visual por segurança
-                        let mask = document.getElementById('select2-drop-mask');
-                        if (mask) mask.style.display = 'none';
-                        window.jQuery('#select2-drop').css('display', 'none');
-                        window.jQuery('.select2-drop-active').removeClass('select2-drop-active');
-                    }}
-                }}''')
-            except Exception:
-                pass
-        except Exception as e:
-            erro_msg = f"Falha ao usar Select2 {select_id} para o termo {termo_busca}: {e}"
-            logging.error(erro_msg)
-            self._capturar_tela_e_log(page, f"select2_{select_id}")
-            raise ValueError(erro_msg) from e
+                container = page.locator(f'#s2id_{select_id}')
+                container.wait_for(state="visible", timeout=3000)
+                
+                classes = container.get_attribute("class") or ""
+                if "select2-container-disabled" in classes:
+                    # Campo bloqueado via JS (somente leitura), abortamos a injeção.
+                    return
+                    
+                # Tenta abrir via API do Select2 nativo primeiro, fallback para click
+                try:
+                    page.evaluate(f"if (window.jQuery) window.jQuery('#{select_id}').select2('open');")
+                except Exception:
+                    pass
+                container.click(timeout=3000, force=True)
+                time.sleep(1.0)
+                
+                # 2. Digita no input temporário que nasce dinamicamente no final do <body>
+                input_search = page.locator('#select2-drop:visible .select2-input')
+                input_search.fill("", timeout=3000)
+                input_search.type(str(termo_busca), delay=10)
+                
+                # Verifica dinamicamente se o Select2 exige pressionar Enter para disparar a busca AJAX
+                try:
+                    msg_busca = page.locator('#select2-drop:visible .select2-searching').first
+                    if msg_busca.count() > 0:
+                        texto_msg = msg_busca.text_content() or ""
+                        texto_msg_lower = texto_msg.lower()
+                        if "tecle enter" in texto_msg_lower or "enter para" in texto_msg_lower:
+                            input_search.press("Enter")
+                            # Dá um tempo extra para a busca AJAX do servidor responder
+                            time.sleep(1.8)
+                except Exception:
+                    pass
+                
+                if dropdown_is_ajax:
+                    time.sleep(1.2) # Espera o SIGA carregar
+                else:
+                    time.sleep(0.5) # Filtro local instantâneo
+                    
+                # 3. Pressiona Enter no input_search para garantir a seleção e fechamento nativo
+                input_search.press("Enter")
+                time.sleep(0.5)
+
+                # Tenta clicar no LI caso o Enter não tenha sido suficiente
+                try:
+                    opcao_li = page.locator('#select2-drop:visible .select2-results li.select2-result-selectable').first
+                    if opcao_li.count() > 0:
+                        opcao_li.click(force=True)
+                        time.sleep(0.5)
+                except Exception:
+                    pass
+                
+                # Limpa o mask e o dropdown usando a API nativa do Select2 para desvincular eventos de teclado globais
+                try:
+                    page.evaluate(f'''() => {{
+                        if (window.jQuery) {{
+                            // Fecha via API nativa para limpar os listeners de teclado do document
+                            window.jQuery('#{select_id}').select2('close');
+                            
+                            // Garante a remoção visual por segurança
+                            let mask = document.getElementById('select2-drop-mask');
+                            if (mask) mask.style.display = 'none';
+                            window.jQuery('#select2-drop').css('display', 'none');
+                            window.jQuery('.select2-drop-active').removeClass('select2-drop-active');
+                        }}
+                    }}''')
+                except Exception:
+                    pass
+
+                # Validação de estado pós-seleção
+                texto_selecionado = page.locator(f'#s2id_{select_id} .select2-chosen').text_content() or ""
+                if normalizar(termo_busca) in normalizar(texto_selecionado):
+                    logging.info(f"[Select2] Sucesso ao selecionar '{termo_busca}' no campo '{select_id}' na tentativa {tentativa}.")
+                    return
+                else:
+                    raise ValueError(f"Texto selecionado '{texto_selecionado}' não corresponde ao termo buscado '{termo_busca}'.")
+
+            except Exception as e:
+                ultimo_erro = e
+                logging.warning(f"[Select2] Falha na tentativa {tentativa}/{tentativas} para selecionar '{termo_busca}' em '{select_id}': {e}")
+                time.sleep(1.5)
+
+        erro_msg = f"Falha definitiva ao usar Select2 {select_id} para o termo {termo_busca} após {tentativas} tentativas. Último erro: {ultimo_erro}"
+        logging.error(erro_msg)
+        self._capturar_tela_e_log(page, f"select2_{select_id}")
+        raise RuntimeError(erro_msg) from ultimo_erro
 
     def inserir_lancamentos_siga(self, page, lancamentos):
         """

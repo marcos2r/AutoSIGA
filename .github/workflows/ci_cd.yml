@@ -62,7 +62,7 @@ jobs:
 
       - name: Compactar Arquivo (.ZIP)
         run: |
-          powershell Compress-Archive -Path dist/AutoSiga/* -DestinationPath AutoSiga_Windows.zip
+          powershell Compress-Archive -Path dist/AutoSIGA.exe -DestinationPath AutoSiga_Windows.zip
 
       - name: Criar Release e Fazer Upload do Artefato
         uses: softprops/action-gh-release@v2

@@ -19,6 +19,7 @@ from models.ofx_reader import OfxReader
 from models.xls_reader import XlsReader
 from controllers.exportador import Exportador
 from bot.siga_bot import SigaBot
+from version import VERSION
 
 # Força o tema claro para combinar com a identidade visual do SIGA
 ctk.set_appearance_mode("light")
@@ -197,7 +198,7 @@ class MainWindow(ctk.CTk):
         self.config_manager = ConfigManager()
 
         # Configurações nativas da Janela
-        self.title("AutoSIGA v1.4.0 - Importação de Lançamentos")
+        self.title(f"AutoSIGA v{VERSION} - Importação de Lançamentos")
         self.aplicar_geometria()
         self.configure(fg_color="#F1F5F9")
         
@@ -408,7 +409,7 @@ class MainWindow(ctk.CTk):
         self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 5))
         
-        texto_rodape = "AutoSIGA v1.4.0 | Arquitetura MVC"
+        texto_rodape = f"AutoSIGA v{VERSION} | Arquitetura MVC"
         self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=("Open Sans", 11), text_color="#999999")
         self.label_rodape.pack()
 
@@ -1175,15 +1176,15 @@ class ModalLocalidades(ctk.CTkToplevel):
             lbl_cod = ctk.CTkLabel(item_frame, text=cod, font=("Open Sans", 11, "bold"), text_color="#3D71A8", width=120, anchor="w")
             lbl_cod.pack(side="left", padx=10, pady=5)
 
-            lbl_nome = ctk.CTkLabel(item_frame, text=nome[:25], font=("Open Sans", 11), anchor="w")
-            lbl_nome.pack(side="left", padx=5, pady=5, fill="x", expand=True)
-
             btn_del = ctk.CTkButton(
                 item_frame, text="Excluir", font=("Open Sans", 10),
                 fg_color="#D9534F", hover_color="#C9302C", width=60, height=20,
                 command=lambda c=cod: self.excluir_localidade(c)
             )
             btn_del.pack(side="right", padx=10, pady=5)
+
+            lbl_nome = ctk.CTkLabel(item_frame, text=nome[:25], font=("Open Sans", 11), anchor="w")
+            lbl_nome.pack(side="left", padx=5, pady=5, fill="x", expand=True)
 
     def salvar_localidade(self):
         codigo = self.entry_codigo.get().strip().upper()
@@ -1288,19 +1289,19 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
             lbl_uc = ctk.CTkLabel(item_frame, text=uc_num, font=("Open Sans", 11, "bold"), text_color="#3D71A8", width=130, anchor="w")
             lbl_uc.pack(side="left", padx=10, pady=5)
 
-            localidades_dict = {l["codigo"]: l["nome"] for l in self.config_manager.get_localidades_energia()}
-            loc_nome = localidades_dict.get(loc_cod, "")
-            texto_loc = f"{loc_cod} - {loc_nome}" if loc_nome else loc_cod
-
-            lbl_loc = ctk.CTkLabel(item_frame, text=texto_loc, font=("Open Sans", 11), anchor="w")
-            lbl_loc.pack(side="left", padx=5, pady=5, fill="x", expand=True)
-
             btn_del = ctk.CTkButton(
                 item_frame, text="Excluir", font=("Open Sans", 10),
                 fg_color="#D9534F", hover_color="#C9302C", width=60, height=20,
                 command=lambda u=uc_num: self.excluir_mapeamento(u)
             )
             btn_del.pack(side="right", padx=10, pady=5)
+
+            localidades_dict = {l["codigo"]: l["nome"] for l in self.config_manager.get_localidades_energia()}
+            loc_nome = localidades_dict.get(loc_cod, "")
+            texto_loc = f"{loc_cod} - {loc_nome}" if loc_nome else loc_cod
+
+            lbl_loc = ctk.CTkLabel(item_frame, text=texto_loc, font=("Open Sans", 11), anchor="w")
+            lbl_loc.pack(side="left", padx=5, pady=5, fill="x", expand=True)
 
     def salvar_mapeamento(self):
         uc = self.entry_uc.get().strip()

@@ -11,6 +11,7 @@ A conciliação bancária entre múltiplas jurisdições (como a de Administraç
 - **Auditoria Inteligente Final (Double Check)**: O robô executa uma validação rigorosa de segurança (auditoria) lendo a grade de dados do SIGA via `TES01501` após o encerramento do lote, atestando o sucesso das importações e alertando se alguma fatura falhou mesmo após a tela de sucesso.
 - **Fail-fast de Mês Fechado e Duplicidades**: Trava de segurança inteligente em cache de memória que previne falhas consecutivas de faturas pertencentes ao mesmo mês bloqueado, e checagem preventiva cruzada para notas duplicadas.
 - **Resiliência e Retries no Select2**: Mecanismo de até 3 tentativas automáticas e validação de estado pós-seleção nos campos Select2 do SIGA, minimizando falhas causadas por atrasos de renderização ou rede lenta.
+- **Correção de Busca de Credenciais (Gmail)**: Correção do cálculo do diretório base no modo executável empacotado pelo PyInstaller, permitindo que o `credentials.json` seja localizado corretamente na pasta de execução.
 
 ## ✨ Destaques da Versão v1.4.0
 

@@ -29,7 +29,11 @@ class EmailReader:
         Salva o token.json para evitar novas solicitações de login no navegador.
         """
         creds = None
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        import sys
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         token_path = os.path.join(base_dir, "token.json")
         credentials_path = os.path.join(base_dir, "credentials.json")
 
@@ -161,5 +165,6 @@ class EmailReader:
 
         except Exception as e:
             logging.error(f"Erro ao ler e-mails via Gmail API: {e}", exc_info=True)
+            raise e
 
         return caminhos_baixados

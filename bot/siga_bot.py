@@ -49,6 +49,7 @@ class SigaBot:
         self._qtd_injecoes_efetuadas = 0
         self.esperando_autorizacao = False
         self.autorizou_importacao = False
+        self.faturas_energia_sucesso = []
         
         # Atributos reativos que serão setados a cada iteração do lote:
         self.dados_processados = None
@@ -1049,6 +1050,7 @@ class SigaBot:
             if faturas_sucesso:
                 self.update_status("🔍 Iniciando Auditoria Final no Banco do SIGA...", "#337AB7")
                 sucessos_auditados = 0
+                faturas_confirmadas = []
                 for fat_aud in faturas_sucesso:
                     num_doc = fat_aud.get("numero_fatura", "")
                     emissao_aud = fat_aud.get("emissao", "")
@@ -1068,17 +1070,20 @@ class SigaBot:
                     if existe:
                         self.update_status(f"✅ Auditoria: Fatura {num_doc} confirmada com SUCESSO!", "#3C763D")
                         sucessos_auditados += 1
+                        faturas_confirmadas.append(fat_aud)
                     else:
                         self.update_status(f"❌ Auditoria: ALERTA! Fatura {num_doc} NÃO encontrada no banco!", "#D9534F")
                     time.sleep(1.5)
 
                 self._qtd_injecoes_efetuadas = sucessos_auditados
+                self.faturas_energia_sucesso = faturas_confirmadas
                 if sucessos_auditados == len(faturas_sucesso):
                     self.update_status(f"✅ Auditoria Finalizada! {sucessos_auditados}/{len(faturas_sucesso)} faturas confirmadas no SIGA.", "#3C763D")
                 else:
                     self.update_status(f"⚠️ Auditoria Finalizada! Apenas {sucessos_auditados}/{len(faturas_sucesso)} faturas foram validadas no SIGA.", "#F89406")
             else:
                 self._qtd_injecoes_efetuadas = qtd_injetada
+                self.faturas_energia_sucesso = []
                 self.update_status(f"✅ Finalizado! 0 faturas de energia importadas no SIGA.", "#3C763D")
 
         except Exception as e:
@@ -1228,7 +1233,7 @@ class SigaBot:
                         "injecoes": self._qtd_injecoes_efetuadas,
                         "pendentes": len(self.lote_processados) - self._qtd_injecoes_efetuadas,
                         "total_contas": len(self.lote_processados),
-                        "volume_financeiro": sum(f.get("valor", 0.0) for f in self.lote_processados[:self._qtd_injecoes_efetuadas])
+                        "volume_financeiro": sum(f.get("valor", 0.0) for f in self.faturas_energia_sucesso)
                     }
                     if "update_progress" in self.callbacks:
                         self.callbacks["update_progress"](1.0)

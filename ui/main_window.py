@@ -453,6 +453,40 @@ class MainWindow(ctk.CTk):
         modal = ModalCredenciais(self, self.config_manager)
         modal.grab_set() # Foca a interação na modal
 
+    def verificar_e_solicitar_credenciais(self):
+        """
+        Verifica se existem credenciais salvas no Keyring ou .env.
+        Caso contrário, abre a modal de cadastro e aguarda o preenchimento pelo usuário.
+        Retorna True se credenciais estiverem cadastradas/presentes, False caso contrário.
+        """
+        import keyring
+        usuario = self.config_manager.get_usuario_siga()
+        senha = keyring.get_password("AutoSIGA", usuario) if usuario else None
+
+        usuario_env = os.getenv("SIGA_USUARIO", "")
+        senha_env = os.getenv("SIGA_SENHA", "")
+
+        if (usuario and senha) or (usuario_env and senha_env):
+            return True
+
+        # Abre a modal de cadastro de forma síncrona
+        messagebox.showinfo(
+            "Credenciais Necessárias", 
+            "Para executar tarefas no SIGA, é necessário cadastrar suas credenciais de acesso."
+        )
+        modal = ModalCredenciais(self, self.config_manager)
+        modal.grab_set()
+        self.wait_window(modal)
+
+        # Re-verifica após o fechamento da modal
+        usuario = self.config_manager.get_usuario_siga()
+        senha = keyring.get_password("AutoSIGA", usuario) if usuario else None
+
+        if (usuario and senha) or (usuario_env and senha_env):
+            return True
+
+        return False
+
     def selecionar_arquivo(self, event=None):
         """Diálogo do sistema operacional para capturar múltiplos extratos (OFX ou XLS)."""
         caminhos_arquivos = filedialog.askopenfilenames(
@@ -633,6 +667,9 @@ class MainWindow(ctk.CTk):
         """
         Valida os dados de todos os cards da tela e instiga a Thread de automação web.
         """
+        if not self.verificar_e_solicitar_credenciais():
+            return
+
         if not self.cards_lote:
             messagebox.showwarning("Atenção", "Nenhum extrato carregado.")
             return
@@ -731,6 +768,9 @@ class MainWindow(ctk.CTk):
         """
         Coleta e valida as faturas de energia e inicia a thread do SigaBot para injeção.
         """
+        if not self.verificar_e_solicitar_credenciais():
+            return
+
         self.atualizar_status("Obtendo faturas de energia do e-mail...", "#428BCA")
         self.progress_bar.configure(mode="indeterminate")
         self.progress_bar.start()

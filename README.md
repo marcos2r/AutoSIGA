@@ -8,6 +8,8 @@ A conciliação bancária entre múltiplas jurisdições (como a de Administraç
 ## ✨ Destaques da Versão v1.6.1
 
 - **Suporte a Extratos OFX do Sicoob**: O leitor de OFX passa a aproveitar a tag `NAME`, onde bancos como o Sicoob (756) enviam o nome do pagador enquanto o `MEMO` traz apenas o tipo genérico da operação (ex: `PIX RECEBIDO - OUTRA IF`). O histórico exibido na conferência e exportado no TXT de ofertas agora segue o formato `MEMO - NAME`, enquanto os filtros de palavras-chave continuam avaliando somente o `MEMO`, evitando que nomes de pessoas sejam confundidos com aplicações ou resgates. Extratos sem `NAME` (como os do Sicredi) permanecem inalterados.
+- **Proteção do `config.json`**: A gravação passa a ser atômica (arquivo temporário + substituição) e um arquivo ilegível é preservado como `config.json.corrompido-<data>` em vez de ser sobrescrito, evitando a perda dos mapeamentos de contas.
+- **Release Corrigida e Dependências Fixadas**: O pipeline empacota a pasta completa do executável (`AutoSiga.exe` + `_internal`) e as versões das dependências foram fixadas no `requirements.txt` para builds reprodutíveis.
 
 ## ✨ Destaques da Versão v1.6.0
 

@@ -30,9 +30,10 @@ except Exception as e:
     logging.warning(f"Não foi possível definir o backend do keyring: {e}")
 
 
+from caminhos import diretorio_base
+
 # Tenta carregar variáveis do .env se o arquivo existir para suporte legado
-raiz_dir = os.path.abspath(os.path.dirname(__file__))
-env_path = os.path.join(raiz_dir, ".env")
+env_path = os.path.join(diretorio_base(), ".env")
 if os.path.exists(env_path):
     load_dotenv(env_path)
 
@@ -40,7 +41,7 @@ from ui.main_window import MainWindow
 
 if __name__ == "__main__":
     # Configura pasta e arquivo de log local para auditoria técnica das conciliações
-    log_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "logs")
+    log_dir = os.path.join(diretorio_base(), "logs")
     os.makedirs(log_dir, exist_ok=True)
     import logging
     from datetime import datetime

@@ -11,6 +11,7 @@ import logging
 from datetime import datetime
 import keyring
 
+from caminhos import diretorio_base
 from models.config_manager import ConfigManager
 from models.email_reader import EmailReader
 from models.pdf_extractor import PdfExtractor
@@ -48,7 +49,7 @@ class FaturaEnergiaController:
             return [], []
 
         # Define pasta temporária para downloads
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base_dir = diretorio_base()
         pasta_temp = os.path.join(base_dir, "faturas_temporarias")
         pasta_organizada = os.path.join(base_dir, "faturas_energisa")
         os.makedirs(pasta_organizada, exist_ok=True)

@@ -9,6 +9,8 @@ import os
 import logging
 import base64
 
+from caminhos import diretorio_base
+
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -29,11 +31,7 @@ class EmailReader:
         Salva o token.json para evitar novas solicitações de login no navegador.
         """
         creds = None
-        import sys
-        if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
-        else:
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base_dir = diretorio_base()
         token_path = os.path.join(base_dir, "token.json")
         credentials_path = os.path.join(base_dir, "credentials.json")
 

@@ -1,22 +1,21 @@
 venv/
 __pycache__/
+.pytest_cache/
 *.ofx
 *.pyc
 config.json
 config.json.*
 siga_browser_data/
-autosiga.log
 
-# Diretórios de compilação do PyInstaller
+# Diretórios de compilação do PyInstaller (o AutoSIGA.spec é versionado)
 build/
 dist/
-*.spec
 *.exe
-temp/
 
-# Credenciais e logs locais
+# Credenciais, logs e faturas locais
 .env
 logs/
 credentials.json
 token.json
 faturas_energisa/
+faturas_temporarias/

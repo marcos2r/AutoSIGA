@@ -9,9 +9,10 @@ e mapeamentos de contas bancárias.
 
 import os
 import json
-import sys
 import logging
 from datetime import datetime
+
+from caminhos import diretorio_base
 
 class ConfigManager:
     """
@@ -26,13 +27,7 @@ class ConfigManager:
         Inicializa o gerenciador de configurações calculando o caminho absoluto do config.json.
         """
         if config_path is None:
-            if getattr(sys, 'frozen', False):
-                # Se empacotado pelo PyInstaller
-                base_dir = os.path.dirname(sys.executable)
-            else:
-                # Se rodando como script Python (config_manager.py está dentro de 'models/')
-                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            config_path = os.path.join(base_dir, "config.json")
+            config_path = os.path.join(diretorio_base(), "config.json")
             
         self.config_path = config_path
 

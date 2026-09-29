@@ -29,6 +29,25 @@ def test_gerar_txt_ofertas_descarte_negativos_e_palavras_bloqueadas(tmp_path):
     content = filepath.read_text(encoding='utf-8')
     assert "14/05/2026;OFERTA DE CULTO ESP;200,00" in content
 
+def test_gerar_txt_ofertas_usa_historico_e_filtra_pelo_memo(tmp_path):
+    transacoes = [
+        # Nome do pagador contém "APLICA", mas o filtro olha só o MEMO: deve entrar
+        {"valor": 100.00, "descricao": "PIX RECEBIDO - OUTRA IF",
+         "historico": "PIX RECEBIDO - OUTRA IF - Maria Aplicada", "data": "03/08/2026"},
+        # Depósito em dinheiro continua bloqueado
+        {"valor": 80.00, "descricao": "DEPOSITO EM DINHEIRO AG",
+         "historico": "DEPOSITO EM DINHEIRO AG", "data": "05/08/2026"},
+    ]
+
+    filepath = tmp_path / "ofertas_sicoob.txt"
+    success, validas, descartadas = Exportador.gerar_txt_ofertas(transacoes, str(filepath))
+
+    assert success
+    assert validas == 1
+    assert descartadas == 1
+    content = filepath.read_text(encoding="utf-8")
+    assert "03/08/2026;PIX RECEBIDO - OUTRA IF - Maria Aplicada;100,00" in content
+
 def test_gerar_excel_lote(tmp_path):
     telemetria = {
         "total_contas": 2,

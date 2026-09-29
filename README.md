@@ -10,6 +10,7 @@ A conciliação bancária entre múltiplas jurisdições (como a de Administraç
 - **Suporte a Extratos OFX do Sicoob**: O leitor de OFX passa a aproveitar a tag `NAME`, onde bancos como o Sicoob (756) enviam o nome do pagador enquanto o `MEMO` traz apenas o tipo genérico da operação (ex: `PIX RECEBIDO - OUTRA IF`). O histórico exibido na conferência e exportado no TXT de ofertas agora segue o formato `MEMO - NAME`, enquanto os filtros de palavras-chave continuam avaliando somente o `MEMO`, evitando que nomes de pessoas sejam confundidos com aplicações ou resgates. Extratos sem `NAME` (como os do Sicredi) permanecem inalterados.
 - **Proteção do `config.json`**: A gravação passa a ser atômica (arquivo temporário + substituição) e um arquivo ilegível é preservado como `config.json.corrompido-<data>` em vez de ser sobrescrito, evitando a perda dos mapeamentos de contas.
 - **Release Corrigida e Dependências Fixadas**: O pipeline empacota a pasta completa do executável (`AutoSiga.exe` + `_internal`) e as versões das dependências foram fixadas no `requirements.txt` para builds reprodutíveis.
+- **Dados Preservados Entre Versões**: No executável, faturas de energia, logs e o `.env` passam a ficar ao lado do `AutoSiga.exe` (como o `config.json`), e não mais dentro da pasta interna `_internal`, que é substituída a cada atualização.
 
 ## ✨ Destaques da Versão v1.6.0
 
@@ -25,7 +26,7 @@ A conciliação bancária entre múltiplas jurisdições (como a de Administraç
 
 ## ✨ Destaques da Versão v1.5.0
 
-- **Módulo de Lançamento de Faturas de Energia**: Automação ponta a ponta na leitura (via IMAP ou PDFs locais) de faturas de energia elétrica (Energisa/Sanepar), extração inteligente de dados (Código UC, Vencimento, Valor) usando a API Google Gemini Pro (Visão) e injeção massiva de contas a pagar (`TES01502`) no SIGA.
+- **Módulo de Lançamento de Faturas de Energia**: Automação ponta a ponta na leitura (via IMAP ou PDFs locais) de faturas de energia elétrica (Energisa/Sanepar), extração inteligente de dados (Código UC, Vencimento, Valor) por leitura do texto do PDF (`pypdf` + expressões regulares) e injeção massiva de contas a pagar (`TES01502`) no SIGA.
 - **Auditoria Inteligente Final (Double Check)**: O robô executa uma validação rigorosa de segurança (auditoria) lendo a grade de dados do SIGA via `TES01501` após o encerramento do lote, atestando o sucesso das importações e alertando se alguma fatura falhou mesmo após a tela de sucesso.
 - **Fail-fast de Mês Fechado e Duplicidades**: Trava de segurança inteligente em cache de memória que previne falhas consecutivas de faturas pertencentes ao mesmo mês bloqueado, e checagem preventiva cruzada para notas duplicadas.
 - **Resiliência e Retries no Select2**: Mecanismo de até 3 tentativas automáticas e validação de estado pós-seleção nos campos Select2 do SIGA, minimizando falhas causadas por atrasos de renderização ou rede lenta.
@@ -73,7 +74,7 @@ A conciliação bancária entre múltiplas jurisdições (como a de Administraç
 Se você realizar edições, gerar a compilação local (.exe) exige certificar-se que os módulos de interface rodem lisos:
 ```powershell
 # Usar o ambiente virtual ativo (venv)
-pyinstaller --name AutoSiga --noconfirm --onedir --windowed --add-data "venv/Lib/site-packages/customtkinter;customtkinter/" main.py
+pyinstaller --noconfirm AutoSIGA.spec
 ```
 > O executável será salvo dentro de `dist/AutoSiga/AutoSiga.exe`.
 

@@ -47,5 +47,5 @@ python main.py
 
 Sempre que criar uma versão nova para os usuários finais rodarem no Windows sem instalarem Python, utilize o PyInstaller apontando para o `main.py`:
 ```bash
-pyinstaller --noconfirm --onedir --windowed --add-data "venv/Lib/site-packages/customtkinter;customtkinter" main.py
+pyinstaller --noconfirm AutoSIGA.spec
 ```

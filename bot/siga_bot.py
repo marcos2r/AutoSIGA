@@ -12,6 +12,7 @@ import logging
 import traceback
 import datetime
 from playwright.sync_api import sync_playwright
+from caminhos import diretorio_base
 from controllers.conciliador import Conciliador
 
 class SigaBot:
@@ -123,7 +124,7 @@ class SigaBot:
             identificador (str): Nome descritivo para compor o nome do arquivo.
         """
         try:
-            log_dir = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), "logs")
+            log_dir = os.path.join(diretorio_base(), "logs")
             screenshot_dir = os.path.join(log_dir, "screenshots")
             os.makedirs(screenshot_dir, exist_ok=True)
             

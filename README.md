@@ -1,9 +1,15 @@
-# AutoSIGA v1.6.0 🚀
+# AutoSIGA v1.6.1 🚀
 
 **AutoSIGA** é um motor avançado de RPA (Robotic Process Automation) construído em Python, voltado para a automatização e conciliação de tesourarias baseadas nas regras IT.TES.05. Ele cruza digitalmente extratos bancários brutos (`.OFX`) com o painel contábil administrativo SIGA (Sistema de Informação e Gestão), injetando dados, poupando centenas de horas humanas e reduzindo a taxa de erros a zero.
 
 ## 🎯 Por que o AutoSIGA existe?
 A conciliação bancária entre múltiplas jurisdições (como a de Administração/Conta Corrente e de Ponto de Pregação/Fundo de Aplicação) no SIGA era uma tarefa manual, exaustiva e suscetível à desorganização humana. O AutoSIGA atua como um robô que enxerga o sistema exatamente como você.
+
+## ✨ Destaques da Versão v1.6.1
+
+- **Suporte a Extratos OFX do Sicoob**: O leitor de OFX passa a aproveitar a tag `NAME`, onde bancos como o Sicoob (756) enviam o nome do pagador enquanto o `MEMO` traz apenas o tipo genérico da operação (ex: `PIX RECEBIDO - OUTRA IF`). O histórico exibido na conferência e exportado no TXT de ofertas agora segue o formato `MEMO - NAME`, enquanto os filtros de palavras-chave continuam avaliando somente o `MEMO`, evitando que nomes de pessoas sejam confundidos com aplicações ou resgates. Extratos sem `NAME` (como os do Sicredi) permanecem inalterados.
+- **Proteção do `config.json`**: A gravação passa a ser atômica (arquivo temporário + substituição) e um arquivo ilegível é preservado como `config.json.corrompido-<data>` em vez de ser sobrescrito, evitando a perda dos mapeamentos de contas.
+- **Release Corrigida e Dependências Fixadas**: O pipeline empacota a pasta completa do executável (`AutoSiga.exe` + `_internal`) e as versões das dependências foram fixadas no `requirements.txt` para builds reprodutíveis.
 
 ## ✨ Destaques da Versão v1.6.0
 

@@ -85,6 +85,26 @@ class SigaBot:
             t = t.replace(char, "")
         return t.strip()
 
+    @staticmethod
+    def _preencher_campos(page, valores):
+        """
+        Preenche campos do formulário do SIGA por id, ignorando os que não existem na tela.
+
+        Os valores vão como argumento do page.evaluate (serializados pelo Playwright),
+        nunca concatenados no código JavaScript, então aspas ou barras vindas do extrato
+        não conseguem quebrar nem alterar o script executado.
+
+        Args:
+            page (Page): Página ativa no navegador.
+            valores (dict): Mapa {id_do_campo: valor}.
+        """
+        page.evaluate('''(valores) => {
+            for (const [id, valor] of Object.entries(valores)) {
+                const campo = document.getElementById(id);
+                if (campo) campo.value = valor;
+            }
+        }''', valores)
+
     def show_message(self, tipo, titulo, msg):
         """Aciona um popup na interface para alertas e erros genéricos."""
         if "show_message" in self.callbacks:
@@ -391,14 +411,14 @@ class SigaBot:
                 # Dispara preenchimento em lote por JavaScript nos textareas de complemento
                 desc_sanitizada = self.sanitizar_descricao(desc_tx)
                 msg_comp = f"{tipo_nome} - {desc_sanitizada}"
-                page.evaluate(f'''
-                    if (document.getElementById("f_complementoorigem")) document.getElementById("f_complementoorigem").value = "{msg_comp}";
-                    if (document.getElementById("f_complementodestino")) document.getElementById("f_complementodestino").value = "{msg_comp}";
-                    if (document.getElementById("f_complemento")) document.getElementById("f_complemento").value = "{msg_comp}";
-                    if (document.getElementById("f_documentoorigem")) document.getElementById("f_documentoorigem").value = "OFX";
-                    if (document.getElementById("f_documentodestino")) document.getElementById("f_documentodestino").value = "OFX";
-                    if (document.getElementById("f_documento")) document.getElementById("f_documento").value = "OFX";
-                ''')
+                self._preencher_campos(page, {
+                    "f_complementoorigem": msg_comp,
+                    "f_complementodestino": msg_comp,
+                    "f_complemento": msg_comp,
+                    "f_documentoorigem": "OFX",
+                    "f_documentodestino": "OFX",
+                    "f_documento": "OFX",
+                })
                 time.sleep(1)
                 
                 # Verifica se está no fim da fila para não clicar em 'Salvar e Novo' à toa
@@ -537,9 +557,7 @@ class SigaBot:
                 # 10. Complemento
                 desc_sanitizada = self.sanitizar_descricao(desc_tx)
                 msg_comp = f"RENDIMENTO - {desc_sanitizada}"
-                page.evaluate(f'''
-                    if (document.getElementById("f_complemento")) document.getElementById("f_complemento").value = "{msg_comp}";
-                ''')
+                self._preencher_campos(page, {"f_complemento": msg_comp})
                 time.sleep(1)
                 
                 # 11. Salvar ou Salvar e Novo

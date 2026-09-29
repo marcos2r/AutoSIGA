@@ -10,6 +10,8 @@ e mapeamentos de contas bancárias.
 import os
 import json
 import sys
+import logging
+from datetime import datetime
 
 class ConfigManager:
     """
@@ -38,7 +40,8 @@ class ConfigManager:
         """
         Lê e retorna as configurações armazenadas no arquivo JSON local.
         
-        Se o arquivo não existir ou for inválido, retorna um dicionário vazio.
+        Se não existir, retorna vazio. Se estiver ilegível, é preservado como backup
+        antes de retornar vazio, para a próxima gravação não apagar os mapeamentos.
         
         Returns:
             dict: Dicionário contendo as configurações estruturadas.
@@ -50,9 +53,19 @@ class ConfigManager:
                 if "contas_mapeadas" in config:
                     config = self._migrar_formato_antigo(config)
                 return config
-            except Exception:
+            except Exception as e:
+                self._preservar_config_corrompido(e)
                 return {}
         return {}
+
+    def _preservar_config_corrompido(self, erro):
+        """Renomeia um config.json ilegível para um backup com data e hora."""
+        backup = f"{self.config_path}.corrompido-{datetime.now():%Y%m%d-%H%M%S}"
+        try:
+            os.replace(self.config_path, backup)
+            logging.error(f"config.json ilegível ({erro}). Cópia preservada em: {backup}")
+        except OSError as e:
+            logging.error(f"config.json ilegível ({erro}) e não foi possível preservá-lo: {e}")
 
     def _migrar_formato_antigo(self, config):
         """
@@ -144,11 +157,17 @@ class ConfigManager:
         Args:
             data (dict): Os dados que devem ser persistidos no JSON.
         """
+        # Grava num arquivo temporário e o troca pelo definitivo em uma única operação:
+        # se o app fechar no meio da gravação, o config.json anterior continua íntegro.
+        temp_path = f"{self.config_path}.tmp"
         try:
-            with open(self.config_path, 'w', encoding='utf-8') as f:
+            with open(temp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, self.config_path)
         except Exception as e:
-            print(f"Erro ao salvar configurações: {e}")
+            logging.error(f"Erro ao salvar configurações: {e}", exc_info=True)
 
     def get_geral(self):
         """

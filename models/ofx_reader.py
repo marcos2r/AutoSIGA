@@ -80,14 +80,38 @@ class OfxReader:
         
         # Converte as transações encapsuladas em objetos ofxtransaction para dicionários
         for tx in extrato.transactions:
+            memo = (getattr(tx, 'memo', '') or '').strip()
+            nome = (getattr(tx, 'payee', '') or '').strip()
+            descricao = memo or nome
+
             dados_ofx["transacoes"].append({
                 "id": getattr(tx, 'id', ''),
                 "data": tx.date.strftime("%d/%m/%Y") if tx.date else '',
                 "valor": float(tx.amount) if tx.amount else 0.0,
                 "tipo": getattr(tx, 'type', ''),
-                # Alguns bancos mandam a descrição no 'memo', outros no 'payee'.
-                # Essa estrutura garante que não perderemos a descrição.
-                "descricao": getattr(tx, 'memo', getattr(tx, 'payee', ''))
+                # 'descricao' guarda só o MEMO (tipo da operação) e é a base dos
+                # filtros de palavras-chave; nomes de pessoas não podem influenciá-los.
+                "descricao": descricao,
+                # 'historico' é o texto exibido e exportado. Bancos como o Sicoob
+                # enviam um MEMO genérico ("PIX RECEBIDO - OUTRA IF") e o nome do
+                # pagador na tag NAME, então ela é anexada quando traz informação nova.
+                "historico": OfxReader._montar_historico(descricao, nome)
             })
-            
+
         return dados_ofx
+
+    @staticmethod
+    def _montar_historico(descricao: str, nome: str) -> str:
+        """
+        Combina o MEMO e o NAME de uma transação em um único histórico legível.
+
+        Args:
+            descricao (str): Texto principal da transação (MEMO, ou NAME na ausência dele).
+            nome (str): Conteúdo da tag NAME (pagador/favorecido), podendo ser vazio.
+
+        Returns:
+            str: "MEMO - NAME" quando o NAME acrescenta informação; caso contrário, só o MEMO.
+        """
+        if not nome or nome.upper() in descricao.upper():
+            return descricao
+        return f"{descricao} - {nome}"

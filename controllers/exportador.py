@@ -73,7 +73,9 @@ class Exportador:
             valor_fmt = f"{valor:.2f}".replace(".", ",")
             
             # Formato SIGA Csv: DATA;HISTÓRICO;VALOR
-            linha = f"{data};{tx.get('descricao', '').strip()};{valor_fmt}"
+            # O histórico (MEMO + NAME) é o texto exportado; a filtragem acima usa só o MEMO.
+            historico = tx.get('historico') or tx.get('descricao', '')
+            linha = f"{data};{historico.strip()};{valor_fmt}"
             linhas_limpas.append(linha)
 
         if not linhas_limpas:

@@ -3,6 +3,7 @@ __pycache__/
 *.ofx
 *.pyc
 config.json
+config.json.*
 siga_browser_data/
 autosiga.log
 

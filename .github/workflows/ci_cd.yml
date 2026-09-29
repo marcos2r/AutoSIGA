@@ -53,7 +53,7 @@ jobs:
           python -m venv venv
           .\venv\Scripts\activate
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
+          pip install -r requirements.txt pyinstaller==6.19.0
 
       - name: Compilar Executável (PyInstaller)
         run: |
@@ -62,7 +62,9 @@ jobs:
 
       - name: Compactar Arquivo (.ZIP)
         run: |
-          powershell Compress-Archive -Path dist/AutoSIGA.exe -DestinationPath AutoSiga_Windows.zip
+          # O AutoSIGA.spec gera um build em pasta (onedir): o executável depende da
+          # pasta _internal ao lado dele, então a pasta inteira precisa ir no .zip.
+          Compress-Archive -Path dist/AutoSiga -DestinationPath AutoSiga_Windows.zip -ErrorAction Stop
 
       - name: Criar Release e Fazer Upload do Artefato
         uses: softprops/action-gh-release@v2

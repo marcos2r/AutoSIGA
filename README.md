@@ -1,11 +1,11 @@
-# AutoSIGA v1.6.2 🚀
+# AutoSIGA v1.7.0 🚀
 
 **AutoSIGA** é um motor avançado de RPA (Robotic Process Automation) construído em Python, voltado para a automatização e conciliação de tesourarias baseadas nas regras IT.TES.05. Ele cruza digitalmente extratos bancários brutos (`.OFX`) com o painel contábil administrativo SIGA (Sistema de Informação e Gestão), injetando dados, poupando centenas de horas humanas e reduzindo a taxa de erros a zero.
 
 ## 🎯 Por que o AutoSIGA existe?
 A conciliação bancária entre múltiplas jurisdições (como a de Administração/Conta Corrente e de Ponto de Pregação/Fundo de Aplicação) no SIGA era uma tarefa manual, exaustiva e suscetível à desorganização humana. O AutoSIGA atua como um robô que enxerga o sistema exatamente como você.
 
-## ✨ Próxima Versão
+## ✨ Destaques da Versão v1.7.0
 
 - **Faturas de Energia Nunca Se Perdem**: Uma fatura de UC ainda não mapeada é gravada como pendente assim que chega. Fechar a pergunta de UC nova ou escolher "Deixar Pendente" não a descarta mais: ela aparece na seção **Faturas pendentes** da aba Energia (com atalho para abrir o PDF) e volta a ser perguntada a cada importação. Mapeando a UC (pela pergunta ou em "Mapear UCs"), ela é lançada na próxima importação. O descarte definitivo passa a exigir confirmação.
 - **Anexo com Nome do Lançamento**: O PDF da fatura é anexado no SIGA com a conta de despesa e o centro de custo no nome (ex: `3006 - ENERGIA ELETRICA - BR 10-0516 - ADM DOURADOS.pdf`). O arquivo original em `faturas_energisa/` não é alterado.

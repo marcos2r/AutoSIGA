@@ -8,6 +8,7 @@ A conciliação bancária entre múltiplas jurisdições (como a de Administraç
 ## ✨ Próxima Versão
 
 - **Faturas de Energia Nunca Se Perdem**: Uma fatura de UC ainda não mapeada é gravada como pendente assim que chega. Fechar a pergunta de UC nova ou escolher "Deixar Pendente" não a descarta mais: ela aparece na seção **Faturas pendentes** da aba Energia (com atalho para abrir o PDF) e volta a ser perguntada a cada importação. Mapeando a UC (pela pergunta ou em "Mapear UCs"), ela é lançada na próxima importação. O descarte definitivo passa a exigir confirmação.
+- **Anexo com Nome do Lançamento**: O PDF da fatura é anexado no SIGA com a conta de despesa e o centro de custo no nome (ex: `3006 - ENERGIA ELETRICA - BR 10-0516 - ADM DOURADOS.pdf`). O arquivo original em `faturas_energisa/` não é alterado.
 
 ## ✨ Destaques da Versão v1.6.2
 

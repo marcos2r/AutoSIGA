@@ -14,6 +14,7 @@ import datetime
 from playwright.sync_api import sync_playwright
 from caminhos import diretorio_base
 from controllers.conciliador import Conciliador
+from controllers.anexo_fatura import CONTA_DESPESA_ENERGIA, preparar_anexo
 
 class SigaBot:
     """
@@ -912,8 +913,8 @@ class SigaBot:
                         pass
                     time.sleep(0.5)
 
-                # 5. Rateio - Despesas (Select2): Seleciona "3006"
-                self.selecionar_select2(page, "f_despesa_rateio", "3006", dropdown_is_ajax=False)
+                # 5. Rateio - Despesas (Select2): Seleciona a conta de energia elétrica ("3006")
+                self.selecionar_select2(page, "f_despesa_rateio", CONTA_DESPESA_ENERGIA, dropdown_is_ajax=False)
                 time.sleep(0.5)
 
                 # 6. Rateio - Centro de Custo (Select2): Mapeia baseado na localidade da UC
@@ -996,17 +997,23 @@ class SigaBot:
                 self.selecionar_select2(page, "f_historico", "021 - NF", dropdown_is_ajax=False)
                 time.sleep(0.5)
 
-                # 13. Anexo PDF
+                # 13. Anexo PDF, renomeado com a conta de despesa e o centro de custo
+                # (ex: "3006 - ENERGIA ELETRICA - BR 10-0516 - ADM DOURADOS.pdf")
                 if caminho_pdf and os.path.exists(caminho_pdf):
                     self.update_status("Anexando PDF da fatura...", "#F89406")
                     try:
+                        pasta_anexos = os.path.join(diretorio_base(), "faturas_temporarias", "anexos_siga")
+                        caminho_anexo = preparar_anexo(caminho_pdf, localidade_codigo, localidade_nome, pasta_anexos)
                         input_file = page.locator('#f_anexos')
                         if input_file.count() == 0:
                             input_file = page.locator('input[type="file"]').first
-                        input_file.set_input_files(caminho_pdf)
+                        input_file.set_input_files(caminho_anexo)
                         time.sleep(1.5)
                     except Exception as e_upload:
                         logging.warning(f"Não foi possível fazer upload do anexo: {e_upload}")
+                    # A cópia não é apagada aqui: com o navegador local, o Playwright entrega
+                    # o caminho e o arquivo só é lido ao gravar. A pasta faturas_temporarias
+                    # é limpa na próxima importação de energia.
 
                 # Salvar (F para fechar no último/único, N para novo)
                 is_ultimo = (i == len(faturas) - 1)

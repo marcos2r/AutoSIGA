@@ -18,6 +18,7 @@ graph TD
 ### 1. Models (Acesso a Dados e Persistência)
 Localizado na pasta `/models`, abriga classes que lidam exclusivamente com I/O (Input/Output). Nenhum Model sabe o que é uma janela ou um clique.
 - **`config_manager.py`**: Acessa e edita o `config.json`.
+- **`faturas_pendentes.py`**: Guarda no `config.json` as faturas de energia cuja UC ainda não foi mapeada (e as descartadas pelo usuário), para que nenhuma se perca entre importações.
 - **`ofx_reader.py`**: Traduz arquivos físicos `.ofx` para dicionários nativos do Python usando a biblioteca `ofxparse`.
 
 ### 2. Controllers (Lógica de Negócios)
@@ -33,6 +34,7 @@ Localizado em `/bot`. Devido à natureza robusta e assíncrona do Playwright, a 
 ### 4. View (Interface Gráfica)
 Localizado em `/ui`.
 - **`main_window.py`**: É o antigo arquivo gigante, agora purgado de regras de negócio. Usa o `CustomTkinter` para renderizar uma interface limpa.
+- **`panel_energia.py`** e **`modais_energia.py`**: Aba Energia (configuração do e-mail e lista de faturas pendentes) e seus modais (localidades, mapeamento de UCs e a pergunta de UC nova).
 - **Thread-Safety**: Todo acesso à UI vindo do Bot passa pelo método `self.after(0, ...)`, garantindo que apenas a *Main Thread* pinte os pixels na tela.
 
 ## 🚀 Como Iniciar

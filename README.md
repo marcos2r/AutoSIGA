@@ -5,6 +5,10 @@
 ## 🎯 Por que o AutoSIGA existe?
 A conciliação bancária entre múltiplas jurisdições (como a de Administração/Conta Corrente e de Ponto de Pregação/Fundo de Aplicação) no SIGA era uma tarefa manual, exaustiva e suscetível à desorganização humana. O AutoSIGA atua como um robô que enxerga o sistema exatamente como você.
 
+## ✨ Próxima Versão
+
+- **Faturas de Energia Nunca Se Perdem**: Uma fatura de UC ainda não mapeada é gravada como pendente assim que chega. Fechar a pergunta de UC nova ou escolher "Deixar Pendente" não a descarta mais: ela aparece na seção **Faturas pendentes** da aba Energia (com atalho para abrir o PDF) e volta a ser perguntada a cada importação. Mapeando a UC (pela pergunta ou em "Mapear UCs"), ela é lançada na próxima importação. O descarte definitivo passa a exigir confirmação.
+
 ## ✨ Destaques da Versão v1.6.2
 
 - **Dados Preservados Entre Versões**: No executável, faturas de energia, logs e o `.env` passam a ficar ao lado do `AutoSiga.exe` (como o `config.json`), e não mais dentro da pasta interna `_internal`, que é substituída a cada atualização.

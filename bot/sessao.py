@@ -5,6 +5,8 @@ Abertura do navegador e validação de sessão (login) do SigaBot.
 import os
 import logging
 
+from caminhos import diretorio_base
+
 
 class SessaoMixin:
     """Inicialização do Edge persistente e login no SIGA."""
@@ -15,7 +17,8 @@ class SessaoMixin:
         Returns:
             tuple: (context, page) do Playwright.
         """
-        user_data_dir = os.path.join(os.getcwd(), 'siga_browser_data')
+        # Ao lado do executável, independente da pasta de início do atalho
+        user_data_dir = os.path.join(diretorio_base(), 'siga_browser_data')
         
         # Utiliza o Microsoft Edge nativo
         context = p.chromium.launch_persistent_context(

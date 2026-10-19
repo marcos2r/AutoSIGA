@@ -4,6 +4,7 @@ Abertura do navegador e validação de sessão (login) do SigaBot.
 
 import os
 import logging
+import time
 
 from caminhos import diretorio_base
 
@@ -117,3 +118,56 @@ class SessaoMixin:
         # Agora sim, com o dashboard carregado, fechamos as notificações
         self.fechar_notificacoes(page)
         self.update_status("Sessão Validada. Iniciando processamento do lote...", "#428BCA")
+
+    def _ajustar_localidade_competencia(self, page, tipo_adm, nome_adm, mes_ano_alvo):
+        """Troca a localidade e o Mês de Trabalho ativos no SIGA pelo modal "Outros Meses".
+
+        Args:
+            page: Página do Playwright no SIGA.
+            tipo_adm (str): Tipo da localidade (ex: "ADM").
+            nome_adm (str): Nome da localidade (ex: "DOURADOS - MS").
+            mes_ano_alvo (str): Competência "mm/aaaa"; vazio mantém a atual.
+        """
+        self.update_status("Ajustando configurações de Localidade e Mês de Trabalho...", "#428BCA")
+        
+        page.locator('#a_competencia').click()
+        time.sleep(1)
+        
+        page.locator('a.showModal:has-text("Outros Meses")').click()
+        
+        btn_confirmar = page.locator('form.modal-form button[type="submit"]:has-text("Confirmar")').first
+        btn_confirmar.wait_for(state="attached", timeout=15000)
+        time.sleep(1.5)
+        
+        js_select2 = f'''() => {{
+            var selectLoc = jQuery('select[name="f_estabelecimento"]');
+            if (selectLoc.length > 0) {{
+                var optLoc = selectLoc.find('option').filter(function() {{
+                    var text = jQuery(this).text().toUpperCase();
+                    return text.indexOf("{tipo_adm}") > -1 && text.indexOf("{nome_adm}") > -1;
+                }});
+                if (optLoc.length > 0) {{
+                    selectLoc.val(optLoc.val()).trigger('change');
+                }}
+            }}
+            
+            if ("{mes_ano_alvo}" !== "") {{
+                var selectMes = jQuery('select[name="f_competencia"]');
+                if (selectMes.length > 0) {{
+                    var optMes = selectMes.find('option:contains("{mes_ano_alvo}")');
+                    if (optMes.length > 0) {{
+                        selectMes.val(optMes.val()).trigger('change');
+                    }}
+                }}
+            }}
+            
+            jQuery('#f-mudarpadrao').prop('checked', true);
+        }}'''
+        
+        page.evaluate(js_select2)
+        time.sleep(1.5)
+        
+        btn_confirmar.evaluate("el => el.click()")
+        
+        page.wait_for_load_state("domcontentloaded")
+        time.sleep(3)

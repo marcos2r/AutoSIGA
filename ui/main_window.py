@@ -240,6 +240,13 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, DashboardM
             corner_radius=4, height=35, state="disabled", command=self.gerar_txt_ofertas
         )
         self.botao_gerar_txt.grid(row=0, column=1, padx=5)
+
+        self.botao_importar_ofertas = ctk.CTkButton(
+            self.frame_botoes, text="Importar Ofertas no SIGA", font=("Open Sans", 13, "bold"),
+            fg_color="#428BCA", hover_color="#3071A9", text_color="#FFFFFF",
+            corner_radius=4, height=35, state="disabled", command=self.iniciar_importacao_ofertas
+        )
+        self.botao_importar_ofertas.grid(row=0, column=2, padx=5)
         
         # Barra de Progresso Geral do Lote
         self.progress_bar = ctk.CTkProgressBar(self, width=400, height=8, corner_radius=4, progress_color="#5CB85C", fg_color="#E0E0E0")

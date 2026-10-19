@@ -84,7 +84,8 @@ Usada para as faturas de energia.
 
 - Consulta: Número, Data, Nome Arquivo (`AAAA/M - AAAAMMDD_HHMMSS`), Valor; botões Novo, Filtros e Exportar.
 - **Novo** abre o modal "Importar Extrato" (TES05602): Data, Banco (select) e Histórico **fixo em "156 - DEPÓSITO/PIX - OFERTA PIEDADE/DIVERSOS"**, além do anexo do arquivo. Botões: Salvar e Novo, Salvar e Fechar, Fechar.
-- É o destino natural do TXT de ofertas gerado por `controllers/exportador.py`. Hoje essa importação é manual; automatizá-la exigiria lidar com o iframe cross-origin.
+- O bot (`bot/ofertas.py`, botão "Importar Ofertas no SIGA") importa aqui um TXT por conta corrente: Data = último dia do mês do extrato, Banco = opção que contém o código mapeado no card (ex.: `10130`). Pula quando a grade já tem a mesma data e valor, e audita se surgiu uma linha nova com o valor total.
+- O Banco lista só as contas que recebem ofertas da localidade ativa (hoje 10129, 10130 e 10315).
 
 ## Ainda não levantado
 

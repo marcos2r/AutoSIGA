@@ -75,3 +75,35 @@ def test_gerar_excel_lote(tmp_path):
     
     assert filepath.exists()
     assert filepath.stat().st_size > 0
+
+
+def test_filtrar_ofertas_mantem_so_positivos_sem_palavra_bloqueada():
+    transacoes = [
+        {"valor": -10.0, "descricao": "TARIFA", "data": "01/08/2026"},
+        {"valor": 50.0, "descricao": "RESGATE POUPANCA", "data": "02/08/2026"},
+        {"valor": 30.0, "descricao": "PIX RECEBIDO", "data": "03/08/2026"},
+    ]
+    ofertas, descartadas = Exportador.filtrar_ofertas(transacoes)
+    assert [tx["valor"] for tx in ofertas] == [30.0]
+    assert descartadas == 2
+
+
+def test_resumo_ofertas_usa_ultimo_dia_do_mes_mais_recente():
+    ofertas = [
+        {"valor": 10.10, "data": "15/01/2026"},
+        {"valor": 20.20, "data": "03/02/2026"},
+        {"valor": 0.05, "data": "data invalida"},
+    ]
+    total, data_importacao, competencia = Exportador.resumo_ofertas(ofertas)
+    assert total == 30.35
+    assert data_importacao == "28/02/2026"
+    assert competencia == "02/2026"
+
+
+def test_resumo_ofertas_sem_datas_validas():
+    assert Exportador.resumo_ofertas([{"valor": 5.0, "data": ""}]) == (5.0, "", "")
+
+
+def test_formatar_moeda_no_padrao_do_siga():
+    assert Exportador.formatar_moeda(1120441.6) == "R$ 1.120.441,60"
+    assert Exportador.formatar_moeda(5.5) == "R$ 5,50"

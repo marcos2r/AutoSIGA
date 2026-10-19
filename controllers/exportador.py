@@ -6,7 +6,9 @@ gerar o arquivo CSV customizado (que leva extensão .txt) de Ofertas,
 permitindo a importação manual em lote no sistema legado do SIGA.
 """
 
+import calendar
 import logging
+from datetime import datetime
 
 class Exportador:
     """
@@ -44,42 +46,20 @@ class Exportador:
         if not transacoes:
             return False, 0, 0
 
-        # Palavras bloqueadas que categorizam lançamentos que NÃO são Ofertas puras.
-        # Por exemplo: Rendimentos de aplicação, saques aplicados e dinheiro em 
-        # caixa já lançado direto (depositos ou congregação).
-        palavras_bloqueadas = ["APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "RESG.", "DEP ", "CONGREGACAO", "TRANSFERENCIA"]
+        ofertas, qtd_descartadas = Exportador.filtrar_ofertas(transacoes)
+        if not ofertas:
+            return False, 0, qtd_descartadas
 
         linhas_limpas = []
-        qtd_descartadas = 0
-
-        for tx in transacoes:
-            valor = tx.get("valor", 0.0)
-            descricao = tx.get("descricao", "").upper()
-            data = tx.get("data", "")
-
-            # COND. 1: Somente valores POSITIVOS entram no lançamento puro (sem "-").
-            # Valores negativos (débitos) são ignorados pois o SIGA não aceita estornos neste arquivo.
-            if valor <= 0:
-                qtd_descartadas += 1
-                continue
-            
-            # COND. 2: Nenhuma palavra bloqueada pode fazer parte da descrição da string OFX.
-            if any(palavra in descricao for palavra in palavras_bloqueadas):
-                qtd_descartadas += 1
-                continue
-
+        for tx in ofertas:
             # FORMATAR VALOR (sem separador de milhar, virgula p/ centavos. ex: 1530,50)
             # O SIGA legado em ASP classic quebra se mandarmos '1.530,50' ou '1530.50'
-            valor_fmt = f"{valor:.2f}".replace(".", ",")
-            
-            # Formato SIGA Csv: DATA;HISTÓRICO;VALOR
-            # O histórico (MEMO + NAME) é o texto exportado; a filtragem acima usa só o MEMO.
-            historico = tx.get('historico') or tx.get('descricao', '')
-            linha = f"{data};{historico.strip()};{valor_fmt}"
-            linhas_limpas.append(linha)
+            valor_fmt = f"{tx.get('valor', 0.0):.2f}".replace(".", ",")
 
-        if not linhas_limpas:
-            return False, 0, qtd_descartadas
+            # Formato SIGA Csv: DATA;HISTÓRICO;VALOR
+            # O histórico (MEMO + NAME) é o texto exportado; a filtragem usa só o MEMO.
+            historico = tx.get('historico') or tx.get('descricao', '')
+            linhas_limpas.append(f"{tx.get('data', '')};{historico.strip()};{valor_fmt}")
 
         try:
             # Utiliza utf-8 padrão (sem BOM) para evitar que o importador web ASP do SIGA
@@ -92,6 +72,64 @@ class Exportador:
         except Exception as e:
             logging.error(f"Erro ao salvar arquivo TXT das ofertas: {e}", exc_info=True)
             raise e
+
+    # Palavras bloqueadas que categorizam lançamentos que NÃO são Ofertas puras.
+    # Por exemplo: Rendimentos de aplicação, saques aplicados e dinheiro em
+    # caixa já lançado direto (depositos ou congregação).
+    PALAVRAS_BLOQUEADAS = ["APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "RESG.", "DEP ", "CONGREGACAO", "TRANSFERENCIA"]
+
+    @staticmethod
+    def filtrar_ofertas(transacoes):
+        """
+        Separa as transações que são ofertas puras (regras IT.TES.05).
+
+        Args:
+            transacoes (list): Lista de dicionários contendo transações do OFX.
+
+        Returns:
+            tuple: (ofertas, qtd_descartadas), onde ofertas é a lista das transações mantidas.
+        """
+        ofertas = []
+        qtd_descartadas = 0
+        for tx in transacoes or []:
+            descricao = tx.get("descricao", "").upper()
+            # COND. 1: Somente valores POSITIVOS (o SIGA não aceita estornos neste arquivo).
+            # COND. 2: Nenhuma palavra bloqueada no MEMO.
+            if tx.get("valor", 0.0) <= 0 or any(p in descricao for p in Exportador.PALAVRAS_BLOQUEADAS):
+                qtd_descartadas += 1
+                continue
+            ofertas.append(tx)
+        return ofertas, qtd_descartadas
+
+    @staticmethod
+    def resumo_ofertas(ofertas):
+        """
+        Calcula o total e a data de importação (último dia do mês da oferta mais recente).
+
+        Args:
+            ofertas (list): Transações já filtradas por `filtrar_ofertas`, com data "dd/mm/aaaa".
+
+        Returns:
+            tuple: (total, data_importacao "dd/mm/aaaa", competencia "mm/aaaa"); datas vazias se nenhuma for válida.
+        """
+        total = round(sum(tx.get("valor", 0.0) for tx in ofertas), 2)
+        datas = []
+        for tx in ofertas:
+            try:
+                datas.append(datetime.strptime(tx.get("data", ""), "%d/%m/%Y"))
+            except ValueError:
+                continue
+        if not datas:
+            return total, "", ""
+        mais_recente = max(datas)
+        ultimo_dia = calendar.monthrange(mais_recente.year, mais_recente.month)[1]
+        return total, f"{ultimo_dia:02d}/{mais_recente:%m/%Y}", f"{mais_recente:%m/%Y}"
+
+    @staticmethod
+    def formatar_moeda(valor):
+        """Formata um valor no padrão exibido pelo SIGA (ex: 'R$ 1.234,56')."""
+        texto = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {texto}"
 
     @staticmethod
     def gerar_excel_lote(telemetria, dados_lote, filepath):

@@ -20,10 +20,45 @@ class AcoesSigaMixin:
         """
         if not self.verificar_e_solicitar_credenciais():
             return
+        lote_valido = self._montar_lote_extratos()
+        if not lote_valido:
+            return
 
+        # Bloqueia reentrância
+        self.botao_conectar.configure(state="disabled")
+        
+        # Destrói navegador órfão antes de abrir um novo
+        if getattr(self, 'bot_instance', None) and getattr(self.bot_instance, 'browser_aberto', False):
+            self.atualizar_status("Encerrando janela antiga do SIGA...", "#F89406")
+            self.bot_instance.fechar_browser()
+            self.update()
+            time.sleep(2)
+            
+        self.atualizar_status("Iniciando lote de automação no SIGA...", "#F89406")
+        self.progress_bar.set(0.0)
+        
+        callbacks = {
+            "update_status": self.atualizar_status,
+            "update_progress": lambda val: self.after(0, lambda: self.progress_bar.set(val)),
+            "show_message": lambda t, tit, m: self.after(0, lambda: self.exibir_mensagem_topo(t, tit, m)),
+            "request_authorization": lambda pend: self.after(0, lambda: self.mostrar_janela_lancamentos(pend)),
+            "show_dashboard": lambda tel, t: self.after(0, lambda: self.mostrar_dashboard_produtividade(tel, t)),
+            "on_finish": lambda: self.after(0, lambda: self.botao_conectar.configure(state="normal"))
+        }
+
+        self.bot_instance = SigaBot(lote_valido, callbacks)
+        threading.Thread(target=self.bot_instance.fluxo_automacao, daemon=True).start()
+
+    def _montar_lote_extratos(self):
+        """
+        Coleta os cards da tela, aplica o filtro manual de datas e monta o lote para o bot.
+
+        Returns:
+            list | None: Extratos prontos para o SigaBot, ou None se houve aviso ao usuário.
+        """
         if not self.cards_lote:
             messagebox.showwarning("Atenção", "Nenhum extrato carregado.")
-            return
+            return None
 
         # Garante o salvamento explícito de todos os inputs inseridos nos cards antes de coletar os dados
         for card in self.cards_lote:
@@ -50,14 +85,14 @@ class AcoesSigaMixin:
         # Alerta se o formato de data estiver incorreto
         if (data_ini_raw and not d_ini) or (data_fim_raw and not d_fim):
             messagebox.showwarning("Aviso de Formato", "As datas inseridas no filtro manual são inválidas. Use o formato DD/MM/AAAA.")
-            return
+            return None
 
         lote_valido = []
         for card in self.cards_lote:
             info = card.obter_dados_mapeados()
             if not info["valido"]:
                 messagebox.showwarning("Atenção", f"O extrato da conta {card.conta_id} possui mapeamento incompleto!")
-                return
+                return None
                 
             dados_exec = card.dados_extrato.copy()
             
@@ -88,31 +123,34 @@ class AcoesSigaMixin:
                 
         if not lote_valido:
             messagebox.showinfo("Lote Vazio", "Nenhum lançamento restante no lote após aplicar os filtros de datas informados.")
+            return None
+        return lote_valido
+
+    def iniciar_importacao_ofertas(self, event=None):
+        """Importa no SIGA (TES05602) o TXT de ofertas de cada conta corrente do lote."""
+        if not self.verificar_e_solicitar_credenciais():
+            return
+        lote_valido = self._montar_lote_extratos()
+        if not lote_valido:
+            return
+        if not any(d.get("tipo_extrato") != "APLICACAO" for d in lote_valido):
+            messagebox.showwarning("Atenção", "Nenhuma conta corrente no lote para importar ofertas.")
+            return
+        if not messagebox.askyesno("Importar Ofertas no SIGA",
+                                   "O robô vai importar no SIGA o TXT de ofertas de cada conta corrente do lote, "
+                                   "com a data do último dia do mês do extrato. Continuar?", parent=self):
             return
 
-        # Bloqueia reentrância
-        self.botao_conectar.configure(state="disabled")
-        
-        # Destrói navegador órfão antes de abrir um novo
-        if getattr(self, 'bot_instance', None) and getattr(self.bot_instance, 'browser_aberto', False):
-            self.atualizar_status("Encerrando janela antiga do SIGA...", "#F89406")
-            self.bot_instance.fechar_browser()
-            self.update()
-            time.sleep(2)
-            
-        self.atualizar_status("Iniciando lote de automação no SIGA...", "#F89406")
+        self.botao_importar_ofertas.configure(state="disabled")
+        self.atualizar_status("Iniciando importação de ofertas no SIGA...", "#F89406")
         self.progress_bar.set(0.0)
-        
         callbacks = {
             "update_status": self.atualizar_status,
             "update_progress": lambda val: self.after(0, lambda: self.progress_bar.set(val)),
             "show_message": lambda t, tit, m: self.after(0, lambda: self.exibir_mensagem_topo(t, tit, m)),
-            "request_authorization": lambda pend: self.after(0, lambda: self.mostrar_janela_lancamentos(pend)),
-            "show_dashboard": lambda tel, t: self.after(0, lambda: self.mostrar_dashboard_produtividade(tel, t)),
-            "on_finish": lambda: self.after(0, lambda: self.botao_conectar.configure(state="normal"))
+            "on_finish": lambda: self.after(0, lambda: self.botao_importar_ofertas.configure(state="normal"))
         }
-
-        self.bot_instance = SigaBot(lote_valido, callbacks)
+        self.bot_instance = SigaBot(lote_valido, callbacks, tipo_lote="ofertas")
         threading.Thread(target=self.bot_instance.fluxo_automacao, daemon=True).start()
 
     def iniciar_importacao_energia(self):

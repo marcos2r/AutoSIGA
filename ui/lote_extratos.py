@@ -104,6 +104,7 @@ class LoteExtratosMixin:
             self.label_arquivo.configure(text="Nenhum arquivo selecionado.", text_color="#666666")
             self.botao_conectar.configure(state="disabled")
             self.botao_gerar_txt.configure(state="disabled")
+            self.botao_importar_ofertas.configure(state="disabled")
             self.atualizar_status("Nenhum arquivo carregado com sucesso.", "#D9534F")
 
     def resetar_lote(self, event=None):
@@ -116,6 +117,7 @@ class LoteExtratosMixin:
         self.label_arquivo.configure(text="Nenhum arquivo selecionado.", text_color="#666666")
         self.botao_conectar.configure(state="disabled")
         self.botao_gerar_txt.configure(state="disabled")
+        self.botao_importar_ofertas.configure(state="disabled")
         self.progress_bar.set(0.0)
         self.atualizar_status("Lote limpo com sucesso. Aguardando novos arquivos.", "#666666")
 
@@ -128,6 +130,7 @@ class LoteExtratosMixin:
         if not self.cards_lote:
             self.botao_conectar.configure(state="disabled")
             self.botao_gerar_txt.configure(state="disabled")
+            self.botao_importar_ofertas.configure(state="disabled")
             return
             
         todos_validos = True
@@ -147,8 +150,10 @@ class LoteExtratosMixin:
         tem_conta_corrente = any(not card.is_aplicacao for card in self.cards_lote)
         if tem_conta_corrente:
             self.botao_gerar_txt.configure(state="normal")
+            self.botao_importar_ofertas.configure(state="normal")
         else:
             self.botao_gerar_txt.configure(state="disabled")
+            self.botao_importar_ofertas.configure(state="disabled")
 
     def gerar_txt_ofertas(self, event=None):
         """Delega a geração de TXT das transações de Conta Corrente do lote ao Controller Exportador."""

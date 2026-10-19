@@ -11,14 +11,16 @@ import logging
 import traceback
 from playwright.sync_api import sync_playwright
 from controllers.conciliador import Conciliador
+from controllers.exportador import Exportador
 from bot.siga_helpers import HelpersMixin
 from bot.sessao import SessaoMixin
 from bot.extratos import ExtratosMixin
 from bot.energia_auditoria import AuditoriaEnergiaMixin
 from bot.energia import EnergiaMixin
+from bot.ofertas import OfertasMixin
 
 
-class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, EnergiaMixin):
+class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, EnergiaMixin, OfertasMixin):
     """
     Controlador do Navegador Playwright.
     
@@ -39,7 +41,7 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
                 - request_authorization(lancamentos_pendentes)
                 - show_dashboard(telemetria, tempo_inicio)
                 - on_finish()
-            tipo_lote (str): Tipo de lote ("extrato" ou "energia").
+            tipo_lote (str): Tipo de lote ("extrato", "energia" ou "ofertas").
         """
         # Ordena o lote por localidade_selecionada para agrupar os lançamentos da mesma filial,
         # minimizando as trocas de localidade no portal SIGA.
@@ -78,6 +80,51 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
     def fechar_browser(self):
         """Força a finalização do loop principal do Playwright."""
         self.browser_aberto = False
+
+    def _aguardar_fechamento(self, context):
+        """Mantém o navegador aberto para conferência até o usuário fechá-lo."""
+        self.browser_aberto = True
+        while self.browser_aberto:
+            try:
+                if not context.pages:
+                    break
+            except Exception:
+                break
+            time.sleep(1)
+
+    def _fluxo_ofertas(self, page):
+        """Importa o TXT de ofertas de cada conta corrente do lote na TES05602."""
+        contas = [d for d in self.lote_processados if d.get("tipo_extrato") != "APLICACAO"]
+        resultados = {"importado": 0, "duplicado": 0, "vazio": 0, "falha": 0}
+        localidade_anterior = competencia_anterior = None
+
+        for idx, dados in enumerate(contas):
+            if not self.browser_aberto:
+                break
+            self._verificar_sessao_ativa(page)
+            ofertas, _ = Exportador.filtrar_ofertas(dados.get("transacoes", []))
+            _, _, competencia = Exportador.resumo_ofertas(ofertas)
+            localidade = f"{dados['tipo_adm']}-{dados['nome_adm']}"
+            if competencia and (localidade != localidade_anterior or competencia != competencia_anterior):
+                self._ajustar_localidade_competencia(page, dados["tipo_adm"], dados["nome_adm"], competencia)
+                localidade_anterior, competencia_anterior = localidade, competencia
+
+            # Uma conta com erro (ex: timeout ao abrir a tela) não interrompe as demais
+            try:
+                resultados[self.importar_ofertas_siga(page, dados)] += 1
+            except Exception as e:
+                logging.error(f"Erro ao importar ofertas da conta {dados.get('conta_id', '')}: {e}", exc_info=True)
+                self._capturar_tela_e_log(page, "ofertas_erro")
+                self.update_status(f"❌ Erro nas ofertas da conta {dados.get('conta_id', '')}: {str(e)[:60]}", "#D9534F")
+                resultados["falha"] += 1
+            if "update_progress" in self.callbacks:
+                self.callbacks["update_progress"]((idx + 1) / len(contas))
+
+        resumo = (f"Importadas: {resultados['importado']} | Já existentes: {resultados['duplicado']} | "
+                  f"Sem ofertas: {resultados['vazio']} | Falhas: {resultados['falha']}")
+        cor = "#D9534F" if resultados["falha"] else "#3C763D"
+        self.update_status(f"Importação de ofertas concluída. {resumo}", cor)
+        self.show_message("warning" if resultados["falha"] else "info", "Importação de Ofertas", resumo)
 
     def fluxo_automacao(self):
         """
@@ -133,6 +180,11 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
                         time.sleep(1)
                     return
                 
+                if self.tipo_lote == "ofertas":
+                    self._fluxo_ofertas(page)
+                    self._aguardar_fechamento(context)
+                    return
+
                 localidade_anterior = None
                 competencia_anterior = None
                 
@@ -163,50 +215,8 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
                     
                     # Só troca de localidade e competência se for diferente do extrato anterior
                     if localidade_atual != localidade_anterior or mes_ano_alvo != competencia_anterior:
-                        self.update_status("Ajustando configurações de Localidade e Mês de Trabalho...", "#428BCA")
-                        
-                        page.locator('#a_competencia').click()
-                        time.sleep(1)
-                        
-                        page.locator('a.showModal:has-text("Outros Meses")').click()
-                        
-                        btn_confirmar = page.locator('form.modal-form button[type="submit"]:has-text("Confirmar")').first
-                        btn_confirmar.wait_for(state="attached", timeout=15000)
-                        time.sleep(1.5)
-                        
-                        js_select2 = f'''() => {{
-                            var selectLoc = jQuery('select[name="f_estabelecimento"]');
-                            if (selectLoc.length > 0) {{
-                                var optLoc = selectLoc.find('option').filter(function() {{
-                                    var text = jQuery(this).text().toUpperCase();
-                                    return text.indexOf("{self.tipo_alvo}") > -1 && text.indexOf("{self.nome_alvo}") > -1;
-                                }});
-                                if (optLoc.length > 0) {{
-                                    selectLoc.val(optLoc.val()).trigger('change');
-                                }}
-                            }}
-                            
-                            if ("{mes_ano_alvo}" !== "") {{
-                                var selectMes = jQuery('select[name="f_competencia"]');
-                                if (selectMes.length > 0) {{
-                                    var optMes = selectMes.find('option:contains("{mes_ano_alvo}")');
-                                    if (optMes.length > 0) {{
-                                        selectMes.val(optMes.val()).trigger('change');
-                                    }}
-                                }}
-                            }}
-                            
-                            jQuery('#f-mudarpadrao').prop('checked', true);
-                        }}'''
-                        
-                        page.evaluate(js_select2)
-                        time.sleep(1.5)
-                        
-                        btn_confirmar.evaluate("el => el.click()")
-                        
-                        page.wait_for_load_state("domcontentloaded")
-                        time.sleep(3)
-                        
+                        self._ajustar_localidade_competencia(page, self.tipo_alvo, self.nome_alvo, mes_ano_alvo)
+
                         localidade_anterior = localidade_atual
                         competencia_anterior = mes_ano_alvo
                         

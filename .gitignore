@@ -19,3 +19,6 @@ credentials.json
 token.json
 faturas_energisa/
 faturas_temporarias/
+
+# Estado da tarefa em andamento entre Claude Code e Antigravity
+.agents/handoff.md

@@ -1,10 +1,41 @@
-# Diretrizes de Desenvolvimento Local - AutoSIGA
+# AutoSIGA — regras do projeto
 
-Este arquivo define as regras locais específicas para o projeto AutoSIGA.
+Fonte única de instruções para qualquer IA (Antigravity lê direto; o `CLAUDE.md` da raiz só importa este arquivo). Mantenha-o curto: detalhe longo vai para `docs/` e é lido sob demanda.
 
----
+RPA desktop para Windows (CustomTkinter + Playwright/Edge) que concilia extratos bancários (`.ofx`, `.xls` Sicredi) e faturas de energia (PDF via Gmail ou pasta local) com o sistema web SIGA, lançando o que falta.
 
-## 1. Controle de Versão e Exibição de Versão
-* **Centralização da Versão**: O número de versão da aplicação deve ser definido única e exclusivamente no arquivo `version.py` através da variável `VERSION`.
-* **Proibição de Hardcoding**: É terminantemente proibido declarar a string de versão de forma manual (hardcoded) em qualquer componente da interface de usuário, modais, logs ou metadados de empacotamento. Todos os arquivos devem importar e utilizar `VERSION` de `version.py`.
-* **Sincronização ao Atualizar**: Sempre que a versão em `version.py` for atualizada, certifique-se de que a documentação como o `README.md` também seja atualizada em sua seção de destaques para refletir o novo ciclo de lançamento.
+## Comandos
+
+```powershell
+venv\Scripts\pip install -r requirements.txt
+venv\Scripts\python main.py                                    # roda o app
+venv\Scripts\python -m pytest -q tests/                        # suíte completa (mesma do CI)
+venv\Scripts\python -m pytest -q tests/test_conciliador.py::nome_do_teste   # teste único
+pyinstaller --noconfirm AutoSIGA.spec                          # build onedir em dist/AutoSiga/
+```
+
+CI (`.github/workflows/ci_cd.yml`, Windows, Python 3.11): pytest em push/PR para `master`; tag `v*` gera o build e publica `AutoSiga_Windows.zip` (pasta inteira, com `_internal`) na Release.
+
+## Arquitetura (MVC adaptado — detalhes em `docs/arquitetura.md`)
+
+- `main.py`: ajusta `sys.path`, fixa o backend do `keyring` no Windows Credential Manager, carrega `.env` legado, configura log diário em `logs/` e abre `ui.main_window.MainWindow`.
+- `models/`: só I/O, sem UI. `config_manager.py` é a persistência central em `config.json` (mapeamentos conta→SIGA, localidades, UCs, geometria da janela), com gravação atômica e backup de arquivo corrompido. `faturas_pendentes.py` guarda faturas de UC não mapeada no mesmo `config.json`. Leitores: `ofx_reader`, `xls_reader`, `pdf_extractor` (pypdf + regex), `email_reader` (API do Gmail via `credentials.json`/`token.json`).
+- `controllers/`: regras de negócio puras e testáveis — `conciliador` (OFX × grade do SIGA, tolerância de 1 centavo), `exportador` (TXT de ofertas com blacklist de palavras-chave, Excel do lote), `fatura_energia_controller` (baixa/extrai/organiza faturas em `faturas_energisa/`), `anexo_fatura` (nome do PDF anexado no SIGA).
+- `bot/siga_bot.py`: `SigaBot.fluxo_automacao()` roda numa thread separada (disparada em `ui/main_window.py`) com `launch_persistent_context(channel="msedge")` em `siga_browser_data/`. Ramifica por `tipo_lote` (`"extrato"` ou `"energia"`) e navega pelas rotinas do SIGA preenchendo `#f_executar_programa` (TES01701/01703/01704 extratos e rendimentos; TES01502 lançamento e TES01501 consulta/auditoria de faturas). Select2 tem helper com retries (`selecionar_select2`). Falhas geram screenshot em `logs/screenshots/`.
+- Bot ↔ UI só por dicionário de **callbacks** (`update_status`, `show_message`, `update_progress`, `show_dashboard`, `on_finish`). Na UI, todo callback vindo da thread do bot passa por `self.after(0, ...)`; nunca tocar widgets direto da thread do bot.
+- `ui/`: `main_window.py` (aba de extratos e orquestração), `panel_energia.py` + `modais_energia.py` (aba Energia).
+
+## Convenções
+
+- **Versão**: definida só em `version.py` (`VERSION`); nunca hardcoded em UI, modais, logs ou spec. Ao subir a versão: nova seção no topo de `docs/CHANGELOG.md`, e no `README.md` trocar o título e a seção "Destaques da Versão" (o README mostra só a versão atual).
+- **Caminhos de dados**: usar `caminhos.diretorio_base()` para tudo que o usuário mantém entre versões (`config.json`, `.env`, `credentials.json`, `token.json`, `logs/`, `faturas_energisa/`). No executável aponta para a pasta do `AutoSiga.exe`, não para `_internal` (substituída a cada atualização); calcular a partir de `__file__` quebra isso.
+- **Credenciais do SIGA**: Windows Keyring (serviço `"AutoSIGA"`) com fallback para `SIGA_USUARIO`/`SIGA_SENHA` do `.env`.
+- `bot/siga_bot.py` e `ui/main_window.py` já passam do teto de 500 linhas: não leia esses arquivos inteiros (localize com busca e leia só a região) e, ao adicionar funcionalidade, extraia para módulos novos em vez de crescê-los.
+- Testes em `tests/` (fixtures em `tests/fixtures/`), sem `conftest.py`; o bot é testado com páginas falsas (classes que imitam `page`), sem navegador. `*.ofx` está no `.gitignore`: fixture nova de OFX precisa de `git add -f`.
+
+## Handoff entre ferramentas (Claude Code ↔ Antigravity)
+
+O estado da tarefa em andamento fica em `.agents/handoff.md` (fora do git).
+- Usuário diz **"handoff"** (ou os tokens estão acabando): reescreva o arquivo, curto, com: tarefa e objetivo, o que já foi feito, decisões tomadas, arquivos alterados, como verificar e próximo passo exato. Substitua o conteúdo anterior, não acumule histórico.
+- Usuário diz **"continuar"**: leia `.agents/handoff.md` antes de qualquer outra coisa e retome do próximo passo, sem reexplorar o que já está registrado.
+- Concluída a tarefa (commit feito), esvazie o arquivo.

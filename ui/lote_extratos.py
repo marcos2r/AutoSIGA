@@ -2,12 +2,13 @@
 Aba de extratos: seleção e leitura de arquivos, validação do lote e TXT de ofertas.
 """
 
-from tkinter import filedialog, messagebox
-import os
 import logging
+import os
+from tkinter import filedialog, messagebox
+
+from controllers.exportador import Exportador
 from models.ofx_reader import OfxReader
 from models.xls_reader import XlsReader
-from controllers.exportador import Exportador
 from ui.card_conta_extrato import CardContaExtrato
 
 
@@ -33,12 +34,12 @@ class LoteExtratosMixin:
         """Processa uma lista de caminhos de arquivos e atualiza a UI com o lote de cards."""
         self.dados_processados_lote = []
         erros = []
-        
+
         # Remove os cards anteriores da interface
         for card in self.cards_lote:
             card.destroy()
         self.cards_lote = []
-        
+
         assinaturas_lote = set()
         arquivos_descartados = []
 
@@ -49,7 +50,7 @@ class LoteExtratosMixin:
                     dados = XlsReader.parse_file(caminho)
                 else:
                     dados = OfxReader.parse_file(caminho)
-                
+
                 # Assinatura única baseada em conta_id, datas e tipo do extrato
                 chave_duplicado = (
                     str(dados.get("conta_id", "")).strip(),
@@ -58,11 +59,11 @@ class LoteExtratosMixin:
                     str(dados.get("tipo_extrato", "")).strip(),
                     str(dados.get("produto", "")).strip()
                 )
-                
+
                 if chave_duplicado in assinaturas_lote:
                     arquivos_descartados.append(os.path.basename(caminho))
                     continue
-                    
+
                 assinaturas_lote.add(chave_duplicado)
                 dados["caminho_arquivo"] = caminho
                 self.dados_processados_lote.append(dados)
@@ -70,18 +71,18 @@ class LoteExtratosMixin:
                 nome_arq = os.path.basename(caminho)
                 erros.append(f"{nome_arq}: {e}")
                 logging.error(f"Erro ao processar arquivo {nome_arq}: {e}")
-                
+
         if arquivos_descartados:
             msg_desc = f"Detectados {len(arquivos_descartados)} arquivo(s) duplicados no lote. Eles foram ignorados para evitar conciliação duplicada:\n\n" + "\n".join(arquivos_descartados)
             messagebox.showinfo("Arquivos Duplicados Ignorados", msg_desc)
-                
+
         if erros:
             msg_erro = "Alguns arquivos não puderam ser lidos:\n\n" + "\n".join(erros)
             messagebox.showwarning("Erro de Leitura Parcial", msg_erro)
-            
+
         if self.dados_processados_lote:
             self.lbl_no_data.pack_forget()
-            
+
             # Instancia os novos cards roláveis para cada conta
             for dados in self.dados_processados_lote:
                 card = CardContaExtrato(
@@ -89,7 +90,7 @@ class LoteExtratosMixin:
                 )
                 card.pack(fill="x", padx=5, pady=5)
                 self.cards_lote.append(card)
-                
+
             qtd = len(self.dados_processados_lote)
             nomes_arquivos = [os.path.basename(d["caminho_arquivo"]) for d in self.dados_processados_lote]
             if len(nomes_arquivos) > 3:
@@ -97,7 +98,7 @@ class LoteExtratosMixin:
             else:
                 texto_arquivos = f"{qtd} arquivo(s) selecionado(s):\n" + ", ".join(nomes_arquivos)
             self.label_arquivo.configure(text=texto_arquivos, text_color="#3C763D")
-            
+
             self.validar_lote_e_atualizar_botoes()
         else:
             self.lbl_no_data.pack(pady=40)
@@ -132,21 +133,21 @@ class LoteExtratosMixin:
             self.botao_gerar_txt.configure(state="disabled")
             self.botao_importar_ofertas.configure(state="disabled")
             return
-            
+
         todos_validos = True
         for card in self.cards_lote:
             info = card.obter_dados_mapeados()
             if not info["valido"]:
                 todos_validos = False
                 break
-                
+
         if todos_validos:
             self.botao_conectar.configure(state="normal")
             self.atualizar_status("Todos os extratos estão configurados. Pronto para conciliar!", "#3C763D")
         else:
             self.botao_conectar.configure(state="disabled")
             self.atualizar_status("Preencha as configurações pendentes nos cards acima.", "#F89406")
-            
+
         tem_conta_corrente = any(not card.is_aplicacao for card in self.cards_lote)
         if tem_conta_corrente:
             self.botao_gerar_txt.configure(state="normal")

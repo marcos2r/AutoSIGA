@@ -2,9 +2,10 @@
 Lançamento de faturas de energia no SIGA (TES01502).
 """
 
+import logging
 import os
 import time
-import logging
+
 from caminhos import diretorio_base
 from controllers.anexo_fatura import CONTA_DESPESA_ENERGIA, preparar_anexo
 
@@ -54,7 +55,7 @@ class EnergiaMixin:
                 if emissao and len(emissao.split('/')) == 3:
                     partes = emissao.split('/')
                     competencia_fatura = f"{partes[1]}/{partes[2]}"
-                    
+
                 if competencia_fatura and competencia_fatura in competencias_fechadas:
                     self.update_status(f"⚠️ Competência {competencia_fatura} já mapeada como fechada. Pulando fatura {numero_fatura}...", "#D9534F")
                     time.sleep(1)
@@ -87,7 +88,7 @@ class EnergiaMixin:
                     try:
                         page.evaluate(f'''() => {{
                             let dataEm = "{emissao}";
-                            
+
                             // Data Lançamento e Data Documento idênticas (mesmo mês de competência agora ajustado)
                             let inpLan = document.getElementById("f_lancamento");
                             if (inpLan) {{
@@ -97,7 +98,7 @@ class EnergiaMixin:
                                     window.jQuery(inpLan).trigger('change');
                                 }}
                             }}
-                            
+
                             // Data Documento
                             let inpEm = document.getElementById("f_emissao");
                             if (inpEm) {{
@@ -107,21 +108,21 @@ class EnergiaMixin:
                                     window.jQuery(inpEm).trigger('change');
                                 }}
                             }}
-                            
+
                             if (window.jQuery) {{
                                 window.jQuery('.datepicker').hide();
                             }}
                         }}''')
                     except Exception as e_datas:
                         logging.warning(f"Erro ao preencher datas de lançamento/emissão: {e_datas}")
-                    
+
                     time.sleep(1.5) # Aguarda o AJAX de validação de data do SIGA responder
-                    
+
                     mes_fechado = page.evaluate('''() => {
                         let hasError = false;
                         let modals = document.querySelectorAll('.bootbox.modal');
                         modals.forEach(m => {
-                            if (m.innerText.includes('Fechamento de competência já realizado') || 
+                            if (m.innerText.includes('Fechamento de competência já realizado') ||
                                 m.innerText.includes('fora da Competência') ||
                                 m.innerText.includes('Fechamento mensal')) {
                                 hasError = true;
@@ -130,13 +131,13 @@ class EnergiaMixin:
                             if (closeBtn) closeBtn.click();
                             else m.remove();
                         });
-                        
+
                         let backdrop = document.querySelector('.modal-backdrop');
                         if (backdrop) backdrop.remove();
-                        
+
                         return hasError;
                     }''')
-                    
+
                     if mes_fechado:
                         competencias_fechadas.add(competencia_fatura)
                         self.update_status(f"⚠️ Competência {competencia_fatura} fechada ou data inválida. Pulando fatura {numero_fatura}...", "#D9534F")
@@ -156,7 +157,6 @@ class EnergiaMixin:
                         time.sleep(0.5)
 
                 # 4. Valor
-                valor_str = f"{valor:.2f}".replace('.', ',')
                 input_valor = page.locator('#f_valor')
                 if input_valor.count() > 0:
                     try:
@@ -176,7 +176,7 @@ class EnergiaMixin:
                             let hasError = false;
                             let modals = document.querySelectorAll('.bootbox.modal');
                             modals.forEach(m => {
-                                if (m.innerText.includes('Fechamento de competência já realizado') || 
+                                if (m.innerText.includes('Fechamento de competência já realizado') ||
                                     m.innerText.includes('fora da Competência') ||
                                     m.innerText.includes('Fechamento mensal')) {
                                     hasError = true;
@@ -313,7 +313,7 @@ class EnergiaMixin:
                         let hasError = false;
                         let modals = document.querySelectorAll('.bootbox.modal');
                         modals.forEach(m => {
-                            if (m.innerText.includes('Fechamento de competência já realizado') || 
+                            if (m.innerText.includes('Fechamento de competência já realizado') ||
                                 m.innerText.includes('fora da Competência') ||
                                 m.innerText.includes('Fechamento mensal')) {
                                 hasError = true;
@@ -350,7 +350,7 @@ class EnergiaMixin:
                     btn_sucesso.evaluate("el => el.click()")
                 except Exception:
                     pass
-                
+
                 # Marca como processada
                 config_mgr.marcar_fatura_processada(fat.get("numero_fatura", ""))
                 faturas_sucesso.append(fat)
@@ -395,7 +395,7 @@ class EnergiaMixin:
             else:
                 self._qtd_injecoes_efetuadas = qtd_injetada
                 self.faturas_energia_sucesso = []
-                self.update_status(f"✅ Finalizado! 0 faturas de energia importadas no SIGA.", "#3C763D")
+                self.update_status("✅ Finalizado! 0 faturas de energia importadas no SIGA.", "#3C763D")
 
         except Exception as e:
             logging.error(f"Erro ao inserir faturas de energia: {e}", exc_info=True)

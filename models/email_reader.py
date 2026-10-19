@@ -5,16 +5,16 @@ Responsável por conectar ao Gmail usando autenticação OAuth2 (token.json e cr
 buscar mensagens contendo faturas da Energisa, baixar os anexos PDFs e marcá-los como lidos.
 """
 
-import os
-import logging
 import base64
-
-from caminhos import diretorio_base
+import logging
+import os
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+
+from caminhos import diretorio_base
 
 # Definimos o escopo necessário para ler e marcar mensagens como lidas
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
@@ -37,7 +37,7 @@ class EmailReader:
 
         if os.path.exists(token_path):
             creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-        
+
         # Se as credenciais não forem válidas, faz login no navegador
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
@@ -46,7 +46,7 @@ class EmailReader:
                 except Exception as e:
                     logging.warning(f"Não foi possível fazer refresh no token: {e}. Solicitando novo login...")
                     creds = None
-            
+
             if not creds:
                 if not os.path.exists(credentials_path):
                     raise FileNotFoundError(
@@ -55,7 +55,7 @@ class EmailReader:
                     )
                 flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
                 creds = flow.run_local_server(port=0)
-            
+
             # Salva o token gerado para a próxima execução
             with open(token_path, "w") as token:
                 token.write(creds.to_json())
@@ -63,7 +63,7 @@ class EmailReader:
         return creds
 
     @staticmethod
-    def baixar_faturas_email(servidor: str, email_user: str, senha_keyring: str, pasta_destino: str, mes_corte: str = "") -> list:
+    def baixar_faturas_email(servidor: str, email_user: str, senha_keyring: str | None, pasta_destino: str, mes_corte: str = "") -> list:
         """
         Conecta ao Gmail via API oficial e baixa os PDFs da Energisa que possuem anexo.
 
@@ -109,10 +109,10 @@ class EmailReader:
             for msg_summary in messages:
                 msg_id = msg_summary['id']
                 message = service.users().messages().get(userId='me', id=msg_id).execute()
-                
+
                 payload = message.get('payload', {})
                 parts = [payload]
-                
+
                 # Coleta todas as subpartes de e-mails multipart
                 parts_to_scan = payload.get('parts', [])
                 while parts_to_scan:
@@ -127,22 +127,22 @@ class EmailReader:
                     if filename and filename.lower().endswith('.pdf'):
                         body = part.get('body', {})
                         attachment_id = body.get('attachmentId', '')
-                        
+
                         if attachment_id:
                             # Faz o download do anexo binário bruto
                             attachment = service.users().messages().attachments().get(
                                 userId='me', messageId=msg_id, id=attachment_id
                             ).execute()
-                            
+
                             file_data = base64.urlsafe_b64decode(attachment.get('data', '').encode('UTF-8'))
-                            
+
                             caminho_salvamento = os.path.join(
-                                pasta_destino, 
+                                pasta_destino,
                                 f"temp_energisa_{msg_id}_{filename}"
                             )
                             with open(caminho_salvamento, "wb") as f:
                                 f.write(file_data)
-                            
+
                             caminhos_baixados.append(caminho_salvamento)
                             logging.info(f"Gmail API: Anexo salvo localmente em: {caminho_salvamento}")
                             anexo_baixado = True

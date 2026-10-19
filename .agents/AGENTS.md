@@ -11,10 +11,15 @@ venv\Scripts\pip install -r requirements.txt
 venv\Scripts\python main.py                                    # roda o app
 venv\Scripts\python -m pytest -q tests/                        # suíte completa (mesma do CI)
 venv\Scripts\python -m pytest -q tests/test_conciliador.py::nome_do_teste   # teste único
+venv\Scripts
+uff check .                                     # lint (--fix corrige o seguro)
+venv\Scripts\mypy                                             # tipos (arquivos em pyproject.toml)
 pyinstaller --noconfirm AutoSIGA.spec                          # build onedir em dist/AutoSiga/
 ```
 
-CI (`.github/workflows/ci_cd.yml`, Windows, Python 3.11): pytest em push/PR para `master`; tag `v*` gera o build e publica `AutoSiga_Windows.zip` (pasta inteira, com `_internal`) na Release.
+A `venv` usa **Python 3.11**, igual ao CI e ao build (`uv python install 3.11`). Configuração de pytest, ruff e mypy no `pyproject.toml`; o mypy ainda é gradual (só funções anotadas).
+
+CI (`.github/workflows/ci_cd.yml`, Windows, Python 3.11): ruff, mypy e pytest em push/PR para `master`; tag `v*` gera o build e publica `AutoSiga_Windows.zip` (pasta inteira, com `_internal`) na Release.
 
 ## Arquitetura (MVC adaptado — detalhes em `docs/arquitetura.md`)
 

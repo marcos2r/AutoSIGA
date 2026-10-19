@@ -2,12 +2,13 @@
 Disparo do SigaBot em thread separada (extratos e energia) com callbacks via self.after(0, ...).
 """
 
-from tkinter import messagebox
+import logging
 import threading
 import time
-import logging
-from models.faturas_pendentes import FaturasPendentes
+from tkinter import messagebox
+
 from bot.siga_bot import SigaBot
+from models.faturas_pendentes import FaturasPendentes
 from ui.modais_energia import ModalPerguntaMapeamentoUC
 
 
@@ -26,17 +27,17 @@ class AcoesSigaMixin:
 
         # Bloqueia reentrância
         self.botao_conectar.configure(state="disabled")
-        
+
         # Destrói navegador órfão antes de abrir um novo
         if getattr(self, 'bot_instance', None) and getattr(self.bot_instance, 'browser_aberto', False):
             self.atualizar_status("Encerrando janela antiga do SIGA...", "#F89406")
             self.bot_instance.fechar_browser()
             self.update()
             time.sleep(2)
-            
+
         self.atualizar_status("Iniciando lote de automação no SIGA...", "#F89406")
         self.progress_bar.set(0.0)
-        
+
         callbacks = {
             "update_status": self.atualizar_status,
             "update_progress": lambda val: self.after(0, lambda: self.progress_bar.set(val)),
@@ -67,7 +68,7 @@ class AcoesSigaMixin:
         # Coleta os filtros manuais de datas (opcionais)
         data_ini_raw = self.entry_data_inicio.get().strip()
         data_fim_raw = self.entry_data_fim.get().strip()
-        
+
         def formatar_para_data(str_d):
             import datetime
             if not str_d:
@@ -81,7 +82,7 @@ class AcoesSigaMixin:
 
         d_ini = formatar_para_data(data_ini_raw)
         d_fim = formatar_para_data(data_fim_raw)
-        
+
         # Alerta se o formato de data estiver incorreto
         if (data_ini_raw and not d_ini) or (data_fim_raw and not d_fim):
             messagebox.showwarning("Aviso de Formato", "As datas inseridas no filtro manual são inválidas. Use o formato DD/MM/AAAA.")
@@ -93,9 +94,9 @@ class AcoesSigaMixin:
             if not info["valido"]:
                 messagebox.showwarning("Atenção", f"O extrato da conta {card.conta_id} possui mapeamento incompleto!")
                 return None
-                
+
             dados_exec = card.dados_extrato.copy()
-            
+
             # Aplica o filtro manual de datas sobre a lista de transações se os campos forem preenchidos
             if d_ini or d_fim:
                 transacoes_filtradas = []
@@ -116,11 +117,11 @@ class AcoesSigaMixin:
             dados_exec["tipo_adm"] = info["tipo_adm"]
             dados_exec["nome_adm"] = info["nome_adm"]
             dados_exec["localidade_selecionada"] = f"{info['tipo_adm']} - {info['nome_adm']}"
-            
+
             # Só adiciona extrato se houver transações remanescentes após o filtro
             if dados_exec.get("transacoes"):
                 lote_valido.append(dados_exec)
-                
+
         if not lote_valido:
             messagebox.showinfo("Lote Vazio", "Nenhum lançamento restante no lote após aplicar os filtros de datas informados.")
             return None
@@ -195,9 +196,9 @@ class AcoesSigaMixin:
                             resposta_codigo = [None]
                             thread_blocked = threading.Event()
 
-                            def cb_resposta(codigo_escolhido):
-                                resposta_codigo[0] = codigo_escolhido
-                                thread_blocked.set()
+                            def cb_resposta(codigo_escolhido, resposta=resposta_codigo, evento=thread_blocked):
+                                resposta[0] = codigo_escolhido
+                                evento.set()
 
                             # Abre o popup na main thread e espera a resposta do usuário
                             caminho_pdf = fat.get("caminho_arquivo", "")
@@ -228,13 +229,15 @@ class AcoesSigaMixin:
                 self.after(0, lambda: self.progress_bar.stop())
                 self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
                 self.after(0, lambda: self.panel_energia.btn_importar.configure(state="normal"))
-                self.after(0, lambda: messagebox.showerror("Erro", f"Ocorreu um erro ao buscar faturas: {e_thread}", parent=self))
+                # O nome da exceção some ao fim do except: a mensagem precisa ser capturada antes
+                msg_erro = f"Ocorreu um erro ao buscar faturas: {e_thread}"
+                self.after(0, lambda: messagebox.showerror("Erro", msg_erro, parent=self))
                 return
 
             self.after(0, lambda: self.progress_bar.stop())
             self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
             self.atualizar_status(f"Preparando importação de {len(lote_valido)} faturas no SIGA...", "#428BCA")
-            
+
             # Formata telemetria e inicia o SigaBot no modo energia
             callbacks = {
                 "update_status": self.atualizar_status,

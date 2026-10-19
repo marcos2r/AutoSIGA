@@ -5,17 +5,17 @@ Responsável por fazer o download do e-mail, extrair os dados e aplicar os filtr
 de negócio (Data de corte, UCs duplicadas, relacionamento de UC -> Localidade).
 """
 
+import logging
 import os
 import shutil
-import logging
 from datetime import datetime
-import keyring
 
 from caminhos import diretorio_base
 from models.config_manager import ConfigManager
 from models.email_reader import EmailReader
 from models.faturas_pendentes import FaturasPendentes
 from models.pdf_extractor import PdfExtractor
+
 
 class FaturaEnergiaController:
     """
@@ -40,11 +40,11 @@ class FaturaEnergiaController:
 
         config_mgr = ConfigManager()
         email_cfg = config_mgr.get_email_config()
-        
+
         email_user = email_cfg.get("email", "")
         servidor = email_cfg.get("servidor", "imap.gmail.com")
         mes_corte = email_cfg.get("mes_corte", "")
-        
+
         # Define pastas de trabalho
         base_dir = diretorio_base()
         pasta_temp = os.path.join(base_dir, "faturas_temporarias")

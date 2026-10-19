@@ -1,23 +1,24 @@
 """
 Módulo de Gerenciamento de Configurações (Model).
 
-Este módulo é responsável por isolar toda a lógica de persistência e 
-recuperação de dados locais da aplicação (I/O). Ele lida com o arquivo 
-'config.json', armazenando preferências do usuário como localidade 
+Este módulo é responsável por isolar toda a lógica de persistência e
+recuperação de dados locais da aplicação (I/O). Ele lida com o arquivo
+'config.json', armazenando preferências do usuário como localidade
 e mapeamentos de contas bancárias.
 """
 
-import os
 import json
 import logging
+import os
 from datetime import datetime
 
 from caminhos import diretorio_base
 
+
 class ConfigManager:
     """
     Gerencia a leitura e escrita do arquivo de configurações JSON.
-    
+
     A classe encapsula as operações de I/O para evitar acesso direto ao disco
     pelos controllers ou interfaces, seguindo o padrão MVC.
     """
@@ -28,22 +29,22 @@ class ConfigManager:
         """
         if config_path is None:
             config_path = os.path.join(diretorio_base(), "config.json")
-            
+
         self.config_path = config_path
 
     def get_config_data(self):
         """
         Lê e retorna as configurações armazenadas no arquivo JSON local.
-        
+
         Se não existir, retorna vazio. Se estiver ilegível, é preservado como backup
         antes de retornar vazio, para a próxima gravação não apagar os mapeamentos.
-        
+
         Returns:
             dict: Dicionário contendo as configurações estruturadas.
         """
         if os.path.exists(self.config_path):
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
+                with open(self.config_path, encoding='utf-8') as f:
                     config = json.load(f)
                 if "contas_mapeadas" in config:
                     config = self._migrar_formato_antigo(config)
@@ -68,20 +69,20 @@ class ConfigManager:
         """
         contas_mapeadas = config.pop("contas_mapeadas", {})
         mapeamentos_novos = []
-        
+
         def norm(c_id):
             return "".join(c for c in str(c_id) if c.isdigit()).lstrip("0")
-            
+
         for key, value in contas_mapeadas.items():
             if not value or not (value.get("corrente", "").strip() or value.get("aplicacao", "").strip()):
                 continue
-                
+
             tipo_adm = None
             for t in ["ADM", "DR", "PIA"]:
                 if key.startswith(f"{t}-"):
                     tipo_adm = t
                     break
-            
+
             if tipo_adm:
                 resto = key[len(tipo_adm) + 1:]
                 if '#' in resto:
@@ -90,7 +91,7 @@ class ConfigManager:
                 else:
                     conta_raw = resto
                     produto = None
-                
+
                 partes = conta_raw.split('-')
                 if len(partes) >= 2:
                     idx_conta = len(partes) - 1
@@ -98,7 +99,7 @@ class ConfigManager:
                         if partes[idx_conta - 1].isalpha():
                             break
                         idx_conta -= 1
-                    
+
                     conta_id = "-".join(partes[idx_conta:])
                     nome_adm = "-".join(partes[:idx_conta]).strip().upper()
                 else:
@@ -113,7 +114,7 @@ class ConfigManager:
                 else:
                     conta_id = key
                     produto = None
-            
+
             mapeamentos_novos.append({
                 "conta_id": conta_id,
                 "produto": produto,
@@ -122,7 +123,7 @@ class ConfigManager:
                 "corrente": value.get("corrente", ""),
                 "aplicacao": value.get("aplicacao", "")
             })
-            
+
         # Agrupa duplicados
         mapeamentos_unicos = {}
         for m in mapeamentos_novos:
@@ -140,7 +141,7 @@ class ConfigManager:
                     existente["aplicacao"] = m["aplicacao"]
             else:
                 mapeamentos_unicos[chave_unica] = m
-                
+
         config["mapeamentos"] = list(mapeamentos_unicos.values())
         self.save_config_data(config)
         return config
@@ -148,7 +149,7 @@ class ConfigManager:
     def save_config_data(self, data):
         """
         Salva um dicionário contendo as configurações da aplicação no disco.
-        
+
         Args:
             data (dict): Os dados que devem ser persistidos no JSON.
         """
@@ -167,7 +168,7 @@ class ConfigManager:
     def get_geral(self):
         """
         Retorna as preferências gerais salvas pelo usuário.
-        
+
         Returns:
             tuple: Uma tupla (str, str) contendo (tipo_adm, nome_adm).
                    Exemplo: ("ADM", "SÃO PAULO")
@@ -178,7 +179,7 @@ class ConfigManager:
     def salvar_geral(self, tipo_adm, nome_adm):
         """
         Salva a preferência de administração atual no disco.
-        
+
         Args:
             tipo_adm (str): O tipo de administração (ex: ADM, DR, PIA).
             nome_adm (str): O nome da administração (ex: SÃO PAULO).
@@ -191,23 +192,23 @@ class ConfigManager:
     def get_mapeamento_conta(self, conta_id, tipo_adm, nome_adm, produto=None):
         """
         Busca as contas SIGA vinculadas a uma conta bancária (OFX ou XLS).
-        
+
         Args:
             conta_id (str): Número da conta bancária.
             tipo_adm (str): Tipo da administração corrente.
             nome_adm (str): Nome da administração corrente.
             produto (str): Opcional. Nome do produto de investimento.
-            
+
         Returns:
             tuple: (tipo_adm, nome_adm, dados_contas) onde 'dados_contas' é um dict.
         """
         config = self.get_config_data()
         mapeamentos = config.get("mapeamentos", [])
-        
+
         tipo_alvo = tipo_adm.strip().upper()
         nome_alvo = nome_adm.strip().upper()
         prod_alvo = produto.strip().upper() if produto else None
-        
+
         # 1. Match exato
         for m in mapeamentos:
             if (m.get("conta_id", "").strip() == conta_id and
@@ -215,40 +216,40 @@ class ConfigManager:
                 m.get("tipo_adm", "").strip().upper() == tipo_alvo and
                 m.get("nome_adm", "").strip().upper() == nome_alvo):
                 return tipo_alvo, nome_alvo, m
-                
+
         # 2. Busca reversa (match de conta e produto em qualquer localidade)
         def norm(c_id):
             return "".join(c for c in str(c_id) if c.isdigit()).lstrip("0")
-            
+
         conta_id_norm = norm(conta_id)
         match_favorito = None
-        
+
         for m in mapeamentos:
             m_conta = m.get("conta_id", "").strip()
             m_prod = m.get("produto")
             m_tipo = m.get("tipo_adm", "").strip().upper()
             m_nome = m.get("nome_adm", "").strip().upper()
-            
+
             if norm(m_conta) == conta_id_norm:
                 if prod_alvo and m_prod != prod_alvo:
                     continue
-                    
+
                 if m_tipo == tipo_alvo and m_nome == nome_alvo:
                     match_favorito = m
                     break
                 elif not match_favorito:
                     match_favorito = m
-                    
+
         if match_favorito:
             return match_favorito.get("tipo_adm"), match_favorito.get("nome_adm"), match_favorito
-            
+
         # 3. Fallback geral de conta e produto
         for m in mapeamentos:
             m_conta = m.get("conta_id", "").strip()
             m_prod = m.get("produto")
             if norm(m_conta) == conta_id_norm and (not prod_alvo or m_prod == prod_alvo):
                 return tipo_alvo, nome_alvo, m
-                
+
         return tipo_alvo, nome_alvo, {"corrente": "", "aplicacao": ""}
 
     def salvar_mapeamento_conta(self, conta_id, tipo_adm, nome_adm, corrente, aplicacao, produto=None):
@@ -258,11 +259,11 @@ class ConfigManager:
         config = self.get_config_data()
         if "mapeamentos" not in config:
             config["mapeamentos"] = []
-            
+
         tipo_clean = tipo_adm.strip().upper()
         nome_clean = nome_adm.strip().upper()
         prod_alvo = produto.strip().upper() if produto else None
-        
+
         match_existente = None
         for m in config["mapeamentos"]:
             if (m.get("conta_id", "").strip() == conta_id and
@@ -271,7 +272,7 @@ class ConfigManager:
                 m.get("nome_adm", "").strip().upper() == nome_clean):
                 match_existente = m
                 break
-                
+
         if match_existente:
             match_existente["corrente"] = corrente if corrente.strip() else match_existente.get("corrente", "")
             match_existente["aplicacao"] = aplicacao if aplicacao.strip() else match_existente.get("aplicacao", "")
@@ -284,7 +285,7 @@ class ConfigManager:
                 "corrente": corrente,
                 "aplicacao": aplicacao
             })
-            
+
         self.save_config_data(config)
 
     def limpar_conta(self, conta_id, tipo_adm, nome_adm, produto=None):
@@ -293,11 +294,11 @@ class ConfigManager:
         """
         config = self.get_config_data()
         mapeamentos = config.get("mapeamentos", [])
-        
+
         tipo_clean = tipo_adm.strip().upper()
         nome_clean = nome_adm.strip().upper()
         prod_alvo = produto.strip().upper() if produto else None
-        
+
         novos_mapeamentos = []
         removido = False
         for m in mapeamentos:
@@ -308,7 +309,7 @@ class ConfigManager:
                 removido = True
                 continue
             novos_mapeamentos.append(m)
-            
+
         if removido:
             config["mapeamentos"] = novos_mapeamentos
             self.save_config_data(config)
@@ -349,7 +350,7 @@ class ConfigManager:
     def get_email_config(self):
         """
         Retorna as configurações de e-mail e corte.
-        
+
         Returns:
             dict: {email, servidor, mes_corte}
         """
@@ -373,7 +374,7 @@ class ConfigManager:
     def get_localidades_energia(self):
         """
         Retorna a lista de localidades cadastradas para energia.
-        
+
         Returns:
             list: Lista de dicts [{"codigo": "...", "nome": "..."}]
         """
@@ -386,10 +387,10 @@ class ConfigManager:
         """
         config = self.get_config_data()
         localidades = config.get("localidades_energia", [])
-        
+
         codigo_clean = str(codigo).strip().upper()
         nome_clean = str(nome).strip().upper()
-        
+
         # Procura se já existe para atualizar
         atualizado = False
         for loc in localidades:
@@ -397,13 +398,13 @@ class ConfigManager:
                 loc["nome"] = nome_clean
                 atualizado = True
                 break
-                
+
         if not atualizado:
             localidades.append({
                 "codigo": codigo_clean,
                 "nome": nome_clean
             })
-            
+
         config["localidades_energia"] = localidades
         self.save_config_data(config)
 
@@ -414,7 +415,7 @@ class ConfigManager:
         config = self.get_config_data()
         localidades = config.get("localidades_energia", [])
         codigo_clean = str(codigo).strip().upper()
-        
+
         novas = [loc for loc in localidades if loc.get("codigo") != codigo_clean]
         if len(novas) != len(localidades):
             config["localidades_energia"] = novas
@@ -425,7 +426,7 @@ class ConfigManager:
     def get_mapeamentos_uc(self):
         """
         Retorna a lista de mapeamentos de UCs para Localidades.
-        
+
         Returns:
             list: Lista de dicts [{"uc": "...", "localidade_codigo": "..."}]
         """
@@ -438,23 +439,23 @@ class ConfigManager:
         """
         config = self.get_config_data()
         mapeamentos = config.get("mapeamentos_uc", [])
-        
+
         uc_clean = str(uc).strip()
         loc_codigo_clean = str(localidade_codigo).strip().upper()
-        
+
         atualizado = False
         for map_item in mapeamentos:
             if map_item.get("uc") == uc_clean:
                 map_item["localidade_codigo"] = loc_codigo_clean
                 atualizado = True
                 break
-                
+
         if not atualizado:
             mapeamentos.append({
                 "uc": uc_clean,
                 "localidade_codigo": loc_codigo_clean
             })
-            
+
         config["mapeamentos_uc"] = mapeamentos
         self.save_config_data(config)
 
@@ -465,7 +466,7 @@ class ConfigManager:
         config = self.get_config_data()
         mapeamentos = config.get("mapeamentos_uc", [])
         uc_clean = str(uc).strip()
-        
+
         novos = [m for m in mapeamentos if m.get("uc") != uc_clean]
         if len(novos) != len(mapeamentos):
             config["mapeamentos_uc"] = novos

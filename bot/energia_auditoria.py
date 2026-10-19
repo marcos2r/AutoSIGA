@@ -2,8 +2,8 @@
 Auditoria de faturas de energia no SIGA (TES01501) e ajuste de localidade/competência.
 """
 
-import time
 import logging
+import time
 
 
 class AuditoriaEnergiaMixin:
@@ -16,14 +16,14 @@ class AuditoriaEnergiaMixin:
         """
         try:
             self.update_status(f"Verificando no SIGA se fatura Nº {numero_fatura} já foi lançada...", "#428BCA")
-            
+
             # Navega para a rotina de Consulta de Contas a Pagar (TES01501)
             page.locator('#f_executar_programa').fill("TES01501")
             page.locator('#btn_executar_programa').click()
             page.wait_for_load_state("domcontentloaded")
             time.sleep(2)
             self.esperar_loading(page)
-            
+
             # Ajusta o período de busca com base na data da fatura
             data_ini = "01/01/2026"
             data_fim = "31/12/2026"
@@ -62,7 +62,7 @@ class AuditoriaEnergiaMixin:
                 page.wait_for_load_state("domcontentloaded")
                 time.sleep(2)
                 self.esperar_loading(page)
-                
+
             # Filtra pelo número do documento no campo de busca do datatable
             search_input = page.locator('div#grid1_filter input[type="search"], input[aria-controls="grid1"], div#grid1_filter input')
             if search_input.count() > 0:
@@ -70,7 +70,7 @@ class AuditoriaEnergiaMixin:
                 search_input.first.press("Enter")
                 time.sleep(1.5)
                 self.esperar_loading(page)
-                
+
                 # Verifica se há alguma linha na tabela contendo o número do documento exato na coluna de Nº Doc. (5ª coluna)
                 rows = page.locator('table#grid1 tbody tr')
                 for k in range(rows.count()):
@@ -78,7 +78,7 @@ class AuditoriaEnergiaMixin:
                     row_text = row.text_content() or ""
                     if "nenhum registro" in row_text.lower() or "não encontrado" in row_text.lower():
                         continue
-                        
+
                     doc_cell = row.locator('td').nth(4) # 5ª coluna (index 4)
                     if doc_cell.count() > 0:
                         doc_val = doc_cell.text_content() or ""
@@ -93,10 +93,10 @@ class AuditoriaEnergiaMixin:
         """Garante que a localidade ativa é 'ADM - DOURADOS - MS' e a competência bate com a fatura"""
         active_local = page.locator('li.green span.user-info').text_content() or ""
         active_comp = page.locator('span#f_competencianome').text_content() or ""
-        
+
         loc_incorreta = "ADM - DOURADOS" not in active_local
         comp_incorreta = competencia_fatura and (active_comp.strip() != competencia_fatura.strip())
-        
+
         if loc_incorreta or comp_incorreta:
             self.update_status(f"Ajustando localidade/competência para ADM - DOURADOS - MS ({competencia_fatura})...", "#428BCA")
             mes_encontrado = page.evaluate(f'''() => {{
@@ -112,7 +112,7 @@ class AuditoriaEnergiaMixin:
                 }}
                 return false;
             }}''')
-            
+
             if mes_encontrado:
                 js_submit = f'''() => {{
                     var selectMes = document.getElementById("f_competencia_webmaster");

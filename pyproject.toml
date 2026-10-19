@@ -1,0 +1,24 @@
+# Configuração das ferramentas de qualidade (as dependências ficam no requirements.txt).
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # O ofxparse 0.21 (sem manutenção) chama findAll, obsoleto no BeautifulSoup 4.
+    # O beautifulsoup4 está fixado no requirements.txt; revisar ao atualizá-lo.
+    "ignore:Call to deprecated method findAll:DeprecationWarning:ofxparse",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = ["venv*", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "I"]
+# E501: linhas longas de JS embutido e mensagens; E741: variáveis "l" legadas. Revisar aos poucos.
+ignore = ["E501", "E741"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["main.py", "caminhos.py", "version.py", "bot", "controllers", "models", "ui"]
+ignore_missing_imports = true

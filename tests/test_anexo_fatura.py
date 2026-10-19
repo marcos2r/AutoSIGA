@@ -23,5 +23,6 @@ def test_preparar_anexo_copia_sem_alterar_original(tmp_path):
     copia = preparar_anexo(str(original), "BR 10-0516", "ADM DOURADOS", str(tmp_path / "anexos"))
 
     assert os.path.basename(copia) == "3006 - ENERGIA ELETRICA - BR 10-0516 - ADM DOURADOS.pdf"
-    assert open(copia, "rb").read() == b"%PDF-1.4 conteudo"
+    with open(copia, "rb") as f:
+        assert f.read() == b"%PDF-1.4 conteudo"
     assert original.exists()

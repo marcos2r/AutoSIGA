@@ -2,8 +2,8 @@
 Abertura do navegador e validação de sessão (login) do SigaBot.
 """
 
-import os
 import logging
+import os
 import time
 
 from caminhos import diretorio_base
@@ -20,7 +20,7 @@ class SessaoMixin:
         """
         # Ao lado do executável, independente da pasta de início do atalho
         user_data_dir = os.path.join(diretorio_base(), 'siga_browser_data')
-        
+
         # Utiliza o Microsoft Edge nativo
         context = p.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
@@ -34,9 +34,9 @@ class SessaoMixin:
                 "--disable-gpu-compositing"
             ]
         )
-        
+
         page = context.pages[0] if context.pages else context.new_page()
-        
+
         page.on("console", lambda msg: logging.info(msg.text) if "SIGA-CLIQUE" in msg.text else None)
         page.add_init_script('''
             document.addEventListener('click', function(e) {
@@ -63,17 +63,18 @@ class SessaoMixin:
         self.update_status("Iniciando navegador e validando sessão...", "#428BCA")
         page.goto("https://siga.congregacao.org.br/")
         page.wait_for_load_state("domcontentloaded")
-        
+
         try:
             senha_locator = page.locator('input[type="password"]')
             senha_locator.wait_for(state="visible", timeout=3000)
             precisa_fazer_login = True
-        except:
+        except Exception:
             precisa_fazer_login = False
-        
+
         if precisa_fazer_login:
             # Tenta ler as credenciais do Windows Credential Manager via Keyring
             import keyring
+
             from models.config_manager import ConfigManager
             cfg = ConfigManager()
             usuario = cfg.get_usuario_siga()
@@ -106,15 +107,15 @@ class SessaoMixin:
 
             # Aguarda o usuário concluir o login
             senha_locator.wait_for(state="hidden", timeout=0)
-        
+
         self.update_status("Sessão Validada. Aguardando carregamento do sistema...", "#428BCA")
-        
+
         # Aguarda o input de pesquisa do menu carregar, indicando que o dashboard principal apareceu
         try:
             page.locator('#f_executar_programa').wait_for(state="visible", timeout=30000)
         except Exception as e:
             logging.warning(f"O dashboard principal demorou a carregar ou não exibiu a barra de busca: {e}")
-        
+
         # Agora sim, com o dashboard carregado, fechamos as notificações
         self.fechar_notificacoes(page)
         self.update_status("Sessão Validada. Iniciando processamento do lote...", "#428BCA")
@@ -132,16 +133,16 @@ class SessaoMixin:
             bool: True se, após a troca, o cabeçalho do SIGA mostra a localidade e o mês pedidos.
         """
         self.update_status("Ajustando configurações de Localidade e Mês de Trabalho...", "#428BCA")
-        
+
         page.locator('#a_competencia').click()
         time.sleep(1)
-        
+
         page.locator('a.showModal:has-text("Outros Meses")').click()
-        
+
         btn_confirmar = page.locator('form.modal-form button[type="submit"]:has-text("Confirmar")').first
         btn_confirmar.wait_for(state="attached", timeout=15000)
         time.sleep(1.5)
-        
+
         js_select2 = f'''() => {{
             var selectLoc = jQuery('select[name="f_estabelecimento"]');
             if (selectLoc.length > 0) {{
@@ -153,7 +154,7 @@ class SessaoMixin:
                     selectLoc.val(optLoc.val()).trigger('change');
                 }}
             }}
-            
+
             if ("{mes_ano_alvo}" !== "") {{
                 var selectMes = jQuery('select[name="f_competencia"]');
                 if (selectMes.length > 0) {{
@@ -163,15 +164,15 @@ class SessaoMixin:
                     }}
                 }}
             }}
-            
+
             jQuery('#f-mudarpadrao').prop('checked', true);
         }}'''
-        
+
         page.evaluate(js_select2)
         time.sleep(1.5)
-        
+
         btn_confirmar.evaluate("el => el.click()")
-        
+
         page.wait_for_load_state("domcontentloaded")
         time.sleep(3)
 

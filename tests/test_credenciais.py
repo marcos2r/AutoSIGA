@@ -1,6 +1,6 @@
-import pytest
-from unittest.mock import MagicMock, patch
 import os
+from unittest.mock import MagicMock, patch
+
 
 # Mock class mimicking MainWindow behavior
 class DummyMainWindow:
@@ -23,7 +23,7 @@ class DummyMainWindow:
         # Abre a modal de cadastro de forma síncrona
         from tkinter import messagebox
         messagebox.showinfo(
-            "Credenciais Necessárias", 
+            "Credenciais Necessárias",
             "Para executar tarefas no SIGA, é necessário cadastrar suas credenciais de acesso."
         )
         # Mock instantiating and showing the modal
@@ -84,11 +84,11 @@ def test_verificar_e_solicitar_credenciais_ja_cadastradas_env(mock_getenv, mock_
 def test_verificar_e_solicitar_credenciais_solicita_e_cadastra(mock_getenv, mock_showinfo, mock_get_password):
     # Setup
     win = DummyMainWindow()
-    
+
     # First check: no credentials (usuario = "")
     # Second check: has credentials (usuario = "usuario_novo")
     win.config_manager.get_usuario_siga.side_effect = ["", "usuario_novo"]
-    
+
     # Mock keyring.get_password to return None if user is empty, or "senha_nova" if user is "usuario_novo"
     mock_get_password.side_effect = lambda service, username: "senha_nova" if username == "usuario_novo" else None
     mock_getenv.return_value = ""
@@ -108,7 +108,7 @@ def test_verificar_e_solicitar_credenciais_solicita_e_cadastra(mock_getenv, mock
 def test_verificar_e_solicitar_credenciais_cancela_cadastro(mock_getenv, mock_showinfo, mock_get_password):
     # Setup
     win = DummyMainWindow()
-    
+
     # First check: no credentials; Second check: still no credentials
     win.config_manager.get_usuario_siga.return_value = ""
     mock_get_password.return_value = None

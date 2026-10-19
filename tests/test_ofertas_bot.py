@@ -1,5 +1,5 @@
-from bot.siga_bot import SigaBot
 import bot.ofertas as ofertas
+from bot.siga_bot import SigaBot
 
 
 def _bot():

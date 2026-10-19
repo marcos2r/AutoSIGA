@@ -6,10 +6,10 @@ A tela fica no front novo do SIGA, carregado num iframe de outro domínio
 seletores são por texto e rótulo porque os IDs internos não são conhecidos.
 """
 
+import logging
 import os
 import re
 import time
-import logging
 from datetime import datetime
 
 from caminhos import diretorio_base

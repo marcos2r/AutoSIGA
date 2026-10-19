@@ -1,32 +1,3 @@
-import os
-import pytest
-from models.pdf_extractor import PdfExtractor
-
-def test_pdf_extractor_mock_text(tmp_path):
-    # Como não temos um PDF binário real durante os testes automatizados,
-    # podemos testar o parsing da regex injetando um texto simulado
-    # idêntico ao extraído de uma fatura da Energisa real.
-    
-    # Criamos uma classe de mock do PdfReader para simular o comportamento da pypdf
-    texto_simulado = """
-    DANF3E - DOCUMENTO AUXILIAR DA NOTA FISCAL DE ENERGIA ELÉTRICA ELETRÔNICA
-    ENERGISA MATO GROSSO DO SUL - DISTR. DE ENERGIA S.A.
-    CONGREGACAO CRISTA NO BRASIL
-    Número da UC
-    890.005.051-36
-    
-    NOTA FISCAL Nº: 017.268.416 - Série: 002
-    DATA DE EMISSÃO:07/07/2026
-    REF: MÊS / ANO
-    Julho / 2026
-    
-    VENCIMENTO
-    26/07/2026
-    
-    TOTAL A PAGAR
-    R$ 167,48
-    """
-    pass
 
 def test_pdf_extractor_regex_matching():
     # Teste direto dos padrões de regex usados internamente pelo PdfExtractor
@@ -43,7 +14,7 @@ def test_pdf_extractor_regex_matching():
         "DATA DE EMISSÃO:07/07/2026\n"
         "NOTA FISCAL Nº: 017.268.416\n"
     )
-    
+
     # 1. UC
     uc_match = re.search(r'Número\s+da\s+UC\s*[\r\n]+([\d\.\-]+)', texto, re.IGNORECASE)
     assert uc_match is not None

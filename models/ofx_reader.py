@@ -8,25 +8,26 @@ Utiliza a biblioteca 'ofxparse' para traduzir o XML contido no OFX em objetos Py
 
 from ofxparse import OfxParser
 
+
 class OfxReader:
     """
     Responsável por processar arquivos físicos OFX em dicionários padronizados.
-    
+
     A classe encapsula o acesso à biblioteca 'ofxparse', abstraindo seus objetos
     específicos em dicionários nativos do Python que são mais fáceis de serem
     consumidos pela View e Controllers.
     """
-    
+
     @staticmethod
     def parse_file(caminho):
         """
         Lê um arquivo OFX e extrai dados e transações para um formato estruturado.
-        
+
         Args:
             caminho (str): Caminho absoluto ou relativo para o arquivo .ofx.
-            
+
         Returns:
-            dict: Dicionário padronizado com os metadados da conta e a lista de 
+            dict: Dicionário padronizado com os metadados da conta e a lista de
                   transações financeiras. Estrutura de retorno:
                   {
                       "banco": str,
@@ -46,27 +47,27 @@ class OfxReader:
                           ...
                       ]
                   }
-            
+
         Raises:
             Exception: Se o arquivo não existir, não tiver permissão de leitura,
                        ou contiver sintaxe OFX inválida.
         """
-        # Abre em modo binário ('rb') porque a biblioteca ofxparse espera bytes, 
+        # Abre em modo binário ('rb') porque a biblioteca ofxparse espera bytes,
         # para lidar de forma nativa com as quebras de linha e encodes do XML bancário.
         try:
             with open(caminho, 'rb') as f:
                 ofx = OfxParser.parse(f)
         except Exception as e:
-            raise ValueError(f"O arquivo não é um extrato OFX válido ou está corrompido. Detalhe: {e}")
-        
+            raise ValueError(f"O arquivo não é um extrato OFX válido ou está corrompido. Detalhe: {e}") from e
+
         if not ofx or not hasattr(ofx, 'account') or not ofx.account:
             raise ValueError("O extrato OFX não contém dados de conta válidos.")
-            
+
         conta = ofx.account
         extrato = conta.statement
         if not extrato:
             raise ValueError("O extrato OFX não contém bloco de movimentações financeiras.")
-        
+
         # Consolida os cabeçalhos (metadados gerais da conta) em um dicionário simples
         dados_ofx = {
             "banco": getattr(conta, 'routing_number', ''),
@@ -77,7 +78,7 @@ class OfxReader:
             "data_final": extrato.end_date.strftime("%d/%m/%Y") if hasattr(extrato, 'end_date') and extrato.end_date else None,
             "transacoes": []
         }
-        
+
         # Converte as transações encapsuladas em objetos ofxtransaction para dicionários
         for tx in extrato.transactions:
             memo = (getattr(tx, 'memo', '') or '').strip()

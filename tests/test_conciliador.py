@@ -1,5 +1,5 @@
-import pytest
 from controllers.conciliador import Conciliador
+
 
 def test_conciliar_ofx_vazio():
     assert Conciliador.conciliar([], [{"data": "12/05/2026", "entrada": "100,00"}]) == []

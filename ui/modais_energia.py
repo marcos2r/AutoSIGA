@@ -24,7 +24,7 @@ class ModalLocalidades(ctk.CTkToplevel):
         self.geometry("580x420")
         self.resizable(False, False)
         self.configure(fg_color="#FFFFFF")
-        
+
         self.transient(parent)
         self.attributes("-topmost", True)
         self.grab_set()
@@ -74,7 +74,7 @@ class ModalLocalidades(ctk.CTkToplevel):
             lbl_empty.pack(pady=40)
             return
 
-        for idx, loc in enumerate(localidades):
+        for loc in localidades:
             item_frame = ctk.CTkFrame(self.scroll_tabela, fg_color="#FFFFFF", border_width=1, border_color="#DDDDDD", corner_radius=4)
             item_frame.pack(fill="x", pady=2, padx=2)
 
@@ -144,7 +144,7 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
         self.geometry("580x420")
         self.resizable(False, False)
         self.configure(fg_color="#FFFFFF")
-        
+
         self.transient(parent)
         self.attributes("-topmost", True)
         self.grab_set()
@@ -166,7 +166,7 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
         # Dropdown de localidades cadastradas
         localidades = self.config_manager.get_localidades_energia()
         self.combo_loc_values = [f"{l['codigo']} - {l['nome']}" if l['codigo'] != l['nome'] else l['nome'] for l in localidades]
-        
+
         self.combo_loc = ctk.CTkComboBox(
             frame_inputs, values=self.combo_loc_values if self.combo_loc_values else ["Cadastre Localidades Primeiro"],
             width=340, height=28, font=("Open Sans", 10)
@@ -200,7 +200,7 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
             lbl_empty.pack(pady=40)
             return
 
-        for idx, m in enumerate(mapeamentos):
+        for m in mapeamentos:
             item_frame = ctk.CTkFrame(self.scroll_tabela, fg_color="#FFFFFF", border_width=1, border_color="#DDDDDD", corner_radius=4)
             item_frame.pack(fill="x", pady=2, padx=2)
 
@@ -302,7 +302,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         self.geometry("380x360")
         self.resizable(False, False)
         self.configure(fg_color="#FFFFFF")
-        
+
         self.transient(parent)
         self.attributes("-topmost", True)
         self.grab_set()
@@ -387,7 +387,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
             return
 
         self.config_manager.salvar_mapeamento_uc(self.uc, codigo_loc)
-        
+
         self.callback_resposta(codigo_loc)
         self.destroy()
 

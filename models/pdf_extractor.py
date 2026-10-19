@@ -5,9 +5,11 @@ Responsável por abrir o arquivo PDF da fatura e extrair os campos necessários
 (Número da UC, Valor, Data de Vencimento, Número da Nota Fiscal e Mês de Referência).
 """
 
-import re
 import logging
+import re
+
 from pypdf import PdfReader
+
 
 class PdfExtractor:
     """
@@ -43,7 +45,7 @@ class PdfExtractor:
                 texto_page = page.extract_text()
                 if texto_page:
                     texto += texto_page + "\n"
-            
+
             dados["texto"] = texto
 
             # 1. Extração do Número da UC (Unidade Consumidora)
@@ -59,7 +61,7 @@ class PdfExtractor:
             if not uc_match:
                 # Layout antigo: "MATRÍCULA: 64348-2026-4-1" ou "CADASTRE...CÓDIGO: 0000064348-6"
                 uc_match = re.search(r'MATRÍCULA:\s*(\d{4,8})', texto, re.IGNORECASE)
-            
+
             if uc_match:
                 dados["uc"] = uc_match.group(1).strip() if uc_match.groups() else uc_match.group(0).strip()
 

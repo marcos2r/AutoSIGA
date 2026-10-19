@@ -28,12 +28,12 @@ Localizado em `/controllers`, contém a inteligência de processamento matemáti
 
 ### 3. Bot (Automação / Headless)
 Localizado em `/bot`. Devido à natureza robusta e assíncrona do Playwright, a automação ganhou um módulo exclusivo.
-- **`siga_bot.py`**: Um esqueleto autônomo. Ele faz o bypass de campos complicados (Select2) e injeta dados.
+- **`siga_bot.py`**: Um esqueleto autônomo. Ele faz o bypass de campos complicados (Select2) e injeta dados. A classe `SigaBot` é composta por mixins: `siga_helpers.py` (Select2, loading, notificações, screenshot), `sessao.py` (Edge persistente e login), `extratos.py` (TES01701/01703/01704), `energia_auditoria.py` (TES01501) e `energia.py` (TES01502).
   > **🚨 IMPORTANTE**: O Bot roda numa *Thread Paralela*. Ele se comunica com a Interface Gráfica através de **Callbacks** para não congelar o sistema operacional do usuário.
 
 ### 4. View (Interface Gráfica)
 Localizado em `/ui`.
-- **`main_window.py`**: É o antigo arquivo gigante, agora purgado de regras de negócio. Usa o `CustomTkinter` para renderizar uma interface limpa.
+- **`main_window.py`**: É o antigo arquivo gigante, agora purgado de regras de negócio. Usa o `CustomTkinter` para renderizar uma interface limpa. Mantém só janela e layout; o resto vem de mixins: `credenciais.py` (Keyring e `ModalCredenciais`), `lote_extratos.py` (arquivos e validação do lote), `acoes_siga.py` (thread do bot e callbacks via `self.after(0, ...)`), `dashboard.py` (autorização e produtividade). O card de conta fica em `card_conta_extrato.py`.
 - **`panel_energia.py`** e **`modais_energia.py`**: Aba Energia (configuração do e-mail e lista de faturas pendentes) e seus modais (localidades, mapeamento de UCs e a pergunta de UC nova).
 - **Thread-Safety**: Todo acesso à UI vindo do Bot passa pelo método `self.after(0, ...)`, garantindo que apenas a *Main Thread* pinte os pixels na tela.
 

@@ -22,3 +22,9 @@ ignore = ["E501", "E741"]
 python_version = "3.11"
 files = ["main.py", "caminhos.py", "version.py", "bot", "controllers", "models", "ui"]
 ignore_missing_imports = true
+
+# Checagem completa (inclui funções sem anotação) nos pacotes já limpos.
+# Próximos: bot.* e ui.* (ainda ~230 apontamentos com check_untyped_defs).
+[[tool.mypy.overrides]]
+module = ["controllers.*", "models.*", "caminhos", "version"]
+check_untyped_defs = true

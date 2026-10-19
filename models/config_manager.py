@@ -125,7 +125,7 @@ class ConfigManager:
             })
 
         # Agrupa duplicados
-        mapeamentos_unicos = {}
+        mapeamentos_unicos: dict[tuple, dict] = {}
         for m in mapeamentos_novos:
             chave_unica = (
                 m["conta_id"],

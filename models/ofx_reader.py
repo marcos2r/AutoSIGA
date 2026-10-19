@@ -6,6 +6,8 @@ comumente gerados por bancos contendo o extrato bancário financeiro.
 Utiliza a biblioteca 'ofxparse' para traduzir o XML contido no OFX em objetos Python.
 """
 
+from typing import Any
+
 from ofxparse import OfxParser
 
 
@@ -69,7 +71,7 @@ class OfxReader:
             raise ValueError("O extrato OFX não contém bloco de movimentações financeiras.")
 
         # Consolida os cabeçalhos (metadados gerais da conta) em um dicionário simples
-        dados_ofx = {
+        dados_ofx: dict[str, Any] = {
             "banco": getattr(conta, 'routing_number', ''),
             "conta_id": getattr(conta, 'account_id', ''),
             "moeda": getattr(extrato, 'currency', ''),

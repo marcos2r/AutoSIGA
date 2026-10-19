@@ -17,7 +17,7 @@ venv\Scripts\mypy                                             # tipos (arquivos 
 pyinstaller --noconfirm AutoSIGA.spec                          # build onedir em dist/AutoSiga/
 ```
 
-A `venv` usa **Python 3.11**, igual ao CI e ao build (`uv python install 3.11`). Configuração de pytest, ruff e mypy no `pyproject.toml`; o mypy ainda é gradual (só funções anotadas).
+A `venv` usa **Python 3.11**, igual ao CI e ao build (`uv python install 3.11`). Configuração de pytest, ruff e mypy no `pyproject.toml`; o mypy confere tudo em `controllers/` e `models/` (`check_untyped_defs`); em `bot/` e `ui/` ainda só as funções anotadas.
 
 CI (`.github/workflows/ci_cd.yml`, Windows, Python 3.11): ruff, mypy e pytest em push/PR para `master`; tag `v*` gera o build e publica `AutoSiga_Windows.zip` (pasta inteira, com `_internal`) na Release.
 

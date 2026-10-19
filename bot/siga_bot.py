@@ -106,7 +106,10 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
             _, _, competencia = Exportador.resumo_ofertas(ofertas)
             localidade = f"{dados['tipo_adm']}-{dados['nome_adm']}"
             if competencia and (localidade != localidade_anterior or competencia != competencia_anterior):
-                self._ajustar_localidade_competencia(page, dados["tipo_adm"], dados["nome_adm"], competencia)
+                if not self._ajustar_localidade_competencia(page, dados["tipo_adm"], dados["nome_adm"], competencia):
+                    resultados["falha"] += 1
+                    localidade_anterior = competencia_anterior = None
+                    continue
                 localidade_anterior, competencia_anterior = localidade, competencia
 
             # Uma conta com erro (ex: timeout ao abrir a tela) não interrompe as demais
@@ -215,7 +218,13 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
                     
                     # Só troca de localidade e competência se for diferente do extrato anterior
                     if localidade_atual != localidade_anterior or mes_ano_alvo != competencia_anterior:
-                        self._ajustar_localidade_competencia(page, self.tipo_alvo, self.nome_alvo, mes_ano_alvo)
+                        if not self._ajustar_localidade_competencia(page, self.tipo_alvo, self.nome_alvo, mes_ano_alvo):
+                            # Não lança nada num mês/localidade diferente do extrato
+                            telemetria_lote["pendentes"] += len(self.dados_processados.get("transacoes", []))
+                            localidade_anterior = competencia_anterior = None
+                            if "update_progress" in self.callbacks:
+                                self.callbacks["update_progress"]((idx + 1) / len(self.lote_processados))
+                            continue
 
                         localidade_anterior = localidade_atual
                         competencia_anterior = mes_ano_alvo

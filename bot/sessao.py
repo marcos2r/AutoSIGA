@@ -127,6 +127,9 @@ class SessaoMixin:
             tipo_adm (str): Tipo da localidade (ex: "ADM").
             nome_adm (str): Nome da localidade (ex: "DOURADOS - MS").
             mes_ano_alvo (str): Competência "mm/aaaa"; vazio mantém a atual.
+
+        Returns:
+            bool: True se, após a troca, o cabeçalho do SIGA mostra a localidade e o mês pedidos.
         """
         self.update_status("Ajustando configurações de Localidade e Mês de Trabalho...", "#428BCA")
         
@@ -171,3 +174,25 @@ class SessaoMixin:
         
         page.wait_for_load_state("domcontentloaded")
         time.sleep(3)
+
+        if self._contexto_ativo_confere(page, tipo_adm, nome_adm, mes_ano_alvo):
+            return True
+        # O modal ignora em silêncio um mês ou localidade inexistente: sem esta checagem,
+        # os lançamentos cairiam no mês de trabalho que já estava ativo.
+        self.update_status(f"❌ O SIGA não ficou em {tipo_adm} - {nome_adm} ({mes_ano_alvo or 'mês atual'}). "
+                           "Confira se o mês de trabalho existe e está aberto.", "#D9534F")
+        self._capturar_tela_e_log(page, "contexto_divergente")
+        return False
+
+    @staticmethod
+    def _contexto_ativo_confere(page, tipo_adm, nome_adm, mes_ano_alvo):
+        """Compara a localidade e o Mês de Trabalho exibidos no cabeçalho do SIGA com os esperados."""
+        try:
+            localidade = (page.locator('li.green span.user-info').first.text_content() or "").upper()
+            competencia = (page.locator('span#f_competencianome').first.text_content() or "").strip()
+        except Exception as e:
+            logging.warning(f"Não foi possível ler o contexto ativo do SIGA: {e}")
+            return False
+        localidade_ok = tipo_adm.upper() in localidade and nome_adm.upper() in localidade
+        competencia_ok = not mes_ano_alvo or competencia == mes_ano_alvo
+        return localidade_ok and competencia_ok

@@ -75,50 +75,35 @@ class SessaoMixin:
             import keyring
             from models.config_manager import ConfigManager
             cfg = ConfigManager()
-            usuario_siga = cfg.get_usuario_siga()
-            senha_siga = keyring.get_password("AutoSIGA", usuario_siga) if usuario_siga else None
-            
-            if usuario_siga and senha_siga:
-                self.update_status("Realizando login automático seguro com credenciais do Keyring...", "#428BCA")
-                try:
-                    # Preenche o login (geralmente e-mail ou CPF, campo de texto perto da senha)
-                    input_user = page.locator('input[type="text"], input[type="email"]').first
-                    input_user.fill(usuario_siga)
-                    page.locator('input[type="password"]').fill(senha_siga)
-                    
-                    # Marca a caixa 'Lembrar me'
-                    page.evaluate("() => { let cbs = document.querySelectorAll('input[type=\"checkbox\"]'); for(let cb of cbs) { if(cb.parentElement.innerText.match(/Lembrar/i) || cb.id.indexOf('lembr') > -1) { cb.checked = true; } } }")
-                    
-                    # Submete o formulário
-                    btn_entrar = page.locator('button[type="submit"], input[type="submit"]').first
-                    btn_entrar.click()
-                    page.wait_for_load_state("domcontentloaded")
-                except Exception as login_err:
-                    logging.warning(f"Falha na tentativa de login automático seguro: {login_err}")
-            else:
+            usuario = cfg.get_usuario_siga()
+            senha = keyring.get_password("AutoSIGA", usuario) if usuario else None
+            if not (usuario and senha):
                 # Fallback para credenciais do .env legadas se o keyring estiver limpo
-                usuario_env = os.getenv("SIGA_USUARIO", "")
-                senha_env = os.getenv("SIGA_SENHA", "")
-                if usuario_env and senha_env:
-                    self.update_status("Realizando login automático de fallback com credenciais do .env...", "#428BCA")
-                    try:
-                        input_user = page.locator('input[type="text"], input[type="email"]').first
-                        input_user.fill(usuario_env)
-                        page.locator('input[type="password"]').fill(senha_env)
-                        page.evaluate("() => { let cbs = document.querySelectorAll('input[type=\"checkbox\"]'); for(let cb of cbs) { if(cb.parentElement.innerText.match(/Lembrar/i) || cb.id.indexOf('lembr') > -1) { cb.checked = true; } } }")
-                        btn_entrar = page.locator('button[type="submit"], input[type="submit"]').first
-                        btn_entrar.click()
-                        page.wait_for_load_state("domcontentloaded")
-                    except Exception as env_login_err:
-                        logging.warning(f"Falha na tentativa de login automático de fallback: {env_login_err}")
-                else:
-                    self.update_status("Login Mestre de Hoje: não esqueça de marcar a caixa 'Lembrar me' para a próxima!", "#D9534F")
-                    try:
-                        page.evaluate("() => { let cbs = document.querySelectorAll('input[type=\"checkbox\"]'); for(let cb of cbs) { if(cb.parentElement.innerText.match(/Lembrar/i) || cb.id.indexOf('lembr') > -1) { cb.checked = true; } } }")
-                    except:
-                        pass
-            
-            # Aguarda o login manual do usuário ou a conclusão do automático
+                usuario = os.getenv("SIGA_USUARIO", "")
+                senha = os.getenv("SIGA_SENHA", "")
+
+            # O SIGA exige reCAPTCHA: o botão Entrar só habilita depois que o usuário
+            # marca a caixa, então o bot apenas preenche os campos e não clica.
+            preenchido = False
+            if usuario and senha:
+                try:
+                    input_user = page.locator('input[type="text"], input[type="email"]').first
+                    input_user.fill(usuario)
+                    senha_locator.fill(senha)
+                    preenchido = True
+                except Exception as login_err:
+                    logging.warning(f"Falha ao preencher as credenciais do SIGA: {login_err}")
+            try:
+                page.evaluate("() => { let cbs = document.querySelectorAll('input[type=\"checkbox\"]'); for(let cb of cbs) { if(cb.parentElement.innerText.match(/Lembrar/i) || cb.id.indexOf('lembr') > -1) { cb.checked = true; } } }")
+            except Exception:
+                pass
+
+            if preenchido:
+                self.update_status("Credenciais preenchidas: marque o reCAPTCHA e clique em Entrar no navegador.", "#D9534F")
+            else:
+                self.update_status("Faça o login no navegador (usuário, senha e reCAPTCHA) e clique em Entrar.", "#D9534F")
+
+            # Aguarda o usuário concluir o login
             senha_locator.wait_for(state="hidden", timeout=0)
         
         self.update_status("Sessão Validada. Aguardando carregamento do sistema...", "#428BCA")

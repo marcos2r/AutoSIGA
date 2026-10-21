@@ -1,0 +1,5 @@
+# Ferramentas de desenvolvimento e CI (testes, lint e tipos). O app e o build usam só o requirements.txt.
+-r requirements.txt
+pytest==9.1.1
+ruff==0.17.1
+mypy==2.4.0

@@ -1,4 +1,4 @@
-# Configuração das ferramentas de qualidade (as dependências ficam no requirements.txt).
+# Configuração das ferramentas de qualidade (as dependências ficam no requirements-dev.txt).
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

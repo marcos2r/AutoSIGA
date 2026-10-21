@@ -30,8 +30,8 @@ pyinstaller --noconfirm AutoSIGA.spec
 ## 🧪 Como rodar os testes automatizados (Pytest)?
 Para rodar a suíte de testes unitários locais, utilize o pytest sob o ambiente virtual:
 ```powershell
-# Instalar dependências
-venv\Scripts\pip install -r requirements.txt
+# Instalar dependências do app + pytest, ruff e mypy
+venv\Scripts\pip install -r requirements-dev.txt
 
 # Executar a suíte de testes
 venv\Scripts\python -m pytest tests/

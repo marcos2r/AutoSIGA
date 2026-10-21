@@ -7,7 +7,7 @@ RPA desktop para Windows (CustomTkinter + Playwright/Edge) que concilia extratos
 ## Comandos
 
 ```powershell
-venv\Scripts\pip install -r requirements.txt
+venv\Scripts\pip install -r requirements-dev.txt                 # app + pytest, ruff e mypy
 venv\Scripts\python main.py                                    # roda o app
 venv\Scripts\python -m pytest -q tests/                        # suíte completa (mesma do CI)
 venv\Scripts\python -m pytest -q tests/test_conciliador.py::nome_do_teste   # teste único

@@ -168,6 +168,14 @@ class AcoesSigaMixin:
 
         # Roda o processamento do controller em uma thread secundária para não travar a GUI
         def rodar_thread_energia():
+            """
+            Prepara o lote de energia fora da thread da UI e dispara o SigaBot.
+
+            Baixa e extrai as faturas pelo controller; para cada UC sem localidade,
+            abre o modal de mapeamento na thread da UI (via after) e bloqueia esta
+            thread num Event até o usuário responder. O que não for mapeado continua
+            como pendente na aba Energia. Toda mudança de widget passa por self.after.
+            """
             try:
                 from controllers.fatura_energia_controller import FaturaEnergiaController
                 lote_valido, lote_pendente = FaturaEnergiaController.processar_lote_energia(self.atualizar_status)

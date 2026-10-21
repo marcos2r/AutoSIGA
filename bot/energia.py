@@ -343,19 +343,12 @@ class EnergiaMixin:
                 page.wait_for_load_state("domcontentloaded")
 
                 # Bypassa modal de sucesso
-                try:
-                    btn_sucesso = page.locator('.modal.in button:text-matches("Ok", "i")').first
-                    btn_sucesso.wait_for(state="attached", timeout=10000)
-                    time.sleep(1)
-                    btn_sucesso.evaluate("el => el.click()")
-                except Exception:
-                    pass
+                self._confirmar_gravacao(page, timeout_ms=10000)
 
                 # Marca como processada
                 config_mgr.marcar_fatura_processada(fat.get("numero_fatura", ""))
                 faturas_sucesso.append(fat)
                 qtd_injetada += 1
-                time.sleep(2)
 
             # --- AUDITORIA FINAL ---
             if faturas_sucesso:

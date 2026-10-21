@@ -137,15 +137,7 @@ class ExtratosMixin:
                 page.wait_for_load_state("domcontentloaded")
 
                 # Bypassa a modal de confirmação de gravação bem sucedida
-                try:
-                    btn_sucesso = page.locator('.modal.in button:text-matches("Ok", "i")').first
-                    btn_sucesso.wait_for(state="attached", timeout=25000)
-                    time.sleep(1)
-                    btn_sucesso.evaluate("el => el.click()")
-                except Exception:
-                    pass
-
-                time.sleep(1.5)
+                self._confirmar_gravacao(page, timeout_ms=25000)
 
             self._qtd_injecoes_efetuadas = len(lanc_ordenados)
             self.update_status(f"✅ Finalizado! {len(lanc_ordenados)} registros injetados no SIGA.", "#3C763D")
@@ -275,15 +267,7 @@ class ExtratosMixin:
                 page.wait_for_load_state("domcontentloaded")
 
                 # Bypassa a modal de confirmação de gravação bem sucedida
-                try:
-                    btn_sucesso = page.locator('.modal.in button:text-matches("Ok", "i")').first
-                    btn_sucesso.wait_for(state="attached", timeout=25000)
-                    time.sleep(1.2)
-                    btn_sucesso.evaluate("el => el.click()")
-                except Exception:
-                    pass
-
-                time.sleep(1.5)
+                self._confirmar_gravacao(page, timeout_ms=25000)
 
             self._qtd_injecoes_efetuadas = len(lanc_ordenados)
             self.update_status(f"✅ Finalizado! {len(lanc_ordenados)} rendimentos injetados no SIGA.", "#3C763D")

@@ -141,6 +141,33 @@ class HelpersMixin:
         except Exception:
             pass
 
+    def _confirmar_gravacao(self, page, timeout_ms):
+        """
+        Fecha a modal "Ok" de gravação bem-sucedida e espera o SIGA liberar a tela.
+
+        Substitui as pausas fixas antes e depois do clique: espera o botão ficar
+        visível, clica, confere se a modal fechou (clica de novo uma vez, caso o
+        primeiro clique tenha caído na animação de abertura) e aguarda o loading.
+
+        Args:
+            page (Page): Página ativa no navegador.
+            timeout_ms (int): Limite para a modal de sucesso aparecer, em milissegundos.
+        """
+        try:
+            btn_sucesso = page.locator('.modal.in button:text-matches("Ok", "i")').first
+            btn_sucesso.wait_for(state="visible", timeout=timeout_ms)
+            modal = page.locator('.modal.in').first
+            for _ in range(2):
+                btn_sucesso.evaluate("el => el.click()")
+                try:
+                    modal.wait_for(state="hidden", timeout=3000)
+                    break
+                except Exception:
+                    logging.debug("[Gravação] Modal de sucesso ainda aberta; clicando em Ok de novo.")
+        except Exception as e:
+            logging.debug(f"[Gravação] Modal de sucesso não tratada: {e}")
+        self.esperar_loading(page)
+
     def selecionar_select2(self, page, select_id, termo_busca, dropdown_is_ajax=True):
         """
         Hack utilitário para forçar a interação em listas suspensas (Select2).

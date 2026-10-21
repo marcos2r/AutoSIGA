@@ -6,8 +6,25 @@ loading, notificações, verificação de sessão e captura de tela.
 import logging
 import os
 import time
+import unicodedata
 
 from caminhos import diretorio_base
+
+# Limites da espera pelos resultados do Select2 (busca AJAX no servidor x filtro local)
+TIMEOUT_SELECT2_AJAX = 10.0
+TIMEOUT_SELECT2_LOCAL = 3.0
+INTERVALO_POLL_SELECT2 = 0.2
+# "Nenhum resultado" só encerra a espera depois disso: o Select2 3.x usa a mesma classe
+# para "digite mais caracteres", que fica na tela até a busca disparar.
+ESPERA_MIN_SEM_RESULTADO = 1.5
+
+
+def _normalizar(texto):
+    """Remove acentos, espaços e caixa para comparar textos do Select2."""
+    if not texto:
+        return ""
+    t_clean = unicodedata.normalize('NFKD', str(texto)).encode('ASCII', 'ignore').decode('ASCII')
+    return "".join(t_clean.lower().split())
 
 
 class HelpersMixin:
@@ -139,14 +156,7 @@ class HelpersMixin:
             termo_busca (str): Texto a ser pesquisado (ex: Código da Conta).
             dropdown_is_ajax (bool): Define se o script deve tolerar delay de rede.
         """
-        import unicodedata
-
-        def normalizar(t):
-            if not t:
-                return ""
-            t_clean = unicodedata.normalize('NFKD', str(t)).encode('ASCII', 'ignore').decode('ASCII')
-            return "".join(t_clean.lower().split())
-
+        normalizar = _normalizar
         tentativas = 3
         ultimo_erro = None
 
@@ -174,41 +184,29 @@ class HelpersMixin:
                 except Exception:
                     pass
                 container.click(timeout=3000, force=True)
-                time.sleep(1.0)
 
                 # 2. Digita no input temporário que nasce dinamicamente no final do <body>
                 input_search = page.locator('#select2-drop:visible .select2-input')
+                input_search.wait_for(state="visible", timeout=3000)
                 input_search.fill("", timeout=3000)
                 input_search.type(str(termo_busca), delay=10)
 
-                # Verifica dinamicamente se o Select2 exige pressionar Enter para disparar a busca AJAX
-                try:
-                    msg_busca = page.locator('#select2-drop:visible .select2-searching').first
-                    if msg_busca.count() > 0:
-                        texto_msg = msg_busca.text_content() or ""
-                        texto_msg_lower = texto_msg.lower()
-                        if "tecle enter" in texto_msg_lower or "enter para" in texto_msg_lower:
-                            input_search.press("Enter")
-                            # Dá um tempo extra para a busca AJAX do servidor responder
-                            time.sleep(1.8)
-                except Exception:
-                    pass
-
-                if dropdown_is_ajax:
-                    time.sleep(1.2) # Espera o SIGA carregar
-                else:
-                    time.sleep(0.5) # Filtro local instantâneo
+                timeout = TIMEOUT_SELECT2_AJAX if dropdown_is_ajax else TIMEOUT_SELECT2_LOCAL
+                if not self._aguardar_resultados_select2(page, input_search, termo_busca, timeout):
+                    logging.info(f"[Select2] Resultado para '{termo_busca}' em '{select_id}' não apareceu em {timeout}s; tentando selecionar assim mesmo.")
 
                 # 3. Pressiona Enter no input_search para garantir a seleção e fechamento nativo
                 input_search.press("Enter")
-                time.sleep(0.5)
+                try:
+                    page.locator('#select2-drop').wait_for(state="hidden", timeout=1000)
+                except Exception:
+                    pass
 
                 # Tenta clicar no LI caso o Enter não tenha sido suficiente
                 try:
                     opcao_li = page.locator('#select2-drop:visible .select2-results li.select2-result-selectable').first
                     if opcao_li.count() > 0:
                         opcao_li.click(force=True)
-                        time.sleep(0.5)
                 except Exception:
                     pass
 
@@ -246,3 +244,50 @@ class HelpersMixin:
         logging.error(erro_msg)
         self._capturar_tela_e_log(page, f"select2_{select_id}")
         raise RuntimeError(erro_msg) from ultimo_erro
+
+    def _aguardar_resultados_select2(self, page, input_search, termo_busca, timeout):
+        """
+        Espera o dropdown do Select2 mostrar o resultado do termo digitado.
+
+        Substitui as pausas fixas: consulta a lista a cada INTERVALO_POLL_SELECT2
+        segundos e retorna assim que a primeira opção (a que o Enter seleciona)
+        contém o termo. Se o SIGA pedir "tecle Enter" para disparar a busca AJAX,
+        pressiona Enter uma vez e continua esperando.
+
+        Args:
+            page (Page): Página ativa no navegador.
+            input_search (Locator): Campo de busca do dropdown aberto.
+            termo_busca (str): Texto digitado no campo.
+            timeout (float): Limite da espera, em segundos.
+
+        Returns:
+            bool: True se a opção apareceu ou o SIGA respondeu "nenhum resultado"
+            antes do limite; False se o limite estourou.
+        """
+        termo_norm = _normalizar(termo_busca)
+        enter_enviado = False
+        msg_busca = page.locator('#select2-drop:visible .select2-searching').first
+        primeira_opcao = page.locator('#select2-drop:visible .select2-results li.select2-result-selectable').first
+        sem_resultado = page.locator('#select2-drop:visible .select2-no-results').first
+        inicio = time.monotonic()
+        limite = inicio + timeout
+
+        while True:
+            try:
+                if msg_busca.count() > 0:
+                    texto_msg = (msg_busca.text_content() or "").lower()
+                    # Busca AJAX que só dispara com Enter
+                    if not enter_enviado and ("tecle enter" in texto_msg or "enter para" in texto_msg):
+                        input_search.press("Enter")
+                        enter_enviado = True
+                elif primeira_opcao.count() > 0 and termo_norm in _normalizar(primeira_opcao.text_content()):
+                    return True
+                elif sem_resultado.count() > 0 and time.monotonic() - inicio >= ESPERA_MIN_SEM_RESULTADO:
+                    return True
+            except Exception as e:
+                # O dropdown é recriado durante a busca; tenta de novo na próxima volta
+                logging.debug(f"[Select2] Dropdown instável ao ler resultados: {e}")
+
+            if time.monotonic() >= limite:
+                return False
+            time.sleep(INTERVALO_POLL_SELECT2)

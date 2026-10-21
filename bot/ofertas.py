@@ -166,5 +166,5 @@ class OfertasMixin:
         """Fecha o modal sem salvar."""
         try:
             modal.get_by_role("button", name="Fechar").first.click()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f"[Ofertas] Botão Fechar do modal não encontrado: {e}")

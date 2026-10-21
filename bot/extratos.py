@@ -78,8 +78,8 @@ class ExtratosMixin:
                     btn_sim.wait_for(state="visible", timeout=2000)
                     btn_sim.click()
                     time.sleep(0.5)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"Pop-up de competência não apareceu: {e}")
 
                 # Preenche o Valor Numérico
                 valor_str = f"{abs(valor_tx):.2f}".replace('.', ',')
@@ -216,8 +216,8 @@ class ExtratosMixin:
                     btn_sim.wait_for(state="visible", timeout=2000)
                     btn_sim.click()
                     time.sleep(0.5)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"Pop-up de competência não apareceu: {e}")
 
                 # 5. Forma de Recebimento: "CRÉDITO EM CONTA" (opção '10')
                 self.selecionar_select2(page, "f_formapagamento", "CRÉDITO EM CONTA", dropdown_is_ajax=False)

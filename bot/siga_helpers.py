@@ -127,8 +127,8 @@ class HelpersMixin:
                     widgets.forEach(w => w.remove());
                 }
             }''')
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f"Falha ao fechar notificações: {e}")
 
     def esperar_loading(self, page):
         """
@@ -138,8 +138,8 @@ class HelpersMixin:
             time.sleep(0.5)
             page.locator('.blockUI').wait_for(state="hidden", timeout=15000)
             self.fechar_notificacoes(page)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f"Loading do SIGA não terminou em 15 s: {e}")
 
     def _confirmar_gravacao(self, page, timeout_ms):
         """
@@ -192,8 +192,8 @@ class HelpersMixin:
             texto_inicial = page.locator(f'#s2id_{select_id} .select2-chosen').text_content() or ""
             if normalizar(termo_busca) in normalizar(texto_inicial):
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f"[Select2] Valor atual de '{select_id}' não lido: {e}")
 
         for tentativa in range(1, tentativas + 1):
             try:
@@ -208,8 +208,8 @@ class HelpersMixin:
                 # Tenta abrir via API do Select2 nativo primeiro, fallback para click
                 try:
                     page.evaluate(f"if (window.jQuery) window.jQuery('#{select_id}').select2('open');")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"[Select2] API select2('open') indisponível em '{select_id}': {e}")
                 container.click(timeout=3000, force=True)
 
                 # 2. Digita no input temporário que nasce dinamicamente no final do <body>
@@ -226,16 +226,16 @@ class HelpersMixin:
                 input_search.press("Enter")
                 try:
                     page.locator('#select2-drop').wait_for(state="hidden", timeout=1000)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"[Select2] Dropdown de '{select_id}' ainda aberto após Enter: {e}")
 
                 # Tenta clicar no LI caso o Enter não tenha sido suficiente
                 try:
                     opcao_li = page.locator('#select2-drop:visible .select2-results li.select2-result-selectable').first
                     if opcao_li.count() > 0:
                         opcao_li.click(force=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"[Select2] Clique na opção de '{select_id}' falhou: {e}")
 
                 # Limpa o mask e o dropdown usando a API nativa do Select2 para desvincular eventos de teclado globais
                 try:
@@ -251,8 +251,8 @@ class HelpersMixin:
                             window.jQuery('.select2-drop-active').removeClass('select2-drop-active');
                         }}
                     }}''')
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"[Select2] Falha ao fechar o dropdown de '{select_id}': {e}")
 
                 # Validação de estado pós-seleção
                 texto_selecionado = page.locator(f'#s2id_{select_id} .select2-chosen').text_content() or ""

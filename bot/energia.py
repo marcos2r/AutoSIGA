@@ -194,8 +194,8 @@ class EnergiaMixin:
                             self.update_status(f"⚠️ Competência fechada ou data inválida. Pulando fatura {numero_fatura}...", "#D9534F")
                             time.sleep(2)
                             continue
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.warning(f"Não foi possível checar a competência da fatura {numero_fatura}: {e}")
                     time.sleep(0.5)
 
                 # 5. Rateio - Despesas (Select2): Seleciona a conta de energia elétrica ("3006")
@@ -331,8 +331,8 @@ class EnergiaMixin:
                         self.update_status(f"⚠️ Competência fechada impediu a gravação. Pulando fatura {numero_fatura}...", "#D9534F")
                         time.sleep(2)
                         continue
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.warning(f"Não foi possível checar modais antes de gravar a fatura {numero_fatura}: {e}")
                 time.sleep(0.5)
 
                 if btn_gravar.count() > 0:

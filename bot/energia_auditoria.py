@@ -34,8 +34,8 @@ class AuditoriaEnergiaMixin:
                     dt_ref = datetime.strptime(ref_data, "%d/%m/%Y")
                     data_ini = (dt_ref - timedelta(days=60)).strftime("%d/%m/%Y")
                     data_fim = (dt_ref + timedelta(days=60)).strftime("%d/%m/%Y")
-                except Exception:
-                    pass
+                except (TypeError, ValueError):
+                    logging.warning(f"Data de referência inválida ({ref_data}); auditoria usa o período padrão {data_ini} a {data_fim}.")
 
             # Preenche as datas no formulário de filtro via JS para evitar erros de elemento invisível
             try:

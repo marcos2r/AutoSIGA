@@ -97,8 +97,8 @@ class SessaoMixin:
                     logging.warning(f"Falha ao preencher as credenciais do SIGA: {login_err}")
             try:
                 page.evaluate("() => { let cbs = document.querySelectorAll('input[type=\"checkbox\"]'); for(let cb of cbs) { if(cb.parentElement.innerText.match(/Lembrar/i) || cb.id.indexOf('lembr') > -1) { cb.checked = true; } } }")
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f"Checkbox do login não marcado: {e}")
 
             if preenchido:
                 self.update_status("Credenciais preenchidas: marque o reCAPTCHA e clique em Entrar no navegador.", "#D9534F")

@@ -30,7 +30,7 @@ jobs:
 
       - name: Lint (Ruff) e Tipos (Mypy)
         run: |
-          .env\Scriptsctivate
+          .\venv\Scripts\activate
           ruff check .
           mypy
 

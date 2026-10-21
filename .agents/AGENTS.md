@@ -11,8 +11,7 @@ venv\Scripts\pip install -r requirements.txt
 venv\Scripts\python main.py                                    # roda o app
 venv\Scripts\python -m pytest -q tests/                        # suíte completa (mesma do CI)
 venv\Scripts\python -m pytest -q tests/test_conciliador.py::nome_do_teste   # teste único
-venv\Scripts
-uff check .                                     # lint (--fix corrige o seguro)
+venv\Scripts\ruff check .                                     # lint (--fix corrige o seguro)
 venv\Scripts\mypy                                             # tipos (arquivos em pyproject.toml)
 pyinstaller --noconfirm AutoSIGA.spec                          # build onedir em dist/AutoSiga/
 ```

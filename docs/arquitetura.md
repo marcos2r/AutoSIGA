@@ -17,7 +17,7 @@ graph TD
 
 ### 1. Models (Acesso a Dados e Persistência)
 Localizado na pasta `/models`, abriga classes que lidam exclusivamente com I/O (Input/Output). Nenhum Model sabe o que é uma janela ou um clique.
-- **`config_manager.py`**: Acessa e edita o `config.json`.
+- **`config_manager.py`**: Acessa e edita o `config.json`. As chaves de energia (e-mail, localidades, UCs, faturas processadas) ficam no mixin `config_energia.py`.
 - **`faturas_pendentes.py`**: Guarda no `config.json` as faturas de energia cuja UC ainda não foi mapeada (e as descartadas pelo usuário), para que nenhuma se perca entre importações.
 - **`ofx_reader.py`**: Traduz arquivos físicos `.ofx` para dicionários nativos do Python usando a biblioteca `ofxparse`.
 

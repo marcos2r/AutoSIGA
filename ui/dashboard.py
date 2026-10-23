@@ -7,6 +7,7 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
+from controllers.baixa_energia import linhas_do_painel
 from controllers.exportador import Exportador
 from controllers.prova_real import resumo_resultado
 from ui import tema
@@ -17,10 +18,15 @@ class DashboardMixin:
 
     def mostrar_janela_lancamentos(self, lancamentos, contexto=None):
         """
-        Prévia (opcional) dos lançamentos que o robô vai gravar num extrato.
-        A thread do robô espera até o usuário lançar ou pular; fechar a janela é pular.
+        Prévia (opcional) dos lançamentos que o robô vai gravar num extrato, ou das faturas
+        de energia que vai aprovar e baixar (`contexto["tipo"] == "baixas"`).
+        A thread do robô espera até o usuário gravar ou pular; fechar a janela é pular.
         """
         contexto = contexto or {}
+        baixas = contexto.get("tipo") == "baixas"
+        titulo = f"Faturas de Energia a Baixar ({len(lancamentos)})" if baixas             else f"Lançamentos a Importar ({len(lancamentos)})"
+        rotulo_ok = f"Aprovar e baixar {len(lancamentos)} fatura(s)" if baixas else f"Lançar {len(lancamentos)} itens"
+        rotulo_pular = "Pular as baixas" if baixas else "Pular este extrato"
         janela = ctk.CTkToplevel(self)
         janela.title("Ação Necessária: Lançamentos Pendentes")
         janela.geometry("650x500")
@@ -30,7 +36,7 @@ class DashboardMixin:
         janela.attributes('-topmost', True)
         janela.grab_set() # Foca os cliques apenas neste modal
 
-        lbl_titulo = ctk.CTkLabel(janela, text=f"Lançamentos a Importar ({len(lancamentos)})", font=self.fonte_titulo, text_color=self.cor_azul_header)
+        lbl_titulo = ctk.CTkLabel(janela, text=titulo, font=self.fonte_titulo, text_color=self.cor_azul_header)
         lbl_titulo.pack(pady=(20, 2))
         if contexto:
             ctk.CTkLabel(janela, text=f"Conta {contexto.get('conta', '')} · {contexto.get('localidade', '')}",
@@ -50,15 +56,16 @@ class DashboardMixin:
 
             ctk.CTkLabel(frame_item, text=tx.get("data", ""), font=("Open Sans", 13, "bold"), width=80).pack(side="left", padx=10, pady=5)
             desc = tx.get("historico") or tx.get("descricao", "")
-            ctk.CTkLabel(frame_item, text=desc[:50], font=("Open Sans", 12), anchor="w").pack(side="left", padx=10, pady=5, fill="x", expand=True)
+            ctk.CTkLabel(frame_item, text=desc if baixas else desc[:50], font=("Open Sans", 12), anchor="w",
+                         justify="left", wraplength=360).pack(side="left", padx=10, pady=5, fill="x", expand=True)
             ctk.CTkLabel(frame_item, text=valor_fmt, font=("Open Sans", 13, "bold"), text_color=cor_valor).pack(side="right", padx=15, pady=5)
 
         frame_botoes = ctk.CTkFrame(janela, fg_color="transparent")
         frame_botoes.pack(pady=15)
 
-        ctk.CTkButton(frame_botoes, text=f"Lançar {len(lancamentos)} itens", command=lambda: self.autorizar_lancamentos(janela),
+        ctk.CTkButton(frame_botoes, text=rotulo_ok, command=lambda: self.autorizar_lancamentos(janela),
                       fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, height=40).pack(side="left", padx=10)
-        ctk.CTkButton(frame_botoes, text="Pular este extrato", command=lambda: self.cancelar_lancamentos(janela),
+        ctk.CTkButton(frame_botoes, text=rotulo_pular, command=lambda: self.cancelar_lancamentos(janela),
                       fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER, text_color=tema.CINZA_TEXTO,
                       border_width=1, border_color=tema.CINZA_BORDA, height=40).pack(side="right", padx=10)
 
@@ -81,7 +88,8 @@ class DashboardMixin:
         cores = {"ok": tema.VERDE_TEXTO, "alerta": tema.VERMELHO_TEXTO, "neutro": tema.CINZA_TEXTO}
         ctk.CTkLabel(container, text="PROVA REAL (SALDO DO SIGA × BANCO)", font=(tema.FONTE, 10, "bold"),
                      text_color=tema.AZUL_TITULO).pack(anchor="w", padx=27, pady=(4, 2))
-        lista = ctk.CTkScrollableFrame(container, height=min(52 * len(resultados), 160), fg_color=tema.BRANCO,
+        qtd_linhas = sum(2 + len(linhas_do_painel(r.baixas)) for r in resultados)
+        lista = ctk.CTkScrollableFrame(container, height=min(26 * qtd_linhas, 200), fg_color=tema.BRANCO,
                                        border_width=1, border_color=tema.CINZA_BORDA)
         lista.pack(fill="x", padx=15, pady=(0, 6))
         for r in resultados:
@@ -92,6 +100,10 @@ class DashboardMixin:
                          text_color=tema.CINZA_TEXTO, anchor="w").pack(fill="x")
             ctk.CTkLabel(linha, text=texto, font=(tema.FONTE, 11), text_color=cores[nivel], anchor="w",
                          justify="left", wraplength=540).pack(fill="x")
+            # Baixas de energia feitas antes da conciliação, com cada pendência e o motivo
+            for nivel_baixa, texto_baixa in linhas_do_painel(r.baixas):
+                ctk.CTkLabel(linha, text=texto_baixa, font=(tema.FONTE, 11), text_color=cores[nivel_baixa],
+                             anchor="w", justify="left", wraplength=540).pack(fill="x")
 
     def mostrar_dashboard_produtividade(self, telemetria, tempo_inicio):
         """Exibe o popup parabenizando a finalização dos trabalhos com métricas e ROI financeiro."""

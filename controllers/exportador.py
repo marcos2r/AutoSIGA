@@ -10,6 +10,7 @@ import calendar
 import logging
 from datetime import datetime
 
+from controllers.baixa_energia import resumo_baixa
 from controllers.prova_real import DIVERGE, resumo_resultado
 
 
@@ -243,6 +244,9 @@ class Exportador:
         abas = [ws_resumo, ws_detalhe]
         if telemetria.get("extratos"):
             abas.append(Exportador._aba_prova_real(wb, telemetria["extratos"], cor_header, fonte_header, fonte_normal))
+            if any(r.baixas for r in telemetria["extratos"]):
+                abas.append(Exportador._aba_baixas_energia(wb, telemetria["extratos"], cor_header, fonte_header,
+                                                           fonte_normal))
 
         # Redimensionamento dinâmico das colunas
         for sheet in abas:
@@ -295,3 +299,25 @@ class Exportador:
                 ws.cell(row=linha, column=5).number_format = 'R$ #,##0.00'
         return ws
 
+    @staticmethod
+    def _aba_baixas_energia(wb, resultados, cor_header, fonte_header, fonte_normal):
+        """Aba "Baixas de Energia": cada débito de energia dos extratos e o que foi feito com ele."""
+        ws = wb.create_sheet(title="Baixas de Energia")
+        cabecalho = ["Localidade", "Conta SIGA", "Data do Débito", "Valor", "Código de Débito", "UC", "Fatura",
+                     "Resultado"]
+        for col, texto in enumerate(cabecalho, start=1):
+            cell = ws.cell(row=1, column=col, value=texto)
+            cell.fill, cell.font = cor_header, fonte_header
+
+        linha = 2
+        for r in resultados:
+            for b in r.baixas or []:
+                d = b.decisao
+                fatura = d.provisao.numero if d.provisao else (d.fatura.numero if d.fatura else "")
+                valores = [r.localidade, r.conta_siga, d.debito.data, d.debito.valor, d.debito.codigo,
+                           d.fatura.uc if d.fatura else "", fatura, resumo_baixa(b)[1]]
+                for col, valor in enumerate(valores, start=1):
+                    ws.cell(row=linha, column=col, value=valor).font = fonte_normal
+                ws.cell(row=linha, column=4).number_format = 'R$ #,##0.00'
+                linha += 1
+        return ws

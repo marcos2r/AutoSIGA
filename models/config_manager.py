@@ -361,3 +361,31 @@ class ConfigManager(ConfigEnergiaMixin, ConfigCatalogoMixin):
         config = self.get_config_data()
         config["revisar_antes_de_lancar"] = bool(ativo)
         self.save_config_data(config)
+
+    def get_baixar_energia_pelo_extrato(self):
+        """
+        Retorna se o robô aprova e baixa as faturas de energia debitadas nos extratos (ligado por padrão).
+        """
+        return bool(self.get_config_data().get("baixar_energia_pelo_extrato", True))
+
+    def salvar_baixar_energia_pelo_extrato(self, ativo):
+        """
+        Persiste a preferência da baixa das faturas de energia pelo extrato.
+        """
+        config = self.get_config_data()
+        config["baixar_energia_pelo_extrato"] = bool(ativo)
+        self.save_config_data(config)
+
+    def get_revisar_baixas(self):
+        """
+        Retorna se o robô mostra a prévia das baixas de energia antes de gravar (ligado por padrão).
+        """
+        return bool(self.get_config_data().get("revisar_baixas", True))
+
+    def salvar_revisar_baixas(self, ativo):
+        """
+        Persiste a preferência da prévia das baixas de energia.
+        """
+        config = self.get_config_data()
+        config["revisar_baixas"] = bool(ativo)
+        self.save_config_data(config)

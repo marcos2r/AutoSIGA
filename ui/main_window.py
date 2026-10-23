@@ -277,7 +277,21 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
             self.frame_botoes, text="Revisar os lançamentos antes de gravar no SIGA", font=("Open Sans", 12),
             variable=self.var_revisar,
             command=lambda: self.config_manager.salvar_revisar_antes_de_lancar(self.var_revisar.get())
-        ).grid(row=1, column=0, columnspan=3, pady=(8, 0))
+        ).grid(row=1, column=0, columnspan=3, pady=(8, 0), sticky="w")
+
+        # Baixa das faturas de energia debitadas no extrato: ligada por padrão, com prévia
+        self.var_baixar_energia = ctk.BooleanVar(value=self.config_manager.get_baixar_energia_pelo_extrato())
+        self.var_revisar_baixas = ctk.BooleanVar(value=self.config_manager.get_revisar_baixas())
+        self.check_revisar_baixas = ctk.CTkCheckBox(
+            self.frame_botoes, text="Revisar as baixas de energia antes de gravar", font=("Open Sans", 12),
+            variable=self.var_revisar_baixas,
+            command=lambda: self.config_manager.salvar_revisar_baixas(self.var_revisar_baixas.get()))
+        ctk.CTkCheckBox(
+            self.frame_botoes, text="Baixar as faturas de energia debitadas no extrato", font=("Open Sans", 12),
+            variable=self.var_baixar_energia, command=self._alternar_baixa_energia
+        ).grid(row=2, column=0, columnspan=3, pady=(6, 0), sticky="w")
+        self.check_revisar_baixas.grid(row=3, column=0, columnspan=3, pady=(6, 0), padx=(24, 0), sticky="w")
+        self._alternar_baixa_energia(salvar=False)
 
         # Barra de Progresso Geral do Lote
         self.progress_bar = ctk.CTkProgressBar(self, width=400, height=8, corner_radius=4, progress_color="#5CB85C", fg_color="#E0E0E0")
@@ -317,3 +331,10 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         elif tipo == 'warning':
             messagebox.showwarning(titulo, mensagem, parent=self)
         self.attributes('-topmost', False)
+
+    def _alternar_baixa_energia(self, salvar=True):
+        """Salva a opção da baixa de energia; a prévia das baixas só vale com ela ligada."""
+        ativo = self.var_baixar_energia.get()
+        if salvar:
+            self.config_manager.salvar_baixar_energia_pelo_extrato(ativo)
+        self.check_revisar_baixas.configure(state="normal" if ativo else "disabled")

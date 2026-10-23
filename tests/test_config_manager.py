@@ -60,3 +60,15 @@ def test_previa_dos_lancamentos_desligada_por_padrao_e_persistida(tmp_path):
     cm.salvar_revisar_antes_de_lancar(True)
 
     assert ConfigManager(config_path=str(caminho)).get_revisar_antes_de_lancar() is True
+
+
+def test_baixa_de_energia_e_a_previa_das_baixas_ligadas_por_padrao(tmp_path):
+    caminho = tmp_path / "config.json"
+    cm = ConfigManager(config_path=str(caminho))
+    assert cm.get_baixar_energia_pelo_extrato() is True and cm.get_revisar_baixas() is True
+
+    cm.salvar_baixar_energia_pelo_extrato(False)
+    cm.salvar_revisar_baixas(False)
+
+    recarregado = ConfigManager(config_path=str(caminho))
+    assert recarregado.get_baixar_energia_pelo_extrato() is False and recarregado.get_revisar_baixas() is False

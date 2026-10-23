@@ -48,7 +48,9 @@ class AcoesSigaMixin:
         }
 
         self.bot_instance = SigaBot(lote_valido, callbacks,
-                                    revisar_antes_de_lancar=self.config_manager.get_revisar_antes_de_lancar())
+                                    revisar_antes_de_lancar=self.config_manager.get_revisar_antes_de_lancar(),
+                                    baixar_energia=self.config_manager.get_baixar_energia_pelo_extrato(),
+                                    revisar_baixas=self.config_manager.get_revisar_baixas())
         threading.Thread(target=self.bot_instance.fluxo_automacao, daemon=True).start()
 
     def _montar_lote_extratos(self):

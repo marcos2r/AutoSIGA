@@ -129,3 +129,46 @@ def test_excel_do_lote_tem_a_aba_prova_real_com_as_sobras(tmp_path):
     assert linhas[1][5] is None and linhas[1][8].startswith("✔ Saldo confere")
     assert linhas[2][5] == 42.1
     assert ("DR - CENTRAL", "10396", "05/05/2026", "DUPLICADO", 42.1) in [tuple(linha[:5]) for linha in linhas]
+
+
+def test_excel_do_lote_tem_a_aba_baixas_de_energia(tmp_path):
+    import openpyxl
+
+    from controllers.baixa_energia import (
+        BAIXADA,
+        BAIXAR,
+        SEM_FATURA,
+        DebitoEnergia,
+        Decisao,
+        ProvisaoSiga,
+        ResultadoBaixa,
+    )
+    from controllers.prova_real import ResultadoExtrato
+    from models.indice_faturas_energia import FaturaEnergia
+
+    fatura = FaturaEnergia("018000001", "1.234.567.051-00", 224.25, "26/08/2026", "00012345678")
+    baixada = Decisao(DebitoEnergia("26/08/2026", 224.25, "00012345678"), BAIXAR, "", fatura,
+                      ProvisaoSiga("018000001", 224.25, "Lançado", "G"))
+    sem_fatura = Decisao(DebitoEnergia("26/08/2026", 10.0, "00099999999"), SEM_FATURA, "código sem fatura")
+    resultados = [ResultadoExtrato("12345-6", "10123", "ADM - CENTRAL", "CORRENTE", "conciliado",
+                                   baixas=[ResultadoBaixa(baixada, BAIXADA), ResultadoBaixa(sem_fatura, SEM_FATURA)])]
+    filepath = tmp_path / "lote.xlsx"
+
+    Exportador.gerar_excel_lote({"extratos": resultados}, [], str(filepath))
+
+    linhas = list(openpyxl.load_workbook(filepath)["Baixas de Energia"].iter_rows(values_only=True))
+    assert linhas[1][:7] == ("ADM - CENTRAL", "10123", "26/08/2026", 224.25, "00012345678", "1.234.567.051-00",
+                             "018000001")
+    assert "aprovada e baixada" in linhas[1][7]
+    assert linhas[2][6] is None and "código sem fatura" in linhas[2][7]
+
+
+def test_excel_sem_baixas_nao_cria_a_aba(tmp_path):
+    import openpyxl
+
+    from controllers.prova_real import ResultadoExtrato
+
+    filepath = tmp_path / "lote.xlsx"
+    Exportador.gerar_excel_lote({"extratos": [ResultadoExtrato("1", "10130", "DR", "CORRENTE", "conciliado")]}, [],
+                                str(filepath))
+    assert "Baixas de Energia" not in openpyxl.load_workbook(filepath).sheetnames

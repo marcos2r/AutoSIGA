@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from controllers.prova_real import moeda
+from controllers.prova_real import moeda, valor_br
 from models.indice_faturas_energia import FaturaEnergia
 
 BAIXAR = "baixar"
@@ -34,6 +34,12 @@ _DIAS_ANTES_DO_DEBITO = 40
 _DIAS_DEPOIS_DO_DEBITO = 5
 
 _RE_DEBITO_ENERGIA = re.compile(r"DEBITO\s+CONVENIOS-ENERGI.*?\bID\s*(\d+)", re.IGNORECASE)
+_RE_GUID = re.compile(r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$")
+
+# Resultado da execução de uma decisão BAIXAR no SIGA
+BAIXADA = "baixada"
+APROVADA_SEM_BAIXA = "aprovada_sem_baixa"
+FALHOU = "falhou"
 
 
 @dataclass(frozen=True)
@@ -77,6 +83,61 @@ class Decisao:
     @property
     def precisa_aprovar(self) -> bool:
         return self.acao == BAIXAR and self.provisao is not None and self.provisao.status == LANCADO
+
+
+@dataclass(frozen=True)
+class ResultadoBaixa:
+    """O que aconteceu no SIGA com uma decisão BAIXAR."""
+
+    decisao: Decisao
+    situacao: str
+    detalhe: str = ""
+
+
+def guid_valido(guid: str) -> bool:
+    """O código da parcela vai na URL da TES01508/TES01506: só aceita o formato de GUID."""
+    return bool(_RE_GUID.match(guid or ""))
+
+
+def provisoes_da_grade(linhas: list[dict[str, Any]] | None) -> list[ProvisaoSiga]:
+    """Provisões da Energisa a partir das linhas (texto) da grade da TES01501.
+
+    Linhas de outro fornecedor, sem código de parcela válido ou com valor ilegível ficam de fora.
+    """
+    provisoes = []
+    for linha in linhas or []:
+        if "ENERGISA" not in str(linha.get("fornecedor", "")).upper():
+            continue
+        valor = valor_br(linha.get("valor"))
+        guid = str(linha.get("guid", "")).strip()
+        if valor is None or valor <= 0 or not guid_valido(guid):
+            continue
+        provisoes.append(ProvisaoSiga(str(linha.get("numero", "")).strip(), valor,
+                                      str(linha.get("status", "")).strip(), guid,
+                                      str(linha.get("vencimento", "")).strip()))
+    return provisoes
+
+
+def periodo_de_vencimento(data_inicial: str, data_final: str) -> tuple[str, str] | None:
+    """Período de vencimento a consultar na TES01501 para os débitos de um extrato.
+
+    Cobre a mesma janela de `decidir_baixas`: de 40 dias antes do início a 5 dias depois do fim.
+    """
+    ini, fim = _data(data_inicial), _data(data_final)
+    if not ini or not fim:
+        return None
+    return ((ini - timedelta(days=_DIAS_ANTES_DO_DEBITO)).strftime("%d/%m/%Y"),
+            (fim + timedelta(days=_DIAS_DEPOIS_DO_DEBITO)).strftime("%d/%m/%Y"))
+
+
+def valor_siga(valor: float) -> str:
+    """Valor como o SIGA mostra nos campos ("1.234,56")."""
+    return moeda(valor).removeprefix("R$ ")
+
+
+def mesmo_documento(numero_tela: str, numero: str) -> bool:
+    """Nº Doc. da tela confere com o da provisão (o SIGA às vezes tira os zeros à esquerda)."""
+    return _mesmo_numero(numero_tela or "", numero or "")
 
 
 def _data(texto: str) -> datetime | None:

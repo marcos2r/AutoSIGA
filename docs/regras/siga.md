@@ -86,6 +86,40 @@ Usada para as faturas de energia.
 - Botões: **Novo** (Provisão TES01502, Adiantamento TES01512), **Filtros** (modal `form#f_main`: Tipo Período, Período, Fornecedor, Conta Provisão, Centro Custo, Valor Fatura, Agrupamento, Status da Fatura; botão Consultar), Imprimir, Pagos Rateio, **Manutenções** (Aprovar/Desaprovar em Lote, Baixar em Lote Agrupado/Individual).
 - Opções por linha: Visualizar, Estornar (TES01507), Imprimir, Anexos.
 - O bot usa esta tela para checar duplicidade e para a auditoria final das faturas.
+- **Ciclo da provisão** (levantado em 23/10/2026, só consulta): status **Lançado** → **Aprovado** → **Pago** (ou Pago Parcialmente). As opções por linha mudam com o status:
+  - Lançado: Visualizar, Editar (TES01505), Excluir (TES01504), **Aprovar (TES01508)**, Anexos;
+  - Aprovado: Desaprovar (TES01509), **Baixar (TES01506)**;
+  - Pago: Visualizar, Estornar (TES01507), Anexos.
+
+  Os links levam `?codigo=<GUID da parcela>`. As faturas de energia lançadas pelo AutoSIGA ficam como **Lançado**, então só podem ser baixadas depois de aprovadas. A TES01508 não foi aberta: pode aprovar no próprio carregamento da página.
+- Filtros (`form#f_main`): `f_tipodata` (Dt. Vcto, Dt. Emissão, Dt. Lcto, Dt. Pagamento), `f_data1`/`f_data2`, `f_fornecedor`, `f_contaprovisao`, `f_centrocusto`, `f_valorfatura1`/`f_valorfatura2`, `f_agrupamento`, `f_statusfatura` (Aprovado, Lançado, Pago, Pago Parcialmente).
+- Visualizar (modal TES01503): rateio (despesa 3006 - ENERGIA ELÉTRICA e centro de custo), pagamentos parciais (data, valor pago, multa, juros, desconto, total) e anexos. Não mostra a forma nem a conta de pagamento.
+
+## Como o extrato vira lançamento no SIGA (ADM, levantado em 23/10/2026)
+
+Cruzamento do OFX de maio/2026 de uma conta corrente da ADM com a grade da TES01701 (data e valor, um a um): 328 de 331 movimentos tinham par exato. O que cada movimento do banco vira:
+
+| Movimento no OFX (`MEMO`) | No SIGA (origem · histórico) | Quem lança hoje |
+|---|---|---|
+| `RECEBIMENTO PIX…` (ofertas) | OFERTA · DEPÓSITO/PIX - OFERTA | AutoSIGA (TXT na TES05602) |
+| `APLICACAO FINANCEIRA` / `RESG.APLIC…` | CAIXAS · APLICAÇÃO / RESGATE | AutoSIGA |
+| `LIQUIDACAO BOLETO…` (traz CNPJ e nome do beneficiário) | FATURA · NF … (baixa de provisão) | manual |
+| `PAGAMENTO PIX…` a fornecedor (traz CNPJ/CPF e nome) | FATURA · NF … (baixa) ou LANÇAM · PGTO.RECIBO | manual |
+| `DEB.CTA.FATURA-…` (fatura do cartão, 1 débito) | FATURA · PGTO FAT. CARTÃO, **uma baixa por compra** no mesmo dia, somando o débito | manual |
+| `DEBITO CONVENIOS-ENERGI 70 ID <código> ENERGISA…` | até jun/2026: CAIXAS · PGTO.GUIA ENERGISA; desde jul/2026: FATURA · NF (baixa da provisão) | manual |
+| `DEBITO ARRECADACAO-DARF…`, guias ISSQN/FGTS | LANÇAM · PGTO.GUIA | manual |
+| PIX/TED a pessoas (salário, férias) | LANÇAM · PGTO.RECIBO SALARIO/FERIAS | manual |
+| `TRANSF ENTRE CONTAS` / PIX de outra administração | TRANSF · TRANSF.VLR DOC | manual |
+
+- O `<código>` do débito de energia é o **código de débito automático da UC**, impresso na fatura ("DÉBITO AUTOMÁTICO UTILIZANDO O CÓDIGO: 0000000000-0"; sem o traço, é o ID do OFX).
+- Energia: as faturas das casas de oração são baixadas na conta corrente de **manutenção**, uma baixa por fatura, no dia do débito (dia 26); a da ADM, na conta regional, no vencimento (dia 22). De jul a set/2026, 80 faturas foram baixadas assim.
+- Lançamentos manuais às vezes ficam com data diferente da do banco (1 a 2 dias, fim de semana): a comparação de "sem par" precisa de tolerância de data.
+
+## TES01506 — Baixar provisão (formulário)
+
+- Cabeçalho só para leitura (lote, datas, documento, valor, conta provisão, fornecedor, parcela, vencimento). Campos da baixa: `#f_datapagamento` (obrigatório), `#f_valorapagar` (obrigatório, vem com o saldo), `#f_multa`, `#f_juros`, `#f_desconto` e `#f_total` calculado.
+- **Novo Pagamento** abre um modal: `#f_codigoFormaPgto` (11 Adiantamento, 2 Cheque, **9 Débito Automático**, 1 Dinheiro, 8 Pgto. Eletrônico, 14 PIX, 5 Transf. Bancária, 7 DOC, 6 TED), `#f_valorpagamento`, `#f_conta` (Conta de Pagamento: as 101 e 103 da localidade, carregadas depois de escolher a forma), `#f_historicobaixa` (ex.: 023 - PGTO.NF., 026 - PGTO.DUPL.), `#f_complementobaixa`; cheque, banco/agência/conta e nº do documento aparecem conforme a forma. **Inserir** põe o pagamento na grade (Forma, Conta, Valor) e **Confirmar** grava a baixa. Aceita anexo do comprovante (`#f_anexos`).
+- Uma provisão aceita vários pagamentos (parciais). Abrir o formulário e sair sem Confirmar não grava nada.
 
 ## TES05601 / TES05602 — Importação Extrato (front novo)
 

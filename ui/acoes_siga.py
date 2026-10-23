@@ -42,12 +42,13 @@ class AcoesSigaMixin:
             "update_status": self.atualizar_status,
             "update_progress": lambda val: self.after(0, lambda: self.progress_bar.set(val)),
             "show_message": lambda t, tit, m: self.after(0, lambda: self.exibir_mensagem_topo(t, tit, m)),
-            "request_authorization": lambda pend: self.after(0, lambda: self.mostrar_janela_lancamentos(pend)),
+            "request_authorization": lambda pend, ctx: self.after(0, lambda: self.mostrar_janela_lancamentos(pend, ctx)),
             "show_dashboard": lambda tel, t: self.after(0, lambda: self.mostrar_dashboard_produtividade(tel, t)),
             "on_finish": lambda: self.after(0, lambda: self.botao_conectar.configure(state="normal"))
         }
 
-        self.bot_instance = SigaBot(lote_valido, callbacks)
+        self.bot_instance = SigaBot(lote_valido, callbacks,
+                                    revisar_antes_de_lancar=self.config_manager.get_revisar_antes_de_lancar())
         threading.Thread(target=self.bot_instance.fluxo_automacao, daemon=True).start()
 
     def _montar_lote_extratos(self):

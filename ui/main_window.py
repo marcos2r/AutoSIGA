@@ -271,6 +271,14 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         )
         self.botao_importar_ofertas.grid(row=0, column=2, padx=5)
 
+        # Prévia opcional: desligada por padrão, para quem já confia no robô seguir sem pausas
+        self.var_revisar = ctk.BooleanVar(value=self.config_manager.get_revisar_antes_de_lancar())
+        ctk.CTkCheckBox(
+            self.frame_botoes, text="Revisar os lançamentos antes de gravar no SIGA", font=("Open Sans", 12),
+            variable=self.var_revisar,
+            command=lambda: self.config_manager.salvar_revisar_antes_de_lancar(self.var_revisar.get())
+        ).grid(row=1, column=0, columnspan=3, pady=(8, 0))
+
         # Barra de Progresso Geral do Lote
         self.progress_bar = ctk.CTkProgressBar(self, width=400, height=8, corner_radius=4, progress_color="#5CB85C", fg_color="#E0E0E0")
         self.progress_bar.pack(pady=(5, 5))

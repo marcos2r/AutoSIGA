@@ -19,6 +19,7 @@ CONCILIADO = "conciliado"
 PENDENTE = "pendente"
 CONTA_NAO_ENCONTRADA = "conta_nao_encontrada"
 MES_FECHADO = "mes_fechado"
+RECUSADO = "recusado"
 
 TOLERANCIA = 0.01
 
@@ -177,6 +178,8 @@ def resumo_resultado(r: ResultadoExtrato) -> tuple[str, str]:
         return "alerta", "⛔ Conta não encontrada no SIGA: nada lançado"
     if r.situacao == MES_FECHADO:
         return "neutro", f"— Mês fechado no SIGA: {r.pendentes} item(ns) pendente(s)"
+    if r.situacao == RECUSADO:
+        return "neutro", f"— Lançamento não autorizado por você: {r.pendentes} item(ns) pendente(s)"
     pendentes = f" · {r.pendentes} item(ns) pendente(s)" if r.pendentes else ""
     if r.saldo.status == CONFERE:
         return ("alerta" if r.pendentes else "ok"), f"✔ Saldo confere ({moeda(r.saldo.saldo_siga)}){pendentes}"

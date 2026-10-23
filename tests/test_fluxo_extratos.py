@@ -86,7 +86,8 @@ def _extrato(tipo_adm, conta, transacoes, aplicacao=False):
     }
 
 
-def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False, opcoes=None, saldos=None):
+def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False, opcoes=None, saldos=None,
+          revisar=False, responder=None):
     """Roda `fluxo_automacao` inteiro sem navegador e devolve o que aconteceu."""
     sem_espera = SimpleNamespace(sleep=lambda s: None, time=lambda: 0.0)
     monkeypatch.setattr(siga_bot, "time", sem_espera)
@@ -96,8 +97,14 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
         pass
     pagina = PaginaTesouraria(grades, opcoes, saldos)
     reg = SimpleNamespace(trocas=[], lancamentos=[], rendimentos=[], status=[], telemetria=None)
+    reg.previas = []
     callbacks = {"show_dashboard": lambda tel, t: setattr(reg, "telemetria", tel)}
-    bot = SigaBot(lote, callbacks=callbacks)
+    bot = SigaBot(lote, callbacks=callbacks, revisar_antes_de_lancar=revisar)
+    if responder:
+        def previa(pendentes, contexto):
+            reg.previas.append((pendentes, contexto))
+            responder(bot)
+        callbacks["request_authorization"] = previa
 
     monkeypatch.setattr(siga_bot, "sync_playwright", lambda: nullcontext(None))
     monkeypatch.setattr(bot, "_iniciar_navegador", lambda p: (SimpleNamespace(pages=[]), pagina))
@@ -272,3 +279,59 @@ def test_resultado_registra_conta_nao_encontrada_e_mes_fechado(monkeypatch):
 
     situacoes = {(r.conta_siga, r.situacao) for r in reg.telemetria["extratos"]}
     assert situacoes == {("10130", "mes_fechado"), ("10396", "mes_fechado"), ("10127", "conciliado")}
+
+
+class _EventoSemEspera:
+    """Event que não espera de verdade: só diz se já foi liberado."""
+
+    def __init__(self):
+        self.liberado = False
+
+    def clear(self):
+        self.liberado = False
+
+    def set(self):
+        self.liberado = True
+
+    def wait(self, timeout=None):
+        return self.liberado
+
+
+def test_previa_desligada_lanca_sem_perguntar(monkeypatch):
+    reg = _rodar(monkeypatch, [_extrato("DR", "10130", [RESG])], {},
+                 responder=lambda bot: bot.responder_autorizacao(False))
+
+    assert reg.previas == []
+    assert reg.lancamentos == [[RESG]]
+
+
+def test_previa_autorizada_lanca_e_mostra_a_conta(monkeypatch):
+    reg = _rodar(monkeypatch, [_extrato("DR", "10130", [RESG])], {}, revisar=True,
+                 responder=lambda bot: bot.responder_autorizacao(True))
+
+    assert reg.previas == [([RESG], {"conta": "10130", "localidade": "DR - CENTRAL"})]
+    assert reg.lancamentos == [[RESG]]
+
+
+def test_previa_recusada_nao_grava_e_segue_para_o_proximo(monkeypatch):
+    lote = [_extrato("DR", "10130", [RESG]), _extrato("PIA", "10127", [APLIC])]
+
+    reg = _rodar(monkeypatch, lote, {}, revisar=True, responder=lambda bot: bot.responder_autorizacao(False))
+
+    assert len(reg.previas) == 2
+    assert reg.lancamentos == []
+    assert reg.telemetria["pendentes"] == 2
+    assert {r.situacao for r in reg.telemetria["extratos"]} == {"recusado"}
+
+
+def test_fechar_o_navegador_durante_a_previa_nao_trava_nem_grava(monkeypatch):
+    def fechar(bot):
+        bot._evento_autorizacao = _EventoSemEspera()
+        bot.browser_aberto = False
+
+    reg = _rodar(monkeypatch, [_extrato("DR", "10130", [RESG]), _extrato("PIA", "10127", [APLIC])], {},
+                 revisar=True, responder=fechar)
+
+    assert reg.lancamentos == []
+    # O laço para no extrato seguinte porque o navegador foi fechado
+    assert len(reg.previas) == 1

@@ -347,3 +347,17 @@ class ConfigManager(ConfigEnergiaMixin, ConfigCatalogoMixin):
         config = self.get_config_data()
         config["usuario_siga"] = str(usuario).strip()
         self.save_config_data(config)
+
+    def get_revisar_antes_de_lancar(self):
+        """
+        Retorna se o robô deve mostrar a prévia e esperar autorização antes de gravar no SIGA.
+        """
+        return bool(self.get_config_data().get("revisar_antes_de_lancar", False))
+
+    def salvar_revisar_antes_de_lancar(self, ativo):
+        """
+        Persiste a preferência da prévia dos lançamentos.
+        """
+        config = self.get_config_data()
+        config["revisar_antes_de_lancar"] = bool(ativo)
+        self.save_config_data(config)

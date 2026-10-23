@@ -122,3 +122,9 @@ def test_resumo_de_cada_resultado():
         "neutro", "— Mês fechado no SIGA: 2 item(ns) pendente(s)")
     # Saldo confere, mas ficou algo pendente: não é "ok"
     assert resumo_resultado(_resultado("pendente", saldo=ResultadoSaldo(CONFERE, 1.0, 1.0), pendentes=1))[0] == "alerta"
+
+
+def test_resumo_de_extrato_nao_autorizado_na_previa():
+    from controllers.prova_real import resumo_resultado
+    assert resumo_resultado(_resultado("recusado", pendentes=3)) == (
+        "neutro", "— Lançamento não autorizado por você: 3 item(ns) pendente(s)")

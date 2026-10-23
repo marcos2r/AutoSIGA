@@ -7,6 +7,7 @@ formulários no portal web do SIGA.
 """
 
 import logging
+import threading
 import time
 import traceback
 
@@ -33,7 +34,7 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
     perguntas/alertas para a View (via callbacks), sem nunca importar nada de GUI.
     """
 
-    def __init__(self, lote_processados, callbacks, tipo_lote="extrato"):
+    def __init__(self, lote_processados, callbacks, tipo_lote="extrato", revisar_antes_de_lancar=False):
         """
         Inicializa a configuração do bot de automação em lote.
 
@@ -42,11 +43,12 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
             callbacks (dict): Dicionário de funções para acionar a UI. Possui:
                 - update_status(msg, color)
                 - show_message(tipo, titulo, msg)
-                - request_authorization(lancamentos_pendentes)
+                - request_authorization(lancamentos_pendentes, contexto) (só com a prévia ligada)
                 - show_dashboard(telemetria, tempo_inicio)
                 - on_finish()
                 - on_catalogo(catalogo) (só na descoberta de contas)
             tipo_lote (str): Tipo de lote ("extrato", "energia", "ofertas" ou "descoberta").
+            revisar_antes_de_lancar (bool): Mostra a prévia de cada extrato e só grava com autorização.
         """
         # Ordena o lote por localidade_selecionada para agrupar os lançamentos da mesma filial,
         # minimizando as trocas de localidade no portal SIGA.
@@ -58,8 +60,10 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
         self.tipo_lote = tipo_lote
         self.browser_aberto = False
         self._qtd_injecoes_efetuadas = 0
-        self.esperando_autorizacao = False
-        self.autorizou_importacao = False
+        self.revisar_antes_de_lancar = revisar_antes_de_lancar
+        # Prévia: a UI responde por responder_autorizacao(), que libera a thread do bot
+        self._evento_autorizacao = threading.Event()
+        self._autorizado = False
         self.faturas_energia_sucesso = []
         # (localidade, mm/aaaa) que o SIGA recusou nesta execução. Fica só em memória:
         # numa nova execução o mês pode ter sido reaberto, então tenta de novo.

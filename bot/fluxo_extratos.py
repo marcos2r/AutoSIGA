@@ -18,6 +18,7 @@ from controllers.prova_real import (
     DIVERGE,
     MES_FECHADO,
     PENDENTE,
+    RECUSADO,
     ResultadoExtrato,
     conferir_saldo,
     movimentos_do_banco,
@@ -146,9 +147,14 @@ class FluxoExtratosMixin:
         self.update_status(f"Cruzando {len(extrato_siga)} itens do SIGA com o OFX...", "#428BCA")
         novos_lancamentos = Conciliador.conciliar(dados.get("transacoes", []), extrato_siga)
 
-        pendentes, grade_atual = [], True
+        pendentes, grade_atual, recusado = [], True, False
         injecoes_antes = telemetria_lote["injecoes"]
-        if novos_lancamentos:
+        if novos_lancamentos and not self._pedir_autorizacao(novos_lancamentos, conta_alvo):
+            pendentes, recusado = novos_lancamentos, True
+            telemetria_lote["pendentes"] += len(pendentes)
+            self.update_status(f"⏭️ [{self.localidade_selecionada}] Lançamentos não autorizados: "
+                               f"{len(pendentes)} item(ns) ficaram pendentes.", "#F89406")
+        elif novos_lancamentos:
             pendentes, grade_atual = self._lancar_com_conferencia(page, novos_lancamentos, is_aplicacao,
                                                                   chave_competencia, telemetria_lote)
             if pendentes:
@@ -162,11 +168,36 @@ class FluxoExtratosMixin:
         if chave_competencia in self.competencias_fechadas:
             situacao, saldo, sobras = MES_FECHADO, nao_conferido("mês fechado no SIGA", dados.get("saldo_atual")), None
         else:
-            situacao = PENDENTE if pendentes else CONCILIADO
+            situacao = RECUSADO if recusado else (PENDENTE if pendentes else CONCILIADO)
             saldo, sobras = self._prova_real(page, dados, grade_atual)
         self._registrar_resultado(telemetria_lote, dados, conta_alvo, situacao,
                                   telemetria_lote["injecoes"] - injecoes_antes, len(pendentes), saldo, sobras)
         return True
+
+    def _pedir_autorizacao(self, pendentes, conta_siga):
+        """Com a prévia ligada, mostra os lançamentos e espera a resposta do usuário.
+
+        A espera é em fatias de 1 s para terminar como recusa se o navegador for fechado.
+
+        Returns:
+            bool: True para lançar; False se o usuário recusou ou o navegador foi fechado.
+        """
+        if not self.revisar_antes_de_lancar or "request_authorization" not in self.callbacks:
+            return True
+        self._autorizado = False
+        self._evento_autorizacao.clear()
+        self.update_status(f"⏸️ Aguardando sua revisão de {len(pendentes)} lançamento(s)...", "#F89406")
+        self.callbacks["request_authorization"](list(pendentes),
+                                                {"conta": conta_siga, "localidade": self.localidade_selecionada})
+        while not self._evento_autorizacao.wait(1):
+            if not self.browser_aberto:
+                return False
+        return self._autorizado
+
+    def responder_autorizacao(self, autorizado):
+        """Resposta da prévia vinda da UI: libera o bot para lançar ou pular o extrato."""
+        self._autorizado = bool(autorizado)
+        self._evento_autorizacao.set()
 
     def _prova_real(self, page, dados, grade_atual):
         """Confere o saldo final da grade com o do banco e procura lançamentos sem par.

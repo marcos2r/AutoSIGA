@@ -15,12 +15,12 @@ from ui import tema
 class DashboardMixin:
     """Janelas exibidas pela janela principal durante e após a automação."""
 
-    def mostrar_janela_lancamentos(self, lancamentos):
+    def mostrar_janela_lancamentos(self, lancamentos, contexto=None):
         """
-        Janela Modal que lista visualmente todas as pendências que o robô achou.
-        O robô (que está dormindo em Background) só acorda quando o usuário
-        clicar em Autorizar ou Cancelar.
+        Prévia (opcional) dos lançamentos que o robô vai gravar num extrato.
+        A thread do robô espera até o usuário lançar ou pular; fechar a janela é pular.
         """
+        contexto = contexto or {}
         janela = ctk.CTkToplevel(self)
         janela.title("Ação Necessária: Lançamentos Pendentes")
         janela.geometry("650x500")
@@ -31,7 +31,10 @@ class DashboardMixin:
         janela.grab_set() # Foca os cliques apenas neste modal
 
         lbl_titulo = ctk.CTkLabel(janela, text=f"Lançamentos a Importar ({len(lancamentos)})", font=self.fonte_titulo, text_color=self.cor_azul_header)
-        lbl_titulo.pack(pady=(20, 10))
+        lbl_titulo.pack(pady=(20, 2))
+        if contexto:
+            ctk.CTkLabel(janela, text=f"Conta {contexto.get('conta', '')} · {contexto.get('localidade', '')}",
+                         font=(tema.FONTE, 12), text_color=tema.CINZA_TEXTO).pack(pady=(0, 8))
 
         frame_scroll = ctk.CTkScrollableFrame(janela, width=600, height=300, fg_color="#F8F9FA", corner_radius=6)
         frame_scroll.pack(padx=20, pady=10, fill="both", expand=True)
@@ -53,23 +56,24 @@ class DashboardMixin:
         frame_botoes = ctk.CTkFrame(janela, fg_color="transparent")
         frame_botoes.pack(pady=15)
 
-        ctk.CTkButton(frame_botoes, text="Autorizar Lançamentos", command=lambda: self.autorizar_lancamentos(janela), fg_color="#5CB85C", hover_color="#4CAE4C", height=40).pack(side="left", padx=10)
-        ctk.CTkButton(frame_botoes, text="Cancelar", command=lambda: self.cancelar_lancamentos(janela), fg_color="#D9534F", hover_color="#C9302C", height=40).pack(side="right", padx=10)
+        ctk.CTkButton(frame_botoes, text=f"Lançar {len(lancamentos)} itens", command=lambda: self.autorizar_lancamentos(janela),
+                      fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, height=40).pack(side="left", padx=10)
+        ctk.CTkButton(frame_botoes, text="Pular este extrato", command=lambda: self.cancelar_lancamentos(janela),
+                      fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER, text_color=tema.CINZA_TEXTO,
+                      border_width=1, border_color=tema.CINZA_BORDA, height=40).pack(side="right", padx=10)
 
         janela.protocol("WM_DELETE_WINDOW", lambda: self.cancelar_lancamentos(janela))
 
     def autorizar_lancamentos(self, janela):
-        """Muda o semáforo permitindo que o Bot saia do loop e grave."""
+        """Libera o robô para gravar os lançamentos da prévia."""
         if self.bot_instance:
-            self.bot_instance.autorizou_importacao = True
-            self.bot_instance.esperando_autorizacao = False
+            self.bot_instance.responder_autorizacao(True)
         janela.destroy()
 
     def cancelar_lancamentos(self, janela):
-        """Sinaliza aborto para que o Bot jogue a Toalha e não grave nada."""
+        """Pula o extrato da prévia: o robô não grava nada nele e segue para o próximo."""
         if self.bot_instance:
-            self.bot_instance.autorizou_importacao = False
-            self.bot_instance.esperando_autorizacao = False
+            self.bot_instance.responder_autorizacao(False)
         janela.destroy()
 
     def _secao_prova_real(self, container, resultados):

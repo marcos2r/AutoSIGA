@@ -37,7 +37,7 @@ from models.indice_faturas_energia import montar_indice
 
 FORMA_DEBITO_AUTOMATICO = "9"
 HISTORICO_NF = "021"
-COMPLEMENTO_BAIXA = "Baixa automática AutoSIGA - débito automático"
+COMPLEMENTO_BAIXA = "Débito automático"
 
 # Linhas da grade #grid1 da TES01501, inclusive as das outras páginas do DataTable
 _JS_LER_PROVISOES = '''() => {

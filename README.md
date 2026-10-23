@@ -1,19 +1,19 @@
-# AutoSIGA v1.9.0 🚀
+# AutoSIGA v1.10.0 🚀
 
 **AutoSIGA** é um motor avançado de RPA (Robotic Process Automation) construído em Python, voltado para a automatização e conciliação de tesourarias baseadas nas regras IT.TES.05. Ele cruza digitalmente extratos bancários brutos (`.OFX`) com o painel contábil administrativo SIGA (Sistema de Informação e Gestão), injetando dados, poupando centenas de horas humanas e reduzindo a taxa de erros a zero.
 
 ## 🎯 Por que o AutoSIGA existe?
 A conciliação bancária entre múltiplas jurisdições (como a de Administração/Conta Corrente e de Ponto de Pregação/Fundo de Aplicação) no SIGA era uma tarefa manual, exaustiva e suscetível à desorganização humana. O AutoSIGA atua como um robô que enxerga o sistema exatamente como você.
 
-## ✨ Destaques da Versão v1.9.0
+## ✨ Destaques da Versão v1.10.0
 
-- **Prova Real do Saldo**: Ao terminar cada extrato, o robô lê o saldo final da conta na Caixas e Bancos (TES01701) e o compara com o saldo do banco (OFX da conta corrente ou XLS da aplicação). O painel do lote ganha a seção **Prova real**, com uma linha por extrato: "✔ Saldo confere", "⚠ Diferença de R$ X" ou "— Não conferido" com o motivo. A prova real só lê: nada é lançado, apagado ou corrigido no SIGA.
-- **Lançamentos do SIGA sem Par no Banco**: Além do que falta no SIGA, o robô passa a apontar o que sobra nele (lançamento duplicado, valor digitado errado, estorno esquecido), comparando data e valor um a um com o extrato. A lista aparece no painel e na nova aba **Prova Real** do Excel do lote.
-- **Extratos sem Lançamento Novo também São Conferidos**: Um extrato sem nada a lançar (ex: aplicação sem rendimento no mês) entra no lote só para a prova real do saldo. Com o filtro manual de datas, o saldo não é conferido, porque um período parcial não fecha com o saldo do mês.
-- **Nunca Lançar na Conta Errada**: Se a conta do card não aparece na lista da Caixas e Bancos da localidade, o extrato é pulado sem consulta e sem lançamento, e os itens ficam pendentes. Antes, o robô seguia e lançava na conta que já estava selecionada. A conta também passa a ser escolhida pelo código exato (`10130` não casa mais com `110130`), ignorando as inativas.
-- **Rendimento do Dia 31 sem Duplicidade**: No extrato XLS de aplicação, a consulta ia só até o dia 30, e o rendimento do dia 31 era lançado de novo; em fevereiro a data nem existia. Agora vale o último dia real do mês.
-- **Prévia Opcional dos Lançamentos**: Com a caixa **Revisar os lançamentos antes de gravar no SIGA** marcada (desligada por padrão), o robô mostra o que vai lançar em cada extrato, com a conta e a localidade, e só grava com **Lançar N itens**. **Pular este extrato** não grava nada.
-- **Extrato de Capital Social Identificado**: O extrato de Capital Social é recusado com a mensagem "ainda não é suportado", em vez de um erro confuso sobre colunas.
+- **Faturas de Energia Baixadas pelo Extrato**: Em cada extrato de conta corrente, o robô reconhece os débitos automáticos da Energisa e, antes de conciliar, aprova e baixa a fatura certa na Contas a Pagar: data do débito, forma Débito Automático, conta do extrato e histórico 021. Com isso, a conciliação e a prova real passam a encontrar a saída no SIGA. A opção **Baixar as faturas de energia debitadas no extrato** vem ligada.
+- **Três Chaves antes de Baixar**: O débito traz o código de débito automático da UC, o mesmo impresso no PDF da fatura. O robô só baixa quando o código, o valor e o número da fatura apontam para uma única fatura em aberto no SIGA. Empate, valor diferente (possível multa ou juros), débito estornado, fatura sem PDF ou não lançada viram pendência explicada, sem gravar nada. Fatura já paga não é baixada de novo.
+- **Prévia das Baixas**: Com **Revisar as baixas de energia antes de gravar** (ligada por padrão), o robô mostra as faturas que vai aprovar e baixar e só grava com **Aprovar e baixar N fatura(s)**.
+- **Cada Passo Conferido**: Antes de gravar, o robô confere na tela o número da fatura, o valor, a grade de pagamentos e o saldo restante. Depois de gravar, relê a Contas a Pagar para confirmar que a fatura ficou "Pago".
+- **Rastro no SIGA**: A aprovação grava no Motivo quem aprovou e a prova (valor, data, conta e código de débito do extrato), e a baixa leva o complemento "Débito automático".
+- **Painel e Excel**: O painel mostra, por extrato, quantas faturas foram baixadas e cada pendência com o motivo. O Excel ganha a aba **Baixas de Energia**.
+- **Prova Real com Tolerância de Data**: Um lançamento manual com até 3 dias de diferença do banco (fim de semana, feriado) deixa de aparecer como "sem par no banco".
 
 Histórico completo das versões em [docs/CHANGELOG.md](docs/CHANGELOG.md). Arquitetura em [docs/arquitetura.md](docs/arquitetura.md).
 

@@ -91,3 +91,23 @@ def test_montar_historico_ignora_nome_repetido():
     assert OfxReader._montar_historico("OFERTA", "") == "OFERTA"
     assert OfxReader._montar_historico("PIX RECEBIDO FULANO", "Fulano") == "PIX RECEBIDO FULANO"
     assert OfxReader._montar_historico("PIX", "Fulano") == "PIX - Fulano"
+
+def test_parse_ofx_data_saldo_do_ledgerbal():
+    fixture_path = os.path.join(os.path.dirname(__file__), "fixtures", "sample.ofx")
+    dados = OfxReader.parse_file(fixture_path)
+    # DTASOF do LEDGERBAL, não o DTEND da lista de transações
+    assert dados["data_saldo"] == "12/07/2026"
+
+
+def test_parse_ofx_sem_ledgerbal_deixa_saldo_none(tmp_path):
+    # Sem LEDGERBAL o banco não informou saldo: nada de 0.0, que pareceria um saldo real
+    inicio, fim = OFX_SICOOB.split("<LEDGERBAL>")
+    sem_saldo = inicio + fim.split("</LEDGERBAL>", 1)[1]
+    arquivo = tmp_path / "sem_saldo.ofx"
+    arquivo.write_bytes(sem_saldo.encode("cp1252"))
+
+    dados = OfxReader.parse_file(str(arquivo))
+
+    assert dados["saldo_atual"] is None
+    assert dados["data_saldo"] is None
+    assert len(dados["transacoes"]) == 3

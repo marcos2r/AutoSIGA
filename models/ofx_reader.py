@@ -35,7 +35,8 @@ class OfxReader:
                       "banco": str,
                       "conta_id": str,
                       "moeda": str,
-                      "saldo_atual": float,
+                      "saldo_atual": float ou None (LEDGERBAL/BALAMT),
+                      "data_saldo": str (DD/MM/YYYY) ou None (LEDGERBAL/DTASOF),
                       "data_inicial": str (DD/MM/YYYY),
                       "data_final": str (DD/MM/YYYY),
                       "transacoes": [
@@ -70,12 +71,18 @@ class OfxReader:
         if not extrato:
             raise ValueError("O extrato OFX não contém bloco de movimentações financeiras.")
 
+        # Sem LEDGERBAL o ofxparse não cria 'balance'; o saldo fica None e a prova real
+        # por saldo é dispensada, em vez de comparar com um zero que o banco não informou.
+        saldo = getattr(extrato, 'balance', None)
+        data_saldo = getattr(extrato, 'balance_date', None)
+
         # Consolida os cabeçalhos (metadados gerais da conta) em um dicionário simples
         dados_ofx: dict[str, Any] = {
             "banco": getattr(conta, 'routing_number', ''),
             "conta_id": getattr(conta, 'account_id', ''),
             "moeda": getattr(extrato, 'currency', ''),
-            "saldo_atual": float(extrato.balance) if hasattr(extrato, 'balance') else 0.0,
+            "saldo_atual": float(saldo) if saldo is not None else None,
+            "data_saldo": data_saldo.strftime("%d/%m/%Y") if saldo is not None and data_saldo else None,
             "data_inicial": extrato.start_date.strftime("%d/%m/%Y") if hasattr(extrato, 'start_date') and extrato.start_date else None,
             "data_final": extrato.end_date.strftime("%d/%m/%Y") if hasattr(extrato, 'end_date') and extrato.end_date else None,
             "transacoes": []

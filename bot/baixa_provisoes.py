@@ -20,16 +20,24 @@ from controllers.baixa_energia import (
     FALHOU,
     PAGO,
     ResultadoBaixa,
+    decidir_baixas,
     guid_valido,
+    ler_debitos,
     mesmo_documento,
+    motivo_aprovacao,
+    periodo_de_vencimento,
     provisoes_da_grade,
+    resultados_sem_execucao,
+    resumo_decisao,
     valor_siga,
 )
 from controllers.catalogo_contas import escolher_opcao_conta
 from controllers.prova_real import valor_br
+from models.indice_faturas_energia import montar_indice
 
 FORMA_DEBITO_AUTOMATICO = "9"
 HISTORICO_NF = "021"
+COMPLEMENTO_BAIXA = "Baixa automática AutoSIGA - débito automático"
 
 # Linhas da grade #grid1 da TES01501, inclusive as das outras páginas do DataTable
 _JS_LER_PROVISOES = '''() => {
@@ -140,11 +148,56 @@ class BaixaProvisoesMixin:
             self.esperar_loading(page)
         return provisoes_da_grade(page.evaluate(_JS_LER_PROVISOES))
 
+    def _etapa_baixas_energia(self, page, dados, conta_codigo):
+        """Baixa as faturas de energia debitadas num extrato de conta corrente, antes da conciliação.
+
+        Lê as provisões, decide com `decidir_baixas`, mostra a prévia (se ligada) e executa.
+
+        Returns:
+            tuple: (list[ResultadoBaixa] ou None se não há débito de energia ou a opção está
+            desligada, True se o SIGA avisou mês fechado).
+        """
+        if not self.baixar_energia or dados.get("tipo_extrato") == "APLICACAO":
+            return None, False
+        transacoes = dados.get("transacoes", [])
+        debitos, estornados = ler_debitos(transacoes)
+        if not debitos and not estornados:
+            return None, False
+        periodo = periodo_de_vencimento(dados.get("data_inicial", ""), dados.get("data_final", ""))
+        if periodo is None:
+            logging.warning("Extrato sem período: baixas de energia não verificadas.")
+            return None, False
+
+        if self._indice_energia is None:
+            self.update_status("Lendo as faturas de energia guardadas...", "#428BCA")
+            self._indice_energia = montar_indice()
+        decisoes = decidir_baixas(transacoes, self._indice_energia, self._ler_provisoes_energisa(page, periodo))
+        a_baixar = [d for d in decisoes if d.acao == BAIXAR]
+        if not a_baixar:
+            return resultados_sem_execucao(decisoes), False
+        previa = [{"data": d.debito.data, "valor": -d.debito.valor, "historico": resumo_decisao(d)[1][2:]}
+                  for d in a_baixar]
+        if not self._pedir_autorizacao(previa, conta_codigo, tipo="baixas"):
+            self.update_status(f"⏭️ Baixas de energia não autorizadas: {len(a_baixar)} fatura(s) pendente(s).",
+                               "#F89406")
+            return resultados_sem_execucao(decisoes), False
+
+        executados, mes_fechado = self._executar_baixas(page, decisoes, conta_codigo, periodo)
+        por_decisao = {id(r.decisao): r for r in executados}
+        motivo = "mês fechado no SIGA" if mes_fechado else "navegador fechado"
+        resultados = [por_decisao.get(id(d)) or ResultadoBaixa(d, FALHOU if d.acao == BAIXAR else d.acao,
+                                                                   motivo if d.acao == BAIXAR else d.motivo)
+                      for d in decisoes]
+        baixadas = sum(1 for r in resultados if r.situacao == BAIXADA)
+        self.update_status(f"⚡ {baixadas} de {len(a_baixar)} fatura(s) de energia baixada(s).",
+                           "#3C763D" if baixadas == len(a_baixar) else "#F89406")
+        return resultados, mes_fechado
+
     def _executar_baixas(self, page, decisoes, conta_codigo, periodo):
         """Aprova (se preciso) e baixa cada decisão BAIXAR e confere o status no fim.
 
-        Mês fechado interrompe tudo (propaga `MesFechadoError`); outro problema só
-        interrompe a fatura em que aconteceu.
+        Mês fechado interrompe as baixas seguintes; outro problema só interrompe a
+        fatura em que aconteceu.
 
         Args:
             page: Página do Playwright.
@@ -153,32 +206,41 @@ class BaixaProvisoesMixin:
             periodo: Período de vencimento para reler a TES01501.
 
         Returns:
-            list[ResultadoBaixa]: Um por decisão BAIXAR.
+            tuple: (list[ResultadoBaixa] das BAIXAR executadas, True se o SIGA avisou mês fechado).
         """
-        resultados = []
+        resultados, mes_fechado = [], False
         for decisao in [d for d in decisoes if d.acao == BAIXAR]:
             if not self.browser_aberto:
                 break
             aprovou = False
             try:
                 if decisao.precisa_aprovar:
-                    self._aprovar_provisao(page, decisao.provisao)
+                    self._aprovar_provisao(page, decisao.provisao, motivo_aprovacao(decisao, conta_codigo))
                     aprovou = True
                 self._baixar_provisao(page, decisao.provisao, decisao.debito.data, decisao.debito.valor,
                                       conta_codigo)
                 resultados.append(ResultadoBaixa(decisao, BAIXADA))
             except MesFechadoError:
-                raise
+                resultados.append(ResultadoBaixa(decisao, APROVADA_SEM_BAIXA if aprovou else FALHOU,
+                                                 "mês fechado no SIGA"))
+                mes_fechado = True
+                break
             except Exception as e:
                 logging.error(f"Baixa da fatura {decisao.provisao.numero} interrompida: {e}", exc_info=True)
                 self._capturar_tela_e_log(page, f"baixa_{decisao.provisao.numero}")
                 resultados.append(ResultadoBaixa(decisao, APROVADA_SEM_BAIXA if aprovou else FALHOU, str(e)))
-        return self._conferir_status(page, resultados, periodo) if resultados else resultados
+        if resultados:
+            resultados = self._conferir_status(page, resultados, periodo)
+        return resultados, mes_fechado
 
-    def _aprovar_provisao(self, page, provisao):
-        """Aprova a provisão na TES01508, depois de conferir número e valor na tela."""
+    def _aprovar_provisao(self, page, provisao, motivo):
+        """Aprova a provisão na TES01508, depois de conferir número e valor na tela.
+
+        O motivo identifica no histórico do SIGA que a aprovação foi do AutoSIGA e com qual prova.
+        """
         self.update_status(f"Aprovando a fatura {provisao.numero}...", "#428BCA")
         self._abrir_parcela(page, "TES01508", provisao)
+        self._preencher_campos(page, {"f_motivo": motivo})
         page.locator(_SUBMIT_FORMULARIO).first.click()
         self._depois_de_gravar(page)
 
@@ -209,7 +271,7 @@ class BaixaProvisoesMixin:
         if not historico:
             raise BaixaNaoConferidaError(f"histórico {HISTORICO_NF} não encontrado")
         self._escolher(page, "f_historicobaixa", historico, "histórico")
-        self._preencher_campos(page, {"f_valorpagamento": valor_siga(valor)})
+        self._preencher_campos(page, {"f_valorpagamento": valor_siga(valor), "f_complementobaixa": COMPLEMENTO_BAIXA})
         page.locator('#btn-confirmar').click()
         time.sleep(1)
 

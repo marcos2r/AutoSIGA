@@ -9,7 +9,10 @@ ao usuário, que decide o que fazer.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from controllers.baixa_energia import ResultadoBaixa
 
 CONFERE = "confere"
 DIVERGE = "diverge"
@@ -72,6 +75,7 @@ class ResultadoExtrato:
     pendentes: int = 0
     saldo: ResultadoSaldo = field(default_factory=lambda: ResultadoSaldo(NAO_CONFERIDO))
     sobras: list[MovimentoSiga] | None = None
+    baixas: list["ResultadoBaixa"] | None = None
 
 
 def valor_br(texto: Any) -> float | None:

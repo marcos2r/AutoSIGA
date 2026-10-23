@@ -131,3 +131,20 @@ def test_resumo_da_decisao():
     multa = decidir_baixas([_debito("26/08/2026", 140.15)], INDICE, [_prov("017000001", 133.48)])[0]
     nivel, texto = resumo_decisao(multa)
     assert nivel == "alerta" and "possível multa ou juros" in texto
+
+
+def test_linhas_do_painel_contam_baixadas_e_ja_pagas_e_listam_pendencias():
+    from controllers.baixa_energia import BAIXADA, FALHOU, ResultadoBaixa, linhas_do_painel
+
+    baixar = decidir_baixas([_debito("26/08/2026", 133.48)], INDICE, [_prov("017000001", 133.48)])[0]
+    paga = decidir_baixas([_debito("26/08/2026", 133.48)], INDICE, [_prov("017000001", 133.48, PAGO)])[0]
+    resultados = [ResultadoBaixa(baixar, BAIXADA), ResultadoBaixa(paga, JA_BAIXADA),
+                  ResultadoBaixa(baixar, FALHOU, "grade de pagamentos inesperada")]
+
+    linhas = linhas_do_painel(resultados)
+
+    assert linhas[0] == ("ok", "⚡ 1 fatura(s) de energia baixada(s)")
+    assert linhas[1][0] == "neutro" and "1 fatura(s) de energia já estavam pagas" in linhas[1][1]
+    assert linhas[2] == ("alerta", "⚠ 26/08/2026 · R$ 133,48 · fatura 017000001 não baixada: "
+                                   "grade de pagamentos inesperada")
+    assert linhas_do_painel(None) == []

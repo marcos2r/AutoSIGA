@@ -87,7 +87,7 @@ def _extrato(tipo_adm, conta, transacoes, aplicacao=False):
 
 
 def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False, opcoes=None, saldos=None,
-          revisar=False, responder=None):
+          revisar=False, responder=None, etapa_baixas=None):
     """Roda `fluxo_automacao` inteiro sem navegador e devolve o que aconteceu."""
     sem_espera = SimpleNamespace(sleep=lambda s: None, time=lambda: 0.0)
     monkeypatch.setattr(siga_bot, "time", sem_espera)
@@ -111,6 +111,8 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
     monkeypatch.setattr(bot, "_validar_sessao", lambda page: None)
     monkeypatch.setattr(bot, "_verificar_sessao_ativa", lambda page: None)
     monkeypatch.setattr(bot, "update_status", lambda msg, color=None: reg.status.append(msg))
+    if etapa_baixas:
+        monkeypatch.setattr(bot, "_etapa_baixas_energia", lambda page, dados, conta: etapa_baixas)
 
     def trocar(page, tipo, nome, mes):
         reg.trocas.append((tipo, nome, mes))
@@ -309,7 +311,7 @@ def test_previa_autorizada_lanca_e_mostra_a_conta(monkeypatch):
     reg = _rodar(monkeypatch, [_extrato("DR", "10130", [RESG])], {}, revisar=True,
                  responder=lambda bot: bot.responder_autorizacao(True))
 
-    assert reg.previas == [([RESG], {"conta": "10130", "localidade": "DR - CENTRAL"})]
+    assert reg.previas == [([RESG], {"conta": "10130", "tipo": "lancamentos", "localidade": "DR - CENTRAL"})]
     assert reg.lancamentos == [[RESG]]
 
 
@@ -335,3 +337,19 @@ def test_fechar_o_navegador_durante_a_previa_nao_trava_nem_grava(monkeypatch):
     assert reg.lancamentos == []
     # O laço para no extrato seguinte porque o navegador foi fechado
     assert len(reg.previas) == 1
+
+
+def test_baixas_de_energia_entram_no_resultado_do_extrato(monkeypatch):
+    baixas = ["resultado fictício"]
+
+    reg = _rodar(monkeypatch, [_extrato("DR", "10130", [RESG])], {}, etapa_baixas=(baixas, False))
+
+    assert reg.telemetria["extratos"][0].baixas == baixas
+    assert reg.lancamentos == [[RESG]]
+
+
+def test_mes_fechado_nas_baixas_pula_a_conciliacao(monkeypatch):
+    reg = _rodar(monkeypatch, [_extrato("DR", "10130", [RESG])], {}, etapa_baixas=([], True))
+
+    assert reg.lancamentos == []
+    assert [r.situacao for r in reg.telemetria["extratos"]] == ["mes_fechado"]

@@ -36,10 +36,11 @@ _DIAS_DEPOIS_DO_DEBITO = 5
 _RE_DEBITO_ENERGIA = re.compile(r"DEBITO\s+CONVENIOS-ENERGI.*?\bID\s*(\d+)", re.IGNORECASE)
 _RE_GUID = re.compile(r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$")
 
-# Resultado da execução de uma decisão BAIXAR no SIGA
+# Resultado da execução de uma decisão BAIXAR no SIGA (as outras decisões guardam a própria ação)
 BAIXADA = "baixada"
 APROVADA_SEM_BAIXA = "aprovada_sem_baixa"
 FALHOU = "falhou"
+NAO_AUTORIZADA = "nao_autorizada"
 
 
 @dataclass(frozen=True)
@@ -87,11 +88,22 @@ class Decisao:
 
 @dataclass(frozen=True)
 class ResultadoBaixa:
-    """O que aconteceu no SIGA com uma decisão BAIXAR."""
+    """O que aconteceu com um débito de energia do extrato.
+
+    `situacao` é BAIXADA, APROVADA_SEM_BAIXA, FALHOU ou NAO_AUTORIZADA para as decisões
+    BAIXAR; nas outras, é a própria ação da decisão (ex.: SEM_FATURA).
+    """
 
     decisao: Decisao
     situacao: str
     detalhe: str = ""
+
+
+def motivo_aprovacao(decisao: Decisao, conta_codigo: str) -> str:
+    """Motivo gravado na aprovação: quem aprovou e a prova (o débito do extrato)."""
+    d = decisao.debito
+    return (f"Aprovado automaticamente pelo AutoSIGA: débito automático de {moeda(d.valor)} em {d.data} "
+            f"no extrato da conta {conta_codigo} (código de débito {d.codigo}).")
 
 
 def guid_valido(guid: str) -> bool:
@@ -246,3 +258,41 @@ def resumo_decisao(d: Decisao) -> tuple[str, str]:
     if d.acao == JA_BAIXADA:
         return "neutro", f"✔ {base}{d.motivo}"
     return "alerta", f"⚠ {base}não baixada: {d.motivo}"
+
+
+def resultados_sem_execucao(decisoes: list[Decisao], situacao_baixar: str = NAO_AUTORIZADA) -> list[ResultadoBaixa]:
+    """Resultados das decisões que não passam pelo SIGA (e das BAIXAR não executadas)."""
+    return [ResultadoBaixa(d, situacao_baixar if d.acao == BAIXAR else d.acao, d.motivo) for d in decisoes]
+
+
+def resumo_baixa(r: ResultadoBaixa) -> tuple[str, str]:
+    """Nível e frase de um débito de energia depois da execução, para o painel e o Excel."""
+    d = r.decisao
+    base = f"{d.debito.data} · {moeda(d.debito.valor)} · "
+    fatura = f"fatura {d.provisao.numero}" if d.provisao else "fatura"
+    if r.situacao == BAIXADA:
+        return "ok", f"⚡ {base}{fatura} aprovada e baixada" if d.precisa_aprovar else f"⚡ {base}{fatura} baixada"
+    if r.situacao == APROVADA_SEM_BAIXA:
+        return "alerta", f"⚠ {base}{fatura} aprovada, baixa pendente: {r.detalhe}"
+    if r.situacao == FALHOU:
+        return "alerta", f"⚠ {base}{fatura} não baixada: {r.detalhe}"
+    if r.situacao == NAO_AUTORIZADA:
+        return "neutro", f"— {base}{fatura}: baixa não autorizada por você"
+    return resumo_decisao(d)
+
+
+def linhas_do_painel(resultados: list[ResultadoBaixa] | None) -> list[tuple[str, str]]:
+    """Linhas de baixa de um extrato no painel: o total baixado e cada pendência.
+
+    Faturas já pagas no SIGA (rodar o mesmo extrato de novo) entram só como contagem.
+    """
+    resultados = resultados or []
+    baixadas = sum(1 for r in resultados if r.situacao == BAIXADA)
+    ja_pagas = sum(1 for r in resultados if r.situacao == JA_BAIXADA)
+    linhas = []
+    if baixadas:
+        linhas.append(("ok", f"⚡ {baixadas} fatura(s) de energia baixada(s)"))
+    if ja_pagas:
+        linhas.append(("neutro", f"✔ {ja_pagas} fatura(s) de energia já estavam pagas no SIGA"))
+    linhas += [resumo_baixa(r) for r in resultados if r.situacao not in (BAIXADA, JA_BAIXADA)]
+    return linhas

@@ -131,12 +131,23 @@ class FluxoExtratosMixin:
         sufixo = f" ({mes_ano_alvo})" if mes_ano_alvo else ""
         self.update_status(f"✅ Logado em: {self.localidade_selecionada}{sufixo}", "#3C763D")
 
+        # Faturas de energia debitadas: baixadas antes, para a conciliação já encontrar a saída no SIGA
+        baixas, fechado = self._etapa_baixas_energia(page, dados, conta_alvo)
+        if fechado:
+            self.competencias_fechadas.add(chave_competencia)
+            telemetria_lote["pendentes"] += qtd
+            self._registrar_resultado(telemetria_lote, dados, conta_alvo, MES_FECHADO, pendentes=qtd,
+                                      saldo=nao_conferido("mês fechado no SIGA", dados.get("saldo_atual")),
+                                      baixas=baixas)
+            return True
+
         extrato_siga = self._abrir_consulta_tes01701(page, conta_alvo, dados.get("data_inicial", ""), data_final)
         if extrato_siga is None:
             # Sem a conta certa no filtro, consultar ou lançar cairia na conta que já estava selecionada
             telemetria_lote["pendentes"] += qtd
             self._registrar_resultado(telemetria_lote, dados, conta_alvo, CONTA_NAO_ENCONTRADA, pendentes=qtd,
-                                      saldo=nao_conferido("conta não encontrada no SIGA", dados.get("saldo_atual")))
+                                      saldo=nao_conferido("conta não encontrada no SIGA", dados.get("saldo_atual")),
+                                      baixas=baixas)
             self.update_status(f"⛔ Conta {conta_alvo or '(vazia)'} não encontrada em {self.localidade_selecionada}: "
                                f"extrato não lançado ({qtd} itens pendentes).", "#D9534F")
             self._atualizar_progresso(idx)
@@ -171,24 +182,31 @@ class FluxoExtratosMixin:
             situacao = RECUSADO if recusado else (PENDENTE if pendentes else CONCILIADO)
             saldo, sobras = self._prova_real(page, dados, grade_atual)
         self._registrar_resultado(telemetria_lote, dados, conta_alvo, situacao,
-                                  telemetria_lote["injecoes"] - injecoes_antes, len(pendentes), saldo, sobras)
+                                  telemetria_lote["injecoes"] - injecoes_antes, len(pendentes), saldo, sobras, baixas)
         return True
 
-    def _pedir_autorizacao(self, pendentes, conta_siga):
-        """Com a prévia ligada, mostra os lançamentos e espera a resposta do usuário.
+    def _pedir_autorizacao(self, pendentes, conta_siga, tipo="lancamentos"):
+        """Com a prévia ligada, mostra os lançamentos (ou as baixas) e espera a resposta do usuário.
 
         A espera é em fatias de 1 s para terminar como recusa se o navegador for fechado.
 
+        Args:
+            pendentes: Itens da prévia ({"data", "valor", "historico"/"descricao"}).
+            conta_siga: Conta do extrato, mostrada no topo da prévia.
+            tipo: "lancamentos" (prévia `revisar_antes_de_lancar`) ou "baixas" (`revisar_baixas`).
+
         Returns:
-            bool: True para lançar; False se o usuário recusou ou o navegador foi fechado.
+            bool: True para gravar; False se o usuário recusou ou o navegador foi fechado.
         """
-        if not self.revisar_antes_de_lancar or "request_authorization" not in self.callbacks:
+        revisar = self.revisar_baixas if tipo == "baixas" else self.revisar_antes_de_lancar
+        if not revisar or "request_authorization" not in self.callbacks:
             return True
         self._autorizado = False
         self._evento_autorizacao.clear()
-        self.update_status(f"⏸️ Aguardando sua revisão de {len(pendentes)} lançamento(s)...", "#F89406")
-        self.callbacks["request_authorization"](list(pendentes),
-                                                {"conta": conta_siga, "localidade": self.localidade_selecionada})
+        rotulo = "baixa(s) de energia" if tipo == "baixas" else "lançamento(s)"
+        self.update_status(f"⏸️ Aguardando sua revisão de {len(pendentes)} {rotulo}...", "#F89406")
+        self.callbacks["request_authorization"](list(pendentes), {"conta": conta_siga, "tipo": tipo,
+                                                                  "localidade": self.localidade_selecionada})
         while not self._evento_autorizacao.wait(1):
             if not self.browser_aberto:
                 return False
@@ -236,12 +254,12 @@ class FluxoExtratosMixin:
         return saldo, sobras
 
     def _registrar_resultado(self, telemetria_lote, dados, conta_siga, situacao, lancados=0, pendentes=0,
-                             saldo=None, sobras=None):
+                             saldo=None, sobras=None, baixas=None):
         """Guarda o resultado do extrato em `telemetria_lote["extratos"]` para o painel e o Excel."""
         resultado = ResultadoExtrato(
             conta_id=str(dados.get("conta_id", "")), conta_siga=conta_siga or "",
             localidade=dados.get("localidade_selecionada", ""), tipo=dados.get("tipo_extrato", ""),
-            situacao=situacao, lancados=lancados, pendentes=pendentes, sobras=sobras)
+            situacao=situacao, lancados=lancados, pendentes=pendentes, sobras=sobras, baixas=baixas)
         if saldo is not None:
             resultado.saldo = saldo
         telemetria_lote.setdefault("extratos", []).append(resultado)

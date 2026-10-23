@@ -4,14 +4,15 @@ import pytest
 from bot_falso import PaginaGravadora, criar_bot
 
 import bot.baixa_provisoes as bp
-from bot.extratos import MesFechadoError
 from controllers.baixa_energia import (
     APROVADA_SEM_BAIXA,
     APROVADO,
     BAIXADA,
     BAIXAR,
     FALHOU,
+    JA_BAIXADA,
     LANCADO,
+    NAO_AUTORIZADA,
     PAGO,
     SEM_FATURA,
     DebitoEnergia,
@@ -21,6 +22,7 @@ from controllers.baixa_energia import (
     provisoes_da_grade,
     valor_siga,
 )
+from models.indice_faturas_energia import FaturaEnergia
 
 GUID = "C2911CC0-0000-4D59-89EF-000000000001"
 GUID_2 = "C2911CC0-0000-4D59-89EF-000000000002"
@@ -82,6 +84,11 @@ def _decisao(status=LANCADO, guid=GUID, acao=BAIXAR):
     return Decisao(DebitoEnergia("26/08/2026", 224.25, "00012345678"), acao, "fatura 018000001", None, provisao)
 
 
+def _executar(bot, pagina, decisoes, conta, periodo):
+    resultados, _ = bot._executar_baixas(pagina, decisoes, conta, periodo)
+    return resultados
+
+
 def _bot(monkeypatch):
     bot, reg = criar_bot(monkeypatch, bp, "extrato")
     return bot, reg
@@ -91,13 +98,16 @@ def test_aprova_e_baixa_com_debito_automatico_na_conta_do_extrato(monkeypatch):
     bot, reg = _bot(monkeypatch)
     pagina = PaginaBaixa()
 
-    resultados = bot._executar_baixas(pagina, [_decisao()], "10123", PERIODO)
+    resultados = _executar(bot, pagina, [_decisao()], "10123", PERIODO)
 
     assert [r.situacao for r in resultados] == [BAIXADA]
     assert pagina.visitas == [f"https://siga.exemplo/TES/TES01508.aspx?codigo={GUID}",
                               f"https://siga.exemplo/TES/TES01506.aspx?codigo={GUID}"]
     assert pagina.escolhas == [("f_codigoFormaPgto", "9"), ("f_conta", "901"), ("f_historicobaixa", "21")]
-    assert reg.campos == [{"f_valorpagamento": "224,25"}]
+    assert reg.campos == [
+        {"f_motivo": "Aprovado automaticamente pelo AutoSIGA: débito automático de R$ 224,25 em 26/08/2026 "
+                     "no extrato da conta 10123 (código de débito 00012345678)."},
+        {"f_valorpagamento": "224,25", "f_complementobaixa": bp.COMPLEMENTO_BAIXA}]
     # Aprovar, Novo Pagamento, Inserir e Confirmar, nessa ordem, e a TES01501 relida no fim
     assert pagina.cliques() == [bp._SUBMIT_FORMULARIO, "#btn-novo-pagamento", "#btn-confirmar", bp._SUBMIT_FORMULARIO,
                                 "#btn_executar_programa"]
@@ -108,7 +118,7 @@ def test_provisao_ja_aprovada_so_e_baixada(monkeypatch):
     bot, reg = _bot(monkeypatch)
     pagina = PaginaBaixa()
 
-    bot._executar_baixas(pagina, [_decisao(APROVADO)], "10123", PERIODO)
+    _executar(bot, pagina, [_decisao(APROVADO)], "10123", PERIODO)
 
     assert [u.split("/")[-1].split("?")[0] for u in pagina.visitas] == ["TES01506.aspx"]
     assert reg.gravacoes == 1
@@ -118,7 +128,7 @@ def test_so_executa_decisoes_baixar(monkeypatch):
     bot, reg = _bot(monkeypatch)
     pagina = PaginaBaixa()
 
-    assert bot._executar_baixas(pagina, [_decisao(acao=SEM_FATURA)], "10123", PERIODO) == []
+    assert _executar(bot, pagina, [_decisao(acao=SEM_FATURA)], "10123", PERIODO) == []
     assert pagina.visitas == [] and reg.gravacoes == 0
 
 
@@ -129,7 +139,7 @@ def test_so_executa_decisoes_baixar(monkeypatch):
 def test_tela_diferente_nao_aprova_nem_baixa(monkeypatch, pagina, motivo):
     bot, reg = _bot(monkeypatch)
 
-    resultados = bot._executar_baixas(pagina, [_decisao()], "10123", PERIODO)
+    resultados = _executar(bot, pagina, [_decisao()], "10123", PERIODO)
 
     assert resultados[0].situacao == FALHOU and motivo in resultados[0].detalhe
     assert reg.gravacoes == 0
@@ -146,7 +156,7 @@ def test_tela_diferente_nao_aprova_nem_baixa(monkeypatch, pagina, motivo):
 def test_baixa_nao_confirma_se_a_grade_de_pagamentos_nao_bate(monkeypatch, pagina):
     bot, reg = _bot(monkeypatch)
 
-    resultados = bot._executar_baixas(pagina, [_decisao()], "10123", PERIODO)
+    resultados = _executar(bot, pagina, [_decisao()], "10123", PERIODO)
 
     # Aprovou (1 gravação), mas não clicou em Confirmar na baixa
     assert reg.gravacoes == 1
@@ -158,7 +168,7 @@ def test_aprovada_e_baixa_falhou_fica_registrada(monkeypatch):
     bot, _ = _bot(monkeypatch)
     pagina = PaginaBaixa(pagamentos=[], status_final=APROVADO)
 
-    resultados = bot._executar_baixas(pagina, [_decisao()], "10123", PERIODO)
+    resultados = _executar(bot, pagina, [_decisao()], "10123", PERIODO)
 
     assert resultados[0].situacao == APROVADA_SEM_BAIXA
 
@@ -167,7 +177,7 @@ def test_conta_que_nao_aparece_na_baixa_nao_e_trocada_por_outra(monkeypatch):
     bot, reg = _bot(monkeypatch)
     pagina = PaginaBaixa()
 
-    resultados = bot._executar_baixas(pagina, [_decisao(APROVADO)], "10999", PERIODO)
+    resultados = _executar(bot, pagina, [_decisao(APROVADO)], "10999", PERIODO)
 
     assert resultados[0].situacao == FALHOU and "10999" in resultados[0].detalhe
     assert ("f_conta", "900") not in pagina.escolhas and reg.gravacoes == 0
@@ -177,23 +187,26 @@ def test_gravou_mas_nao_ficou_pago_vira_falha(monkeypatch):
     bot, _ = _bot(monkeypatch)
     pagina = PaginaBaixa(status_final=APROVADO)
 
-    resultados = bot._executar_baixas(pagina, [_decisao()], "10123", PERIODO)
+    resultados = _executar(bot, pagina, [_decisao()], "10123", PERIODO)
 
     assert resultados[0].situacao == FALHOU and "Aprovado" in resultados[0].detalhe
 
 
-def test_mes_fechado_interrompe_o_lote(monkeypatch):
-    bot, _ = _bot(monkeypatch)
+def test_mes_fechado_interrompe_as_baixas_seguintes(monkeypatch):
+    bot, reg = _bot(monkeypatch)
 
-    with pytest.raises(MesFechadoError):
-        bot._executar_baixas(PaginaBaixa(mes_fechado=True), [_decisao(), _decisao(guid=GUID_2)], "10123", PERIODO)
+    resultados, fechado = bot._executar_baixas(PaginaBaixa(mes_fechado=True), [_decisao(), _decisao(guid=GUID_2)],
+                                               "10123", PERIODO)
+
+    assert fechado and len(resultados) == 1
+    assert resultados[0].situacao == FALHOU and "mês fechado" in resultados[0].detalhe
 
 
 def test_codigo_de_parcela_invalido_nao_vira_url(monkeypatch):
     bot, _ = _bot(monkeypatch)
     pagina = PaginaBaixa()
 
-    resultados = bot._executar_baixas(pagina, [_decisao(guid="x' onload='1")], "10123", PERIODO)
+    resultados = _executar(bot, pagina, [_decisao(guid="x' onload='1")], "10123", PERIODO)
 
     assert pagina.visitas == [] and resultados[0].situacao == FALHOU
 
@@ -212,3 +225,80 @@ def test_periodo_de_vencimento_e_valor_no_formato_do_siga():
     assert periodo_de_vencimento("01/08/2026", "31/08/2026") == ("22/06/2026", "05/09/2026")
     assert periodo_de_vencimento("", "31/08/2026") is None
     assert valor_siga(1234.5) == "1.234,50"
+
+
+# --- Etapa de baixas dentro do lote de extratos ---
+
+COD = "00012345678"
+INDICE = {COD: [FaturaEnergia("018000001", "1.234.567.051-00", 224.25, "26/08/2026", COD)]}
+DEBITO = {"data": "26/08/2026", "valor": -224.25, "descricao": f"DEBITO CONVENIOS-ENERGI 70 ID {COD} ENERGISA MS"}
+SEM_PAR = {"data": "26/08/2026", "valor": -10.0, "descricao": "DEBITO CONVENIOS-ENERGI 70 ID 00099999999 ENERGISA"}
+
+
+def _extrato(transacoes, tipo="CORRENTE"):
+    return {"tipo_extrato": tipo, "data_inicial": "01/08/2026", "data_final": "31/08/2026",
+            "transacoes": transacoes}
+
+
+def _bot_lote(monkeypatch, autorizar=None, provisoes=None):
+    bot, reg = _bot(monkeypatch)
+    bot.baixar_energia = True
+    bot._indice_energia = INDICE
+    lidas = []
+
+    def ler(page, periodo):
+        # A segunda leitura é a conferência depois de gravar: a fatura já aparece paga
+        lidas.append(periodo)
+        status = PAGO if len(lidas) > 1 else LANCADO
+        return provisoes if provisoes is not None else [ProvisaoSiga("018000001", 224.25, status, GUID)]
+
+    monkeypatch.setattr(bot, "_ler_provisoes_energisa", ler)
+    reg.previas, reg.lidas = [], lidas
+    if autorizar is not None:
+        def previa(itens, contexto):
+            reg.previas.append((itens, contexto))
+            bot.responder_autorizacao(autorizar)
+        bot.callbacks["request_authorization"] = previa
+    return bot, reg
+
+
+def test_etapa_desligada_ou_sem_debito_de_energia_nao_abre_a_contas_a_pagar(monkeypatch):
+    bot, reg = _bot_lote(monkeypatch)
+    assert bot._etapa_baixas_energia(PaginaBaixa(), _extrato([DEBITO], "APLICACAO"), "10123") == (None, False)
+    assert bot._etapa_baixas_energia(PaginaBaixa(), _extrato([{"data": "01/08/2026", "valor": -5.0,
+                                                               "descricao": "TARIFA"}]), "10123") == (None, False)
+    bot.baixar_energia = False
+    assert bot._etapa_baixas_energia(PaginaBaixa(), _extrato([DEBITO]), "10123") == (None, False)
+    assert reg.lidas == []
+
+
+def test_etapa_com_previa_autorizada_baixa_e_lista_a_pendencia(monkeypatch):
+    bot, reg = _bot_lote(monkeypatch, autorizar=True)
+
+    resultados, fechado = bot._etapa_baixas_energia(PaginaBaixa(), _extrato([DEBITO, SEM_PAR]), "10123")
+
+    assert not fechado
+    assert [r.situacao for r in resultados] == [BAIXADA, SEM_FATURA]
+    itens, contexto = reg.previas[0]
+    assert contexto["tipo"] == "baixas" and len(itens) == 1
+    assert itens[0]["valor"] == -224.25 and "aprovar e baixar fatura 018000001" in itens[0]["historico"]
+    assert reg.lidas == [("22/06/2026", "05/09/2026")] * 2
+
+
+def test_etapa_com_previa_recusada_nao_grava(monkeypatch):
+    bot, reg = _bot_lote(monkeypatch, autorizar=False)
+    pagina = PaginaBaixa()
+
+    resultados, _ = bot._etapa_baixas_energia(pagina, _extrato([DEBITO]), "10123")
+
+    assert [r.situacao for r in resultados] == [NAO_AUTORIZADA]
+    assert pagina.visitas == [] and reg.gravacoes == 0
+
+
+def test_etapa_sem_nada_a_baixar_nao_pede_previa(monkeypatch):
+    bot, reg = _bot_lote(monkeypatch, autorizar=True, provisoes=[ProvisaoSiga("018000001", 224.25, PAGO, GUID)])
+
+    resultados, _ = bot._etapa_baixas_energia(PaginaBaixa(), _extrato([DEBITO]), "10123")
+
+    assert [r.situacao for r in resultados] == [JA_BAIXADA]
+    assert reg.previas == []

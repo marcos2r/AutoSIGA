@@ -5,6 +5,21 @@ Fluxos de extratos bancários do SigaBot (TES01701/TES01703/TES01704).
 import logging
 import time
 
+from controllers.catalogo_contas import escolher_opcao_conta
+
+# Contas de origem/destino da TES01704: só carregam depois que a Forma Transferência muda
+_JS_OPCOES_CONTA = '''(id) => Array.from(document.querySelectorAll('select#' + id + ' option')).map(o => ({
+    texto: o.textContent.trim(), valor: o.value, inativa: o.disabled
+}))'''
+_JS_RECARREGAR_CONTAS = "() => { if (window.jQuery) window.jQuery('#f_formapagamento').trigger('change'); }"
+_JS_ESCOLHER_CONTA = '''([id, valor]) => {
+    const campo = document.getElementById(id);
+    if (!campo || !window.jQuery || !Array.from(campo.options).some(o => o.value === valor)) return false;
+    window.jQuery('#' + id).val(valor).trigger('change');
+    return true;
+}'''
+_ESPERA_CONTAS_S = 10
+
 
 class MesFechadoError(Exception):
     """O SIGA recusou o lançamento porque a competência da localidade está fechada."""
@@ -109,8 +124,8 @@ class ExtratosMixin:
                     str_orig = conta_corrente
                     str_dest = conta_aplicacao
 
-                self.selecionar_select2(page, "f_contaorigem", str_orig, dropdown_is_ajax=True)
-                self.selecionar_select2(page, "f_conta", str_dest, dropdown_is_ajax=True)
+                self._escolher_conta_movimentacao(page, "f_contaorigem", str_orig)
+                self._escolher_conta_movimentacao(page, "f_conta", str_dest)
 
                 # 002: Lançamento padrão Aplicação, 031: Lançamento padrão Resgate
                 codigo_historico = "002" if tx["valor"] < 0 else "031"
@@ -161,6 +176,34 @@ class ExtratosMixin:
             logging.error(f"Erro inserindo lançamentos: {e}", exc_info=True)
             self._capturar_tela_e_log(page, "erro_inserir_lancamentos")
             self.update_status(f"Falha na inserção: {e}", "#D9534F")
+
+    def _escolher_conta_movimentacao(self, page, campo, codigo):
+        """Escolhe a conta da TES01704 pelo código exato.
+
+        As listas de origem e destino nascem vazias e o SIGA só as preenche (via AJAX) quando a
+        Forma Transferência muda. Pesquisar no Select2 antes disso falha; por isso espera as
+        opções, dispara o carregamento de novo se elas não vierem e escolhe pelo `value`.
+
+        Args:
+            page: Página do Playwright.
+            campo: `f_contaorigem` ou `f_conta`.
+            codigo: Código reduzido da conta (ex.: "10313").
+
+        Raises:
+            RuntimeError: A conta não aparece na lista depois de duas cargas.
+        """
+        for tentativa in range(2):
+            for _ in range(_ESPERA_CONTAS_S * 2):
+                valor = escolher_opcao_conta(page.evaluate(_JS_OPCOES_CONTA, campo) or [], codigo)
+                if valor and page.evaluate(_JS_ESCOLHER_CONTA, [campo, valor]):
+                    time.sleep(0.5)
+                    return
+                time.sleep(0.5)
+            if tentativa == 0:
+                logging.info(f"Contas de '{campo}' não carregaram; disparando a Forma Transferência de novo.")
+                page.evaluate(_JS_RECARREGAR_CONTAS)
+        self._capturar_tela_e_log(page, f"conta_{campo}")
+        raise RuntimeError(f"A conta {codigo} não aparece em '{campo}' na Movimentação Interna (TES01704).")
 
     def inserir_rendimentos_siga(self, page, lancamentos):
         """

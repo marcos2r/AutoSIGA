@@ -5,6 +5,30 @@ import bot.extratos as extratos
 DADOS = {"conta_siga_corrente": "10130", "conta_siga_aplicacao": "10230"}
 
 
+class PaginaMovimentacao(PaginaGravadora):
+    """TES01704 falsa: as contas só aparecem depois de `carregar_apos` leituras (AJAX da forma)."""
+
+    def __init__(self, contas=("10130", "10230"), carregar_apos=0, recarregar=False):
+        super().__init__()
+        self.contas, self.carregar_apos, self.recarregar = contas, carregar_apos, recarregar
+        self.leituras, self.escolhas, self.recargas = 0, [], 0
+
+    def evaluate(self, script, arg=None):
+        if script == extratos._JS_OPCOES_CONTA:
+            self.leituras += 1
+            if self.leituras <= self.carregar_apos or (self.recarregar and not self.recargas):
+                return [{"texto": "* Selecione *", "valor": "", "inativa": False}]
+            return [{"texto": "101 - BANCOS", "valor": "15", "inativa": True}] + [
+                {"texto": f" {c} - SICREDI", "valor": f"v{c}", "inativa": False} for c in self.contas]
+        if script == extratos._JS_ESCOLHER_CONTA:
+            self.escolhas.append(tuple(arg))
+            return True
+        if script == extratos._JS_RECARREGAR_CONTAS:
+            self.recargas += 1
+            return None
+        return super().evaluate(script, arg)
+
+
 def _lancamentos():
     return [
         {"valor": -200.0, "descricao": "APLIC FINANCEIRA", "data": "05/08/2026"},
@@ -14,17 +38,14 @@ def _lancamentos():
 
 def test_resgate_vem_primeiro_e_inverte_origem_e_destino(monkeypatch):
     bot, reg = criar_bot(monkeypatch, extratos, "extrato", DADOS)
-    pagina = PaginaGravadora()
+    pagina = PaginaMovimentacao()
 
     bot.inserir_lancamentos_siga(pagina, _lancamentos())
 
-    contas = [(c, t) for c, t in reg.select2 if c in ("f_contaorigem", "f_conta", "f_historico")]
-    assert contas == [
-        # Resgate: sai da aplicação para a corrente, histórico 031
-        ("f_contaorigem", "10230"), ("f_conta", "10130"), ("f_historico", "031"),
-        # Aplicação: sai da corrente para a aplicação, histórico 002
-        ("f_contaorigem", "10130"), ("f_conta", "10230"), ("f_historico", "002"),
-    ]
+    # Resgate: sai da aplicação para a corrente; aplicação: da corrente para a aplicação
+    assert pagina.escolhas == [("f_contaorigem", "v10230"), ("f_conta", "v10130"),
+                               ("f_contaorigem", "v10130"), ("f_conta", "v10230")]
+    assert [t for c, t in reg.select2 if c == "f_historico"] == ["031", "002"]
     assert pagina.valores("#f_valor") == ["1500,50", "200,00"]
     assert reg.campos[0]["f_complemento"] == "RESGATE - RESGATE"
     assert bot._qtd_injecoes_efetuadas == 2
@@ -32,7 +53,7 @@ def test_resgate_vem_primeiro_e_inverte_origem_e_destino(monkeypatch):
 
 def test_abre_a_rotina_uma_vez_e_salva_e_novo_ate_o_ultimo(monkeypatch):
     bot, reg = criar_bot(monkeypatch, extratos, "extrato", DADOS)
-    pagina = PaginaGravadora()
+    pagina = PaginaMovimentacao()
 
     bot.inserir_lancamentos_siga(pagina, _lancamentos())
 
@@ -65,6 +86,40 @@ def test_falha_no_select2_gera_captura_e_status_sem_propagar(monkeypatch):
     assert reg.capturas == ["erro_inserir_lancamentos"]
     assert "Select2 travado" in reg.status[-1]
     assert bot._qtd_injecoes_efetuadas == 0
+
+
+def test_espera_as_contas_carregarem_depois_da_forma(monkeypatch):
+    bot, reg = criar_bot(monkeypatch, extratos, "extrato", DADOS)
+    pagina = PaginaMovimentacao(carregar_apos=3)
+
+    bot.inserir_lancamentos_siga(pagina, _lancamentos()[:1])
+
+    assert pagina.escolhas == [("f_contaorigem", "v10130"), ("f_conta", "v10230")]
+    assert pagina.recargas == 0 and reg.gravacoes == 1
+
+
+def test_dispara_a_forma_de_novo_se_as_contas_nao_carregam(monkeypatch):
+    # No SIGA real (23/10/2026) a lista ficou vazia mesmo com a forma escolhida
+    bot, reg = criar_bot(monkeypatch, extratos, "extrato", DADOS)
+    pagina = PaginaMovimentacao(recarregar=True)
+
+    bot.inserir_lancamentos_siga(pagina, _lancamentos()[:1])
+
+    assert pagina.recargas == 1
+    assert pagina.escolhas == [("f_contaorigem", "v10130"), ("f_conta", "v10230")]
+    assert reg.gravacoes == 1
+
+
+def test_conta_fora_da_lista_nao_grava_e_nao_escolhe_parecida(monkeypatch):
+    # "110130" contém "10130", mas não é a mesma conta
+    bot, reg = criar_bot(monkeypatch, extratos, "extrato", DADOS)
+    pagina = PaginaMovimentacao(contas=("110130", "10230"))
+
+    bot.inserir_lancamentos_siga(pagina, _lancamentos()[:1])
+
+    assert pagina.escolhas == [] and reg.gravacoes == 0
+    assert reg.capturas == ["conta_f_contaorigem", "erro_inserir_lancamentos"]
+    assert "10130" in reg.status[-1]
 
 
 def test_rendimentos_em_ordem_de_data_na_conta_de_aplicacao(monkeypatch):

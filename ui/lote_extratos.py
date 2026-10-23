@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox
 from controllers.exportador import Exportador
 from models.ofx_reader import OfxReader
 from models.xls_reader import XlsReader
+from ui import tema
 from ui.card_conta_extrato import CardContaExtrato
 
 
@@ -83,10 +84,12 @@ class LoteExtratosMixin:
         if self.dados_processados_lote:
             self.lbl_no_data.pack_forget()
 
-            # Instancia os novos cards roláveis para cada conta
+            # Instancia os novos cards roláveis para cada conta, já com as sugestões do catálogo
+            catalogo = self.config_manager.get_catalogo()
             for dados in self.dados_processados_lote:
                 card = CardContaExtrato(
-                    self.scroll_lote, dados, self.config_manager, self.validar_lote_e_atualizar_botoes
+                    self.scroll_lote, dados, self.config_manager, self.validar_lote_e_atualizar_botoes,
+                    catalogo=catalogo
                 )
                 card.pack(fill="x", padx=5, pady=5)
                 self.cards_lote.append(card)
@@ -106,6 +109,7 @@ class LoteExtratosMixin:
             self.botao_conectar.configure(state="disabled")
             self.botao_gerar_txt.configure(state="disabled")
             self.botao_importar_ofertas.configure(state="disabled")
+            self.atualizar_faixa_catalogo()
             self.atualizar_status("Nenhum arquivo carregado com sucesso.", "#D9534F")
 
     def resetar_lote(self, event=None):
@@ -120,6 +124,7 @@ class LoteExtratosMixin:
         self.botao_gerar_txt.configure(state="disabled")
         self.botao_importar_ofertas.configure(state="disabled")
         self.progress_bar.set(0.0)
+        self.atualizar_faixa_catalogo()
         self.atualizar_status("Lote limpo com sucesso. Aguardando novos arquivos.", "#666666")
 
     def processar_ofx(self, caminho):
@@ -128,25 +133,22 @@ class LoteExtratosMixin:
 
     def validar_lote_e_atualizar_botoes(self):
         """Verifica se todos os cards do lote estão mapeados e gerencia a ativação dos botões."""
+        self.atualizar_faixa_catalogo()
         if not self.cards_lote:
             self.botao_conectar.configure(state="disabled")
             self.botao_gerar_txt.configure(state="disabled")
             self.botao_importar_ofertas.configure(state="disabled")
             return
 
-        todos_validos = True
-        for card in self.cards_lote:
-            info = card.obter_dados_mapeados()
-            if not info["valido"]:
-                todos_validos = False
-                break
-
-        if todos_validos:
+        # Só um card confirmado e consistente com o catálogo libera a conciliação
+        pendentes = [card for card in self.cards_lote if not card.obter_dados_mapeados()["valido"]]
+        if not pendentes:
             self.botao_conectar.configure(state="normal")
-            self.atualizar_status("Todos os extratos estão configurados. Pronto para conciliar!", "#3C763D")
+            self.atualizar_status("Todos os extratos estão configurados. Pronto para conciliar!", tema.VERDE_TEXTO)
         else:
             self.botao_conectar.configure(state="disabled")
-            self.atualizar_status("Preencha as configurações pendentes nos cards acima.", "#F89406")
+            self.atualizar_status(f"{len(pendentes)} card(s) aguardando: confirme as sugestões ou escolha as contas.",
+                                  tema.AMARELO_TEXTO)
 
         tem_conta_corrente = any(not card.is_aplicacao for card in self.cards_lote)
         if tem_conta_corrente:

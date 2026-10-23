@@ -12,6 +12,7 @@ import traceback
 
 from playwright.sync_api import sync_playwright
 
+from bot.descoberta_contas import DescobertaContasMixin
 from bot.energia import EnergiaMixin
 from bot.energia_auditoria import AuditoriaEnergiaMixin
 from bot.extratos import ExtratosMixin
@@ -22,7 +23,8 @@ from controllers.conciliador import Conciliador
 from controllers.exportador import Exportador
 
 
-class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, EnergiaMixin, OfertasMixin):
+class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, EnergiaMixin, OfertasMixin,
+             DescobertaContasMixin):
     """
     Controlador do Navegador Playwright.
 
@@ -43,7 +45,8 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
                 - request_authorization(lancamentos_pendentes)
                 - show_dashboard(telemetria, tempo_inicio)
                 - on_finish()
-            tipo_lote (str): Tipo de lote ("extrato", "energia" ou "ofertas").
+                - on_catalogo(catalogo) (só na descoberta de contas)
+            tipo_lote (str): Tipo de lote ("extrato", "energia", "ofertas" ou "descoberta").
         """
         # Ordena o lote por localidade_selecionada para agrupar os lançamentos da mesma filial,
         # minimizando as trocas de localidade no portal SIGA.
@@ -154,6 +157,11 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
 
                 self._validar_sessao(page)
 
+                if self.tipo_lote == "descoberta":
+                    # Só leitura: fecha o navegador sozinho ao terminar
+                    self._fluxo_descoberta(page)
+                    context.close()
+                    return
 
                 if self.tipo_lote == "energia":
                     self.update_status(f"Iniciando importação de {len(self.lote_processados)} faturas de energia...", "#428BCA")

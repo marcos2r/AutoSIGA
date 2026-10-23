@@ -2,6 +2,13 @@
 
 Histórico das versões, da mais recente para a mais antiga. A versão atual é definida em `version.py`.
 
+## v1.8.0
+
+- **Contas do SIGA Descobertas Sozinhas**: O botão **Buscar no SIGA** lê as contas bancárias direto do SIGA, só para leitura: pelo Plano de Contas da Contabilidade e, para quem não tem esse acesso, pela Caixas e Bancos de cada localidade (ADM, DR e PIA). No fim o SIGA volta à localidade e ao mês em que o usuário estava, sem alterar a localidade padrão dele. Cada card de extrato já vem com a localidade, a C. Corrente e a C. Aplicação sugeridas.
+- **Card Guiado, sem Digitação**: As contas são escolhidas em listas que mostram o código e a finalidade (ex: `10396 · APLICACAO`). A C. Corrente só aceita contas 101 e a C. Aplicação só contas 103, então inverter os campos fica impossível. Um selo com ícone e texto mostra o estado do card (Confirmado, Sugerido pelo SIGA, Escolha necessária, Revisar, Não encontrado), com o motivo da sugestão logo abaixo. Quando há empate (ex: aplicação e poupança da mesma conta), o AutoSIGA não escolhe e pede a escolha ao usuário. O botão **Confirmar sugestões** confirma o lote de uma vez.
+- **Conciliação Protegida**: A conciliação só é liberada com todos os cards confirmados. Um mapeamento antigo com conta inativa ou de outra localidade fica como **Revisar** até ser corrigido.
+- **Troca de Localidade Corrigida**: O robô passa a usar o formulário do modal "Outros Meses" que contém a localidade e envia os valores ao SIGA como dados, sem montá-los dentro do código JavaScript.
+
 ## v1.7.0
 
 - **Faturas de Energia Nunca Se Perdem**: Uma fatura de UC ainda não mapeada é gravada como pendente assim que chega. Fechar a pergunta de UC nova ou escolher "Deixar Pendente" não a descarta mais: ela aparece na seção **Faturas pendentes** da aba Energia (com atalho para abrir o PDF) e volta a ser perguntada a cada importação. Mapeando a UC (pela pergunta ou em "Mapear UCs"), ela é lançada na próxima importação. O descarte definitivo passa a exigir confirmação.

@@ -120,7 +120,40 @@ class SessaoMixin:
         self.fechar_notificacoes(page)
         self.update_status("Sessão Validada. Iniciando processamento do lote...", "#428BCA")
 
-    def _ajustar_localidade_competencia(self, page, tipo_adm, nome_adm, mes_ano_alvo):
+    # O modal "Outros Meses" tem dois form.modal-form; só o que contém a localidade troca o contexto
+    _FORM_LOCALIDADE = 'form.modal-form:has(select[name="f_estabelecimento"])'
+
+    _JS_PREENCHER_CONTEXTO = '''([tipo, nome, mes, mudarPadrao]) => {
+        var selectLoc = jQuery('select[name="f_estabelecimento"]').first();
+        var form = selectLoc.closest('form');
+        var opcoes = selectLoc.find('option');
+        // Prefere a opção que começa com "TIPO - " (evita "DR" casar com outro nome qualquer)
+        var optLoc = opcoes.filter(function() {
+            var t = jQuery(this).text().toUpperCase().trim();
+            return t.indexOf(tipo + " - ") === 0 && t.indexOf(nome) > -1;
+        });
+        if (optLoc.length === 0) {
+            optLoc = opcoes.filter(function() {
+                var t = jQuery(this).text().toUpperCase();
+                return t.indexOf(tipo) > -1 && t.indexOf(nome) > -1;
+            });
+        }
+        if (optLoc.length > 0) {
+            selectLoc.val(optLoc.first().val()).trigger('change');
+        }
+        if (mes !== "") {
+            var selectMes = form.find('select[name="f_competencia"]');
+            var optMes = selectMes.find('option').filter(function() {
+                return jQuery(this).text().indexOf(mes) > -1;
+            });
+            if (optMes.length > 0) {
+                selectMes.val(optMes.first().val()).trigger('change');
+            }
+        }
+        jQuery('#f-mudarpadrao').prop('checked', mudarPadrao);
+    }'''
+
+    def _ajustar_localidade_competencia(self, page, tipo_adm, nome_adm, mes_ano_alvo, mudar_padrao=True):
         """Troca a localidade e o Mês de Trabalho ativos no SIGA pelo modal "Outros Meses".
 
         Args:
@@ -128,6 +161,8 @@ class SessaoMixin:
             tipo_adm (str): Tipo da localidade (ex: "ADM").
             nome_adm (str): Nome da localidade (ex: "DOURADOS - MS").
             mes_ano_alvo (str): Competência "mm/aaaa"; vazio mantém a atual.
+            mudar_padrao (bool): Marca "mudar padrão" no SIGA. A descoberta de contas usa
+                False para não alterar a localidade padrão do usuário.
 
         Returns:
             bool: True se, após a troca, o cabeçalho do SIGA mostra a localidade e o mês pedidos.
@@ -139,36 +174,13 @@ class SessaoMixin:
 
         page.locator('a.showModal:has-text("Outros Meses")').click()
 
-        btn_confirmar = page.locator('form.modal-form button[type="submit"]:has-text("Confirmar")').first
+        btn_confirmar = page.locator(f'{self._FORM_LOCALIDADE} button[type="submit"]:has-text("Confirmar")').first
         btn_confirmar.wait_for(state="attached", timeout=15000)
         time.sleep(1.5)
 
-        js_select2 = f'''() => {{
-            var selectLoc = jQuery('select[name="f_estabelecimento"]');
-            if (selectLoc.length > 0) {{
-                var optLoc = selectLoc.find('option').filter(function() {{
-                    var text = jQuery(this).text().toUpperCase();
-                    return text.indexOf("{tipo_adm}") > -1 && text.indexOf("{nome_adm}") > -1;
-                }});
-                if (optLoc.length > 0) {{
-                    selectLoc.val(optLoc.val()).trigger('change');
-                }}
-            }}
-
-            if ("{mes_ano_alvo}" !== "") {{
-                var selectMes = jQuery('select[name="f_competencia"]');
-                if (selectMes.length > 0) {{
-                    var optMes = selectMes.find('option:contains("{mes_ano_alvo}")');
-                    if (optMes.length > 0) {{
-                        selectMes.val(optMes.val()).trigger('change');
-                    }}
-                }}
-            }}
-
-            jQuery('#f-mudarpadrao').prop('checked', true);
-        }}'''
-
-        page.evaluate(js_select2)
+        # Valores vão como argumento, não interpolados no JS
+        page.evaluate(self._JS_PREENCHER_CONTEXTO,
+                      [tipo_adm.strip().upper(), nome_adm.strip().upper(), mes_ano_alvo or "", bool(mudar_padrao)])
         time.sleep(1.5)
 
         btn_confirmar.evaluate("el => el.click()")

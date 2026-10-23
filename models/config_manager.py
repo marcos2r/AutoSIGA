@@ -13,10 +13,11 @@ import os
 from datetime import datetime
 
 from caminhos import diretorio_base
+from models.config_catalogo import ConfigCatalogoMixin
 from models.config_energia import ConfigEnergiaMixin
 
 
-class ConfigManager(ConfigEnergiaMixin):
+class ConfigManager(ConfigEnergiaMixin, ConfigCatalogoMixin):
     """
     Gerencia a leitura e escrita do arquivo de configurações JSON.
 

@@ -13,6 +13,7 @@ import customtkinter as ctk
 
 from models.config_manager import ConfigManager
 from ui.acoes_siga import AcoesSigaMixin
+from ui.catalogo_siga import CatalogoSigaMixin
 from ui.credenciais import CredenciaisMixin
 from ui.dashboard import DashboardMixin
 from ui.lote_extratos import LoteExtratosMixin
@@ -22,7 +23,7 @@ from version import VERSION
 # Força o tema claro para combinar com a identidade visual do SIGA
 ctk.set_appearance_mode("light")
 
-class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, DashboardMixin, ctk.CTk):
+class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSigaMixin, DashboardMixin, ctk.CTk):
     """
     Classe principal que desenha e controla a interface do usuário.
 
@@ -212,6 +213,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, DashboardM
         # Sessão 2: Configurações do SIGA
         self.label_instrucao2 = ctk.CTkLabel(self.frame_card, text="2. Mapeamento de Contas no SIGA", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
         self.label_instrucao2.pack(pady=(2, 5))
+        self.construir_faixa_catalogo(self.frame_card, depois_de=self.label_instrucao2)
 
         # Scrollable Frame para os Cards
         self.scroll_lote = ctk.CTkScrollableFrame(self.frame_card, fg_color="#F8F9FA", corner_radius=6, height=260)

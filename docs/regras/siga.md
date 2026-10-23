@@ -87,6 +87,22 @@ Usada para as faturas de energia.
 - O bot (`bot/ofertas.py`, botão "Importar Ofertas no SIGA") importa aqui um TXT por conta corrente: Data = último dia do mês do extrato, Banco = opção que contém o código mapeado no card (ex.: `10130`). Pula quando a grade já tem a mesma data e valor, e audita se surgiu uma linha nova com o valor total.
 - O Banco lista só as contas que recebem ofertas da localidade ativa (hoje 10129, 10130 e 10315).
 
+## CTB00301 — Plano de Contas (consulta)
+
+Menu Contabilidade › Cadastros › Plano de Contas. Nem todo usuário tem acesso; quem tem vê o plano inteiro, de qualquer localidade ativa.
+- Grade `#grid1` (DataTables **server-side**, ~491 registros, paginada): Cód. Reduzido (`"101 30"` = grupo + sufixo, equivale ao código `10130` da Tesouraria), Cód. Contábil (`1.1.1.02.55`), Nome, **Localidade** (`ADM - DOURADOS - MS`, `DR - DOURADOS`, `PIA - DOURADOS` ou lista de tipos `ADM, SET, PIA...` nas contas genéricas), Cust, TES, CTB, Status.
+- A busca livre `CC:` (`jQuery('#grid1').dataTable().fnFilter('CC:')`) traz numa página só todas as contas bancárias ativas (101 corrente e 103 aplicação) **com a localidade dona**, inclusive as das localidades que o usuário não abriu. É a melhor fonte para descobrir conta → localidade.
+
+## Contas por localidade (TES01701)
+
+Levantado em 23/10/2026.
+- O `select#f_conta` lista só as contas da **localidade ativa**: na DR aparecem só as contas da DR; na PIA, só as da PIA. Exceção: a ADM também lista a conta corrente da DR (10127), mas não a aplicação dela.
+- Contas desativadas ficam num `<optgroup label="INATIVO">`; a Contabilidade não as mostra.
+- Os rótulos são texto livre e variam (`AG:0101` / `AG: 0101`, CC com e sem hífen, `CC: CONTA CAPITAL`): compare só os dígitos.
+- Uma conta corrente pode ter várias contas 103 (ex.: aplicação e poupança da mesma CC).
+- **Troca de localidade**: no modal "Outros Meses" há dois `form.modal-form`; o certo é o que contém `select[name="f_estabelecimento"]` (o outro recusa com "Formulário incompleto"). Depois de Confirmar, o SIGA redireciona para `/SIS/SIS99908.aspx`; é preciso abrir a rotina de novo. Sem marcar `#f-mudarpadrao`, a troca não altera a localidade padrão do usuário.
+- O modal lista ADM, DR, PIA, SEC, setores e casas de oração. Ainda não foi visto o comportamento de um usuário sem acesso a uma localidade (o levantamento teve acesso a todas).
+
 ## Ainda não levantado
 
 Despesa (TES01702), Despesa em Lote (TES01705), Repartição Ofertas, Boletos, Cartão de Débito e Transferências, Fech. Administração (TES02301) e os relatórios.

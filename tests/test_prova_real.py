@@ -78,8 +78,8 @@ def test_valor_digitado_errado_vira_sobra():
     assert [s.valor for s in sobras] == [-275.0]
 
 
-def test_data_diferente_nao_pareia():
-    sobras = sobras_no_siga([("04/05/2026", -27.5)], [_linha("05/05/2026", saida="27,50")])
+def test_data_muito_diferente_nao_pareia():
+    sobras = sobras_no_siga([("04/05/2026", -27.5)], [_linha("12/05/2026", saida="27,50")])
     assert len(sobras) == 1
 
 
@@ -128,3 +128,19 @@ def test_resumo_de_extrato_nao_autorizado_na_previa():
     from controllers.prova_real import resumo_resultado
     assert resumo_resultado(_resultado("recusado", pendentes=3)) == (
         "neutro", "— Lançamento não autorizado por você: 3 item(ns) pendente(s)")
+
+
+def test_lancamento_com_data_do_dia_util_seguinte_nao_e_sobra():
+    # Caso real de maio: salário lançado em 09/05 no SIGA, debitado em 11/05 no banco
+    banco = [("11/05/2026", -75.0), ("11/05/2026", -1716.52)]
+    siga = [_linha("09/05/2026", saida="75,00"), _linha("10/05/2026", saida="1.716,52")]
+    assert sobras_no_siga(banco, siga) == []
+
+
+def test_tolerancia_de_data_tem_limite_e_prefere_o_par_exato():
+    # 4 dias de diferença já é sobra
+    assert len(sobras_no_siga([("11/05/2026", -75.0)], [_linha("07/05/2026", saida="75,00")])) == 1
+    # O par exato fica com o lançamento do mesmo dia; o outro, mesmo perto, sobra
+    banco = [("11/05/2026", -75.0)]
+    siga = [_linha("10/05/2026", saida="75,00"), _linha("11/05/2026", saida="75,00")]
+    assert [s.data for s in sobras_no_siga(banco, siga)] == ["10/05/2026"]

@@ -8,6 +8,7 @@ ao usuário, que decide o que fazer.
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 CONFERE = "confere"
@@ -22,6 +23,8 @@ MES_FECHADO = "mes_fechado"
 RECUSADO = "recusado"
 
 TOLERANCIA = 0.01
+# Lançamento manual com a data do dia útil seguinte ou anterior (fim de semana, feriado)
+DIAS_TOLERANCIA = 3
 
 # Sinal de cada movimento do XLS de aplicação na conta 103 do SIGA
 _SINAL_MOVIMENTO = {"APLICACAO": 1, "RESGATE": -1, "RENDIMENTO": 1}
@@ -146,19 +149,39 @@ def sobras_no_siga(movimentos_banco: list[tuple[str, float]],
                    linhas_siga: list[dict[str, Any]] | None) -> list[MovimentoSiga]:
     """Lançamentos do SIGA sem par no extrato (duplicado, valor errado, estorno esquecido).
 
-    O pareamento é um para um, por data e valor: dois lançamentos iguais no SIGA
-    para um só no banco deixam uma sobra.
+    O pareamento é um para um, por valor: primeiro na mesma data e, numa segunda
+    passada, com até `DIAS_TOLERANCIA` dias de diferença (lançamento manual com a data do
+    dia útil seguinte ou anterior). Dois lançamentos iguais no SIGA para um só no banco
+    deixam uma sobra.
     """
     livres = list(movimentos_banco)
-    sobras = []
+    pendentes = []
     for mov in normalizar_linhas_siga(linhas_siga):
         par = next((i for i, (data, valor) in enumerate(livres)
                     if data == mov.data and abs(valor - mov.valor) <= TOLERANCIA), None)
         if par is None:
-            sobras.append(mov)
+            pendentes.append(mov)
         else:
             livres.pop(par)
+
+    sobras = []
+    for mov in pendentes:
+        dia = _data(mov.data)
+        perto = [(abs((d - dia).days), i) for i, (data, valor) in enumerate(livres)
+                 if dia and (d := _data(data)) and abs((d - dia).days) <= DIAS_TOLERANCIA
+                 and abs(valor - mov.valor) <= TOLERANCIA]
+        if perto:
+            livres.pop(min(perto)[1])
+        else:
+            sobras.append(mov)
     return sobras
+
+
+def _data(texto: str) -> datetime | None:
+    try:
+        return datetime.strptime(str(texto).strip(), "%d/%m/%Y")
+    except ValueError:
+        return None
 
 
 def moeda(valor: float | None) -> str:

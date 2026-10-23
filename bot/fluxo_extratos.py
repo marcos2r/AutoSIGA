@@ -166,8 +166,9 @@ class FluxoExtratosMixin:
             self.update_status(f"⏭️ [{self.localidade_selecionada}] Lançamentos não autorizados: "
                                f"{len(pendentes)} item(ns) ficaram pendentes.", "#F89406")
         elif novos_lancamentos:
+            consulta = (conta_alvo, dados.get("data_inicial", ""), data_final)
             pendentes, grade_atual = self._lancar_com_conferencia(page, novos_lancamentos, is_aplicacao,
-                                                                  chave_competencia, telemetria_lote)
+                                                                  chave_competencia, telemetria_lote, consulta)
             if pendentes:
                 telemetria_lote["pendentes"] += len(pendentes)
                 if chave_competencia not in self.competencias_fechadas:
@@ -321,8 +322,16 @@ class FluxoExtratosMixin:
         """Linhas da grade de movimentos da TES01701 como dicionários de texto."""
         return page.evaluate(_JS_LER_GRADE)
 
-    def _lancar_com_conferencia(self, page, pendentes, is_aplicacao, chave_competencia, telemetria_lote):
+    def _lancar_com_conferencia(self, page, pendentes, is_aplicacao, chave_competencia, telemetria_lote, consulta):
         """Lança os pendentes e relê a grade até tudo bater, em até 3 tentativas.
+
+        A releitura refaz o filtro (conta e período do extrato): depois de gravar, a TES01701 volta
+        com o filtro padrão (mês atual), e reaproveitá-lo fazia um extrato de outro mês parecer não
+        lançado. Se a releitura não acha nenhum dos itens gravados, o bot não tenta de novo: lançar
+        outra vez duplicaria tudo o que já foi gravado.
+
+        Args:
+            consulta: (conta, data inicial, data final) do extrato, para refazer o filtro.
 
         Returns:
             tuple: (transações que continuaram sem par no SIGA, True se a grade na tela
@@ -354,19 +363,22 @@ class FluxoExtratosMixin:
             self.update_status("Realizando conferência pós-lançamento...", "#428BCA")
             time.sleep(2.5)
             try:
-                if page.locator('#btn-filtro').is_visible():
-                    page.locator('#btn-filtro').click()
-                    time.sleep(1)
-                page.locator('#modal-filtro form#f_main button.btn-success').first.click()
-                page.wait_for_load_state("domcontentloaded")
-                time.sleep(4)
-
-                extrato_recente = self._ler_grade_tes01701(page)
+                extrato_recente = self._abrir_consulta_tes01701(page, *consulta)
+                if extrato_recente is None:
+                    raise RuntimeError(f"conta {consulta[0]} não encontrada no filtro")
                 self.dados_processados["extrato_siga"] = extrato_recente
-                pendentes = Conciliador.conciliar(self.dados_processados.get("transacoes", []), extrato_recente)
-                if not pendentes:
+                restantes = Conciliador.conciliar(self.dados_processados.get("transacoes", []), extrato_recente)
+                if not restantes:
                     self.update_status(f"✅ [{self.localidade_selecionada}] Conferência 100%: Nenhum item para trás!", "#3C763D")
                     return [], True
+                if self._qtd_injecoes_efetuadas and len(restantes) >= len(pendentes):
+                    logging.error(f"Conferência não achou nenhum dos {self._qtd_injecoes_efetuadas} lançamento(s) "
+                                  "gravado(s); re-tentativa cancelada para não duplicar.")
+                    self.update_status(f"⛔ [{self.localidade_selecionada}] A conferência não encontrou os "
+                                       f"{self._qtd_injecoes_efetuadas} lançamento(s) gravado(s). Confira no SIGA "
+                                       "antes de rodar de novo: o robô não lançou outra vez.", "#D9534F")
+                    return restantes, True
+                pendentes = restantes
             except Exception as e:
                 logging.error(f"Erro na conferência final: {e}")
                 self.update_status(f"✅ [{self.localidade_selecionada}] Finalizado sem prova real.", "#3C763D")

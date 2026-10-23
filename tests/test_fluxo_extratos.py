@@ -87,7 +87,7 @@ def _extrato(tipo_adm, conta, transacoes, aplicacao=False):
 
 
 def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False, opcoes=None, saldos=None,
-          revisar=False, responder=None, etapa_baixas=None):
+          revisar=False, responder=None, etapa_baixas=None, grava=True):
     """Roda `fluxo_automacao` inteiro sem navegador e devolve o que aconteceu."""
     sem_espera = SimpleNamespace(sleep=lambda s: None, time=lambda: 0.0)
     monkeypatch.setattr(siga_bot, "time", sem_espera)
@@ -122,7 +122,7 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
         destino.append(list(pendentes))
         if mes_fechado:
             raise MesFechadoError(pendentes[0]["data"])
-        bot._qtd_injecoes_efetuadas = len(pendentes)
+        bot._qtd_injecoes_efetuadas = len(pendentes) if grava else 0
         if lanca:
             pagina.grades.setdefault(pagina.conta, []).extend(_linha(t["data"], t["valor"]) for t in pendentes)
 
@@ -158,8 +158,9 @@ def test_lanca_so_o_que_falta_e_troca_localidade_so_quando_muda(monkeypatch):
 
     # Lote ordenado por localidade: DR (dois extratos, uma troca) e depois PIA
     assert reg.trocas == [("DR", "CENTRAL", "05/2026"), ("PIA", "CENTRAL", "05/2026")]
-    assert reg.pagina.programas() == ["TES01701"] * 3
-    assert [a[1] for a in reg.pagina.acoes if a[0] == "conta"] == ["10130", "10396", "10127"]
+    # Cada extrato com lançamento é consultado de novo (conta e período refeitos) na conferência
+    assert reg.pagina.programas() == ["TES01701"] * 5
+    assert [a[1] for a in reg.pagina.acoes if a[0] == "conta"] == ["10130", "10130", "10396", "10396", "10127"]
     # PIX não é investimento; a aplicação já estava no SIGA
     assert reg.lancamentos == [[RESG]]
     assert reg.rendimentos == [[REND]]
@@ -169,10 +170,23 @@ def test_lanca_so_o_que_falta_e_troca_localidade_so_quando_muda(monkeypatch):
     assert reg.telemetria["siga_itens"] == 2
 
 
-def test_lancamento_que_nao_aparece_na_grade_e_tentado_tres_vezes(monkeypatch):
+def test_gravado_que_nao_aparece_na_conferencia_nao_e_lancado_de_novo(monkeypatch):
+    # 23/10/2026: a conferência leu o mês errado e o robô começou a lançar os 14 itens de novo
     lote = [_extrato("DR", "10130", [RESG])]
 
     reg = _rodar(monkeypatch, lote, {}, lanca=False)
+
+    assert reg.lancamentos == [[RESG]]
+    assert reg.telemetria["pendentes"] == 1
+    assert any("não encontrou os 1 lançamento(s) gravado(s)" in s for s in reg.status)
+    # A conferência refaz o período do extrato, não reaproveita o filtro padrão da tela
+    assert reg.pagina.acoes.count(("fill", "#f_data2", "31/05/2026")) == 2
+
+
+def test_lancamento_que_falhou_sem_gravar_e_tentado_tres_vezes(monkeypatch):
+    lote = [_extrato("DR", "10130", [RESG])]
+
+    reg = _rodar(monkeypatch, lote, {}, lanca=False, grava=False)
 
     assert reg.lancamentos == [[RESG]] * 3
     assert reg.telemetria["pendentes"] == 1
@@ -213,8 +227,8 @@ def test_conta_ausente_na_localidade_pula_o_extrato_sem_consultar_nem_lancar(mon
 
     # A DR é pulada antes de consultar; a PIA segue normalmente
     assert reg.lancamentos == [[APLIC]]
-    assert [a for a in reg.pagina.acoes if a[0] == "conta"] == [("conta", "v-10127")]
-    assert reg.pagina.acoes.count(("click", '#f_main button[type="submit"].btn-success')) == 1
+    assert [a for a in reg.pagina.acoes if a[0] == "conta"] == [("conta", "v-10127")] * 2
+    assert reg.pagina.acoes.count(("click", '#f_main button[type="submit"].btn-success')) == 2
     assert reg.telemetria["pendentes"] == 1
     assert any("Conta 10130 não encontrada em DR - CENTRAL" in s for s in reg.status)
 

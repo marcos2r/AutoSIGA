@@ -25,7 +25,8 @@ class PdfExtractor:
             caminho_pdf (str): Caminho absoluto do PDF na máquina.
 
         Returns:
-            dict: Dados extraídos {"uc", "valor", "vencimento", "numero_fatura", "referencia", "texto"}
+            dict: Dados extraídos {"uc", "valor", "vencimento", "numero_fatura", "referencia",
+            "codigo_debito", "texto"}
         """
         dados = {
             "uc": "",
@@ -35,6 +36,7 @@ class PdfExtractor:
             "emissao": "",
             "referencia": "",
             "consumo": "",
+            "codigo_debito": "",
             "texto": ""
         }
 
@@ -144,6 +146,14 @@ class PdfExtractor:
                 consumo_match = re.search(r'KWH\s*(?:Ponta\s*)?([\d\.,]+)', texto, re.IGNORECASE)
             if consumo_match:
                 dados["consumo"] = consumo_match.group(1).strip()
+
+            # 8. Código de débito automático da UC
+            # Padrão: "DÉBITO AUTOMÁTICO UTILIZANDO O CÓDIGO: 0009876543-2". Sem o traço, é o
+            # "ID" que o banco põe no débito ("DEBITO CONVENIOS-ENERGI 70 ID 00098765432 ...").
+            codigo_match = re.search(r'D[ÉE]BITO\s+AUTOM[ÁA]TICO\s+UTILIZANDO\s+O\s+C[ÓO]DIGO\s*:\s*(\d+)\s*-\s*(\d)',
+                                     texto, re.IGNORECASE)
+            if codigo_match:
+                dados["codigo_debito"] = codigo_match.group(1) + codigo_match.group(2)
 
         except Exception as e:
             logging.error(f"Erro ao ler PDF de fatura {caminho_pdf}: {e}", exc_info=True)

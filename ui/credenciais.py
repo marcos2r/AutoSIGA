@@ -129,7 +129,8 @@ class ModalCredenciais(ctk.CTkToplevel):
         senha = keyring.get_password("AutoSIGA", usuario) if usuario else ""
 
         self.entry_usuario.insert(0, usuario)
-        self.entry_senha.insert(0, senha)
+        # keyring devolve None quando o usuário existe mas a senha não está neste Windows
+        self.entry_senha.insert(0, senha or "")
 
     def salvar_credenciais(self):
         import keyring

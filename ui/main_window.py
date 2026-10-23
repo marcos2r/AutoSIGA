@@ -7,6 +7,7 @@ Aqui ocorre a interação humana, coleta de cliques, configuração de parâmetr
 na tela e delegação das tarefas pesadas para as camadas Model, Controller e Bot.
 """
 
+import logging
 from tkinter import messagebox
 
 import customtkinter as ctk
@@ -77,56 +78,75 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         # Verifica se há credenciais configuradas e abre a modal se ausente
         self.after(500, self.verificar_credenciais_iniciais)
 
+    # Menor janela em que o card de extrato mostra todos os campos e botões sem cortar
+    LARGURA_MINIMA = 1000
+    ALTURA_MINIMA = 680
+
     def aplicar_geometria(self):
         """
-        Calcula e aplica o enquadramento ideal ou restaura a última geometria da janela.
+        Abre maximizado por padrão, ou restaura a janela normal se o usuário a deixou assim.
+
+        A geometria fica em memória enquanto a janela é movida e só é gravada ao fechar
+        (on_closing), para não reescrever o config.json a cada pixel arrastado.
         """
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
+        self.minsize(self.LARGURA_MINIMA, self.ALTURA_MINIMA)
+        largura_tela = self.winfo_screenwidth()
+        altura_tela = self.winfo_screenheight()
 
-        default_w = 600
-        default_h = min(850, int(screen_height * 0.85))
-        if default_h < 680:
-            default_h = 680
-
-        x = int((screen_width - default_w) / 2)
-        y = int((screen_height - default_h) / 2)
+        w = max(self.LARGURA_MINIMA, min(1200, int(largura_tela * 0.8)))
+        h = max(self.ALTURA_MINIMA, min(900, int(altura_tela * 0.85)))
+        x, y = max(0, (largura_tela - w) // 2), max(0, (altura_tela - h) // 2)
+        maximizada = True
 
         geo_salva = self.config_manager.get_geometry()
-        if geo_salva:
-            w = geo_salva.get("width", default_w)
-            h = geo_salva.get("height", default_h)
-            pos_x = geo_salva.get("x", x)
-            pos_y = geo_salva.get("y", y)
+        if isinstance(geo_salva, dict):
+            # Geometria antiga (sem "maximizada") também abre maximizada: era pequena demais
+            maximizada = geo_salva.get("maximizada", True)
+            if not maximizada:
+                w = max(self.LARGURA_MINIMA, geo_salva.get("width", w))
+                h = max(self.ALTURA_MINIMA, geo_salva.get("height", h))
+                pos_x, pos_y = geo_salva.get("x", x), geo_salva.get("y", y)
+                if 0 <= pos_x <= largura_tela - 100:
+                    x = pos_x
+                if 0 <= pos_y <= altura_tela - 100:
+                    y = pos_y
 
-            if pos_x < 0 or pos_x > screen_width - 100:
-                pos_x = x
-            if pos_y < 0 or pos_y > screen_height - 100:
-                pos_y = y
-            self.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
-        else:
-            self.geometry(f"{default_w}x{default_h}+{x}+{y}")
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        self._geo_normal = {"width": w, "height": h, "x": x, "y": y}
+        if maximizada:
+            # O CustomTkinter reaplica o estado da janela ao ajustar a barra de título no Windows;
+            # maximizar logo depois garante que o "zoomed" não seja desfeito.
+            self.after(50, lambda: self.state("zoomed"))
 
         self.bind("<Configure>", self.on_configure)
 
     def on_configure(self, event):
-        """
-        Callback para salvar a geometria da janela quando ela é movida ou redimensionada.
-        """
+        """Guarda em memória o tamanho e a posição da janela normal (não maximizada)."""
         if event.widget == self and self.state() == "normal":
-            geo = {
-                "width": self.winfo_width(),
-                "height": self.winfo_height(),
-                "x": self.winfo_x(),
-                "y": self.winfo_y()
-            }
+            # geometry() do CTk já devolve os valores sem a escala de DPI, como o geometry() aceita
+            tamanho, _, posicao = self.geometry().partition("+")
+            w, _, h = tamanho.partition("x")
+            x, _, y = posicao.partition("+")
+            try:
+                self._geo_normal = {"width": int(w), "height": int(h), "x": int(x), "y": int(y)}
+            except ValueError:
+                pass
+
+    def _salvar_estado_janela(self):
+        """Grava a geometria normal e se a janela estava maximizada, para a próxima abertura."""
+        try:
+            geo = dict(getattr(self, "_geo_normal", {}) or {})
+            geo["maximizada"] = self.state() == "zoomed"
             self.config_manager.salvar_geometry(geo)
+        except Exception as e:
+            logging.warning(f"Não foi possível salvar o tamanho da janela: {e}")
 
     def on_closing(self):
         """
         Gatilho acionado quando o usuário tenta fechar o programa pelo 'X'.
         Encerra o robô (Playwright) em background antes de matar a UI.
         """
+        self._salvar_estado_janela()
         if self.bot_instance:
             self.bot_instance.fechar_browser()
         self.after(500, self.destroy)

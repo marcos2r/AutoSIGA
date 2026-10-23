@@ -9,7 +9,7 @@ import time
 from bot.descoberta_contas import _JS_LER_CONTAS_TES
 from bot.extratos import MesFechadoError
 from controllers.catalogo_contas import escolher_opcao_conta
-from controllers.conciliador import Conciliador
+from controllers.conciliador import Conciliador, fora_do_periodo
 from controllers.exportador import Exportador
 from controllers.prova_real import (
     CONCILIADO,
@@ -50,7 +50,27 @@ _JS_LER_SALDO = '''() => {
     return celulas.length > 7 ? celulas[7].innerText.trim() : null;
 }'''
 
+# Período do filtro da TES01701. Os campos têm máscara e calendário: `fill` pode não ficar,
+# por isso o valor vai por JS (como na TES01704) e volta lido para conferência.
+_JS_PREENCHER_PERIODO = '''([inicio, fim]) => {
+    for (const [id, valor] of [['f_data1', inicio], ['f_data2', fim]]) {
+        const campo = document.getElementById(id);
+        if (!campo || !valor) continue;
+        campo.value = valor;
+        if (window.jQuery) {
+            try { window.jQuery(campo).datepicker('update', valor); } catch (e) { /* sem calendário */ }
+            window.jQuery(campo).trigger('change');
+        }
+    }
+    if (window.jQuery) window.jQuery('.datepicker').hide();
+    return [(document.getElementById('f_data1') || {}).value || '', (document.getElementById('f_data2') || {}).value || ''];
+}'''
+
 _LIMITE_TENTATIVAS = 3
+
+
+class PeriodoNaoAplicadoError(Exception):
+    """A grade da TES01701 não é do período do extrato: comparar com ela duplicaria lançamentos."""
 
 
 class FluxoExtratosMixin:
@@ -141,7 +161,19 @@ class FluxoExtratosMixin:
                                       baixas=baixas)
             return True
 
-        extrato_siga = self._abrir_consulta_tes01701(page, conta_alvo, dados.get("data_inicial", ""), data_final)
+        try:
+            extrato_siga = self._abrir_consulta_tes01701(page, conta_alvo, dados.get("data_inicial", ""), data_final)
+        except PeriodoNaoAplicadoError as erro:
+            logging.error(f"Período do extrato não aplicado na TES01701: {erro}")
+            self._capturar_tela_e_log(page, "periodo_nao_aplicado")
+            telemetria_lote["pendentes"] += qtd
+            self._registrar_resultado(telemetria_lote, dados, conta_alvo, PENDENTE, pendentes=qtd,
+                                      saldo=nao_conferido("período não aplicado no SIGA", dados.get("saldo_atual")),
+                                      baixas=baixas)
+            self.update_status(f"⛔ [{self.localidade_selecionada}] O SIGA não mostrou o período do extrato "
+                               f"({erro}). Nada foi lançado ({qtd} itens pendentes).", "#D9534F")
+            self._atualizar_progresso(idx)
+            return False
         if extrato_siga is None:
             # Sem a conta certa no filtro, consultar ou lançar cairia na conta que já estava selecionada
             telemetria_lote["pendentes"] += qtd
@@ -270,6 +302,10 @@ class FluxoExtratosMixin:
 
         Returns:
             list | None: Linhas da grade, ou None se a conta não está na lista da localidade.
+
+        Raises:
+            PeriodoNaoAplicadoError: O filtro não ficou com o período do extrato ou a grade
+                traz linhas de fora dele.
         """
         self.update_status("Acessando rotina TES01701...", "#428BCA")
         input_programa = page.locator('#f_executar_programa')
@@ -291,10 +327,10 @@ class FluxoExtratosMixin:
         if not self._selecionar_conta(page, conta_alvo):
             return None
 
-        if data_in:
-            page.locator('#f_data1').fill(data_in)
-        if data_fim:
-            page.locator('#f_data2').fill(data_fim)
+        if data_in or data_fim:
+            aplicado = page.evaluate(_JS_PREENCHER_PERIODO, [data_in, data_fim]) or ["", ""]
+            if (data_in and aplicado[0] != data_in) or (data_fim and aplicado[1] != data_fim):
+                raise PeriodoNaoAplicadoError(f"filtro ficou {aplicado[0]} a {aplicado[1]}")
         time.sleep(0.5)
 
         self.update_status("Consultando movimentações no banco...", "#F89406")
@@ -304,7 +340,12 @@ class FluxoExtratosMixin:
 
         self.update_status("Lendo dados da tabela do SIGA...", "#428BCA")
         page.locator('#grid1').wait_for(state="visible", timeout=10000)
-        return self._ler_grade_tes01701(page)
+        linhas = self._ler_grade_tes01701(page)
+        fora = fora_do_periodo(linhas, data_in, data_fim)
+        if fora:
+            raise PeriodoNaoAplicadoError(f"a grade traz {len(fora)} linha(s) fora de {data_in} a {data_fim} "
+                                          f"(ex.: {fora[0]})")
+        return linhas
 
     def _selecionar_conta(self, page, codigo):
         """Seleciona no filtro a conta ativa de código exatamente igual ao do card.

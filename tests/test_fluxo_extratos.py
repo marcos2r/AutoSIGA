@@ -53,6 +53,7 @@ class PaginaTesouraria:
             {"texto": rotulo, "valor": f"id{codigo}", "inativa": False} for codigo, rotulo in ROTULOS.items()]
         self.conta = ""
         self.acoes = []
+        self.periodo_ignorado = None
 
     def locator(self, seletor):
         return _Locator(self, seletor)
@@ -61,6 +62,12 @@ class PaginaTesouraria:
         pass
 
     def evaluate(self, script, arg=None):
+        if "f_data1" in script and arg is not None:
+            # Grava como `fill` para os testes; `periodo_ignorado` imita o filtro que não fica
+            for campo, valor in zip(("#f_data1", "#f_data2"), arg, strict=True):
+                if valor:
+                    self.acoes.append(("fill", campo, valor))
+            return list(self.periodo_ignorado or arg)
         if "tfoot" in script:
             return self.saldos.get(self.conta)
         if "#grid1 tbody tr" in script:
@@ -87,7 +94,7 @@ def _extrato(tipo_adm, conta, transacoes, aplicacao=False):
 
 
 def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False, opcoes=None, saldos=None,
-          revisar=False, responder=None, etapa_baixas=None, grava=True):
+          revisar=False, responder=None, etapa_baixas=None, grava=True, periodo_ignorado=None):
     """Roda `fluxo_automacao` inteiro sem navegador e devolve o que aconteceu."""
     sem_espera = SimpleNamespace(sleep=lambda s: None, time=lambda: 0.0)
     monkeypatch.setattr(siga_bot, "time", sem_espera)
@@ -96,6 +103,7 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
     except ModuleNotFoundError:
         pass
     pagina = PaginaTesouraria(grades, opcoes, saldos)
+    pagina.periodo_ignorado = periodo_ignorado
     reg = SimpleNamespace(trocas=[], lancamentos=[], rendimentos=[], status=[], telemetria=None)
     reg.previas = []
     callbacks = {"show_dashboard": lambda tel, t: setattr(reg, "telemetria", tel)}
@@ -181,6 +189,28 @@ def test_gravado_que_nao_aparece_na_conferencia_nao_e_lancado_de_novo(monkeypatc
     assert any("não encontrou os 1 lançamento(s) gravado(s)" in s for s in reg.status)
     # A conferência refaz o período do extrato, não reaproveita o filtro padrão da tela
     assert reg.pagina.acoes.count(("fill", "#f_data2", "31/05/2026")) == 2
+
+
+def test_filtro_que_nao_fica_com_o_periodo_nao_lanca_nada(monkeypatch):
+    # O filtro da TES01701 abre no mês atual; se a data não entra, a grade é de outro mês
+    lote = [_extrato("DR", "10130", [RESG])]
+
+    reg = _rodar(monkeypatch, lote, {}, periodo_ignorado=["01/10/2026", "31/10/2026"])
+
+    assert reg.lancamentos == []
+    assert reg.telemetria["pendentes"] == 1
+    assert any("não mostrou o período do extrato" in s and "01/10/2026" in s for s in reg.status)
+    assert _resultados(reg)["10130"].situacao == "pendente"
+
+
+def test_grade_de_outro_mes_nao_lanca_nada(monkeypatch):
+    # 23/10/2026: o extrato de setembro foi comparado com a grade de outubro e saiu todo duplicado
+    lote = [_extrato("DR", "10130", [RESG])]
+
+    reg = _rodar(monkeypatch, lote, {"10130": [_linha("16/06/2026", 399.34)]})
+
+    assert reg.lancamentos == []
+    assert any("fora de 01/05/2026 a 31/05/2026" in s for s in reg.status)
 
 
 def test_lancamento_que_falhou_sem_gravar_e_tentado_tres_vezes(monkeypatch):

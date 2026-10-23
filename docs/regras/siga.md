@@ -34,6 +34,7 @@ Leia sob demanda, quando a tarefa mexer na automação do SIGA (`bot/`). Levanta
 ## TES01701 — Caixas e Bancos (consulta)
 
 - Grade de movimentos: Data, Lançto, Nº Documento, Histórico, Origem, Entrada, Saída, Saldo. Filtro por conta (`select#f_conta`) e período (`#f_data1`, `#f_data2`). É a fonte da conciliação OFX × SIGA.
+- **O filtro abre no mês atual** (01/10 a 31/10/2026 em 23/10/2026), inclusive logo depois de gravar uma movimentação. `#f_data1`/`#f_data2` têm máscara e calendário: o bot põe a data por JS (`value` + `datepicker('update')` + `change`), lê de volta antes de Consultar e recusa a grade que trouxer linha fora do período. Sem isso, o extrato de setembro foi comparado com a grade de outubro e os 14 movimentos saíram duplicados.
 - **Saldo na grade** (levantado em 23/10/2026, só consulta):
   - A 1ª linha do `tbody` é "Saldo Anterior", feita de `th` (sem `td`), com o saldo antes do período na coluna Saldo. Os leitores que exigem 8 `td` a ignoram.
   - As linhas seguem a ordem de data; a coluna Saldo é acumulada a partir do saldo anterior.

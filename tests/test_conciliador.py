@@ -68,3 +68,15 @@ def test_conciliar_conversao_valores_siga():
         {"data": "12/05/2026", "entrada": "-", "saida": "1.500,50"}
     ]
     assert Conciliador.conciliar(ofx_txs, siga_txs) == []
+
+
+def test_fora_do_periodo_aponta_as_linhas_de_outro_mes():
+    from controllers.conciliador import fora_do_periodo
+    linhas = [{"data": "01/09/2026"}, {"data": "30/09/2026"}, {"data": ""}, {"data": "Total"},
+              {"data": "01/10/2026"}, {"data": "31/08/2026"}]
+
+    # Limites incluídos; linhas sem data (total, saldo anterior) não contam
+    assert fora_do_periodo(linhas, "01/09/2026", "30/09/2026") == ["01/10/2026", "31/08/2026"]
+    assert fora_do_periodo(linhas[:2], "01/09/2026", "30/09/2026") == []
+    # Extrato sem período: não há o que conferir
+    assert fora_do_periodo(linhas, "", "30/09/2026") == []

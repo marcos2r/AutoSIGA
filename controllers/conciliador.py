@@ -7,6 +7,8 @@ identifica exatamente quais transações estão no banco mas ainda não
 foram lançadas no sistema.
 """
 
+from datetime import datetime
+
 from controllers.prova_real import normalizar_linhas_siga
 
 
@@ -80,3 +82,33 @@ class Conciliador:
                 a_lancar.append(tx)
 
         return a_lancar
+
+
+def fora_do_periodo(linhas: list[dict], inicio: str, fim: str) -> list[str]:
+    """Datas da grade do SIGA que caem fora do período consultado.
+
+    A TES01701 abre com o filtro do mês atual. Se o período do extrato não for aplicado,
+    a grade é de outro mês e todo o extrato parece faltar no SIGA (em 23/10/2026 isso
+    duplicou 14 lançamentos de setembro). Qualquer data fora do período invalida a leitura.
+
+    Args:
+        linhas: Linhas da grade (`{"data": "dd/mm/aaaa", ...}`).
+        inicio: Data inicial do extrato, "dd/mm/aaaa" (vazia: sem conferência).
+        fim: Data final do extrato, "dd/mm/aaaa" (vazia: sem conferência).
+
+    Returns:
+        list[str]: As datas fora do período, na ordem da grade (vazia se a grade confere).
+    """
+    try:
+        ini, fin = datetime.strptime(inicio, "%d/%m/%Y"), datetime.strptime(fim, "%d/%m/%Y")
+    except (TypeError, ValueError):
+        return []
+    fora = []
+    for linha in linhas or []:
+        try:
+            data = datetime.strptime(str(linha.get("data", "")).strip(), "%d/%m/%Y")
+        except ValueError:
+            continue  # linha sem data (total, saldo anterior)
+        if not ini <= data <= fin:
+            fora.append(linha["data"])
+    return fora

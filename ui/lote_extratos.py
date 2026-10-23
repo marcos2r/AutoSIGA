@@ -89,7 +89,7 @@ class LoteExtratosMixin:
             for dados in self.dados_processados_lote:
                 card = CardContaExtrato(
                     self.scroll_lote, dados, self.config_manager, self.validar_lote_e_atualizar_botoes,
-                    catalogo=catalogo
+                    catalogo=catalogo, on_remover=self.remover_extrato_do_lote
                 )
                 card.pack(fill="x", padx=5, pady=5)
                 self.cards_lote.append(card)
@@ -126,6 +126,23 @@ class LoteExtratosMixin:
         self.progress_bar.set(0.0)
         self.atualizar_faixa_catalogo()
         self.atualizar_status("Lote limpo com sucesso. Aguardando novos arquivos.", "#666666")
+
+    def remover_extrato_do_lote(self, card):
+        """Tira um extrato do lote (ex.: conta que não existe no SIGA) sem apagar mapeamentos."""
+        if card not in self.cards_lote:
+            return
+        self.cards_lote.remove(card)
+        if card.dados_extrato in self.dados_processados_lote:
+            self.dados_processados_lote.remove(card.dados_extrato)
+        card.destroy()
+
+        if not self.cards_lote:
+            self.resetar_lote()
+            return
+        restantes = len(self.cards_lote)
+        self.label_arquivo.configure(text=f"{restantes} extrato(s) no lote. Conta {card.conta_id} retirada.",
+                                     text_color=tema.CINZA_TEXTO)
+        self.validar_lote_e_atualizar_botoes()
 
     def processar_ofx(self, caminho):
         """Mantido para compatibilidade, delega para processar_multiplos_arquivos."""

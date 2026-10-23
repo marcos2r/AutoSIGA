@@ -27,11 +27,12 @@ from ui import tema
 class CardContaExtrato(ctk.CTkFrame):
     """Mapeamento de um extrato para a localidade, a C. Corrente e a C. Aplicação do SIGA."""
 
-    def __init__(self, parent, dados_extrato, config_manager, on_change_callback, catalogo=None):
+    def __init__(self, parent, dados_extrato, config_manager, on_change_callback, catalogo=None, on_remover=None):
         super().__init__(parent, fg_color=tema.BRANCO, border_width=1, border_color=tema.CINZA_BORDA, corner_radius=6)
         self.dados_extrato = dados_extrato
         self.config_manager = config_manager
         self.on_change_callback = on_change_callback
+        self.on_remover = on_remover
 
         self.conta_id = dados_extrato.get("conta_id", "")
         self.produto = dados_extrato.get("produto")
@@ -59,8 +60,16 @@ class CardContaExtrato(ctk.CTkFrame):
                                        font=(tema.FONTE, 12, "bold"), text_color=tema.AZUL_TITULO)
         self.lbl_titulo.grid(row=0, column=0, columnspan=4, padx=10, pady=(6, 2), sticky="w")
 
-        self.lbl_selo = ctk.CTkLabel(self, text="", font=(tema.FONTE, 11, "bold"), corner_radius=10, height=24)
-        self.lbl_selo.grid(row=0, column=4, padx=10, pady=(6, 2), sticky="e")
+        frame_topo = ctk.CTkFrame(self, fg_color="transparent")
+        frame_topo.grid(row=0, column=4, padx=10, pady=(6, 2), sticky="e")
+        self.lbl_selo = ctk.CTkLabel(frame_topo, text="", font=(tema.FONTE, 11, "bold"), corner_radius=10, height=24)
+        self.lbl_selo.pack(side="left")
+        # Tira só este extrato do lote (o mapeamento salvo continua): útil para conta que não existe no SIGA
+        self.btn_remover = ctk.CTkButton(frame_topo, text="✕ Tirar do lote", width=100, height=24,
+                                         font=(tema.FONTE, 11), fg_color=tema.BRANCO, hover_color=tema.VERMELHO_FUNDO,
+                                         text_color=tema.VERMELHO_TEXTO, border_width=1, border_color=tema.CINZA_BORDA,
+                                         command=lambda: self.on_remover(self) if self.on_remover else None)
+        self.btn_remover.pack(side="left", padx=(8, 0))
 
         ctk.CTkLabel(self, text="Localidade:", font=fonte).grid(row=1, column=0, padx=(10, 4), pady=2, sticky="e")
         self.combo_local = ctk.CTkComboBox(self, values=[], width=300, height=28, font=fonte,

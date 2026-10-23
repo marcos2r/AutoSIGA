@@ -86,6 +86,9 @@ class ExtratosMixin:
                     time.sleep(0.5)
                 except Exception as e:
                     logging.debug(f"Pop-up de competência não apareceu: {e}")
+                # O aviso de mês fechado pode chegar depois da validação no servidor
+                if self._mes_fechado_na_tela(page):
+                    raise MesFechadoError(data_tx)
 
                 # Preenche o Valor Numérico
                 valor_str = f"{abs(valor_tx):.2f}".replace('.', ',')
@@ -232,6 +235,9 @@ class ExtratosMixin:
                     time.sleep(0.5)
                 except Exception as e:
                     logging.debug(f"Pop-up de competência não apareceu: {e}")
+                # O aviso de mês fechado pode chegar depois da validação no servidor
+                if self._mes_fechado_na_tela(page):
+                    raise MesFechadoError(data_tx)
 
                 # 5. Forma de Recebimento: "CRÉDITO EM CONTA" (opção '10')
                 self.selecionar_select2(page, "f_formapagamento", "CRÉDITO EM CONTA", dropdown_is_ajax=False)

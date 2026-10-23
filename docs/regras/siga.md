@@ -91,10 +91,17 @@ Usada para as faturas de energia.
   - Aprovado: Desaprovar (TES01509), **Baixar (TES01506)**;
   - Pago: Visualizar, Estornar (TES01507), Anexos.
 
-  Os links levam `?codigo=<GUID da parcela>`. As faturas de energia lançadas pelo AutoSIGA ficam como **Lançado**, então só podem ser baixadas depois de aprovadas. A TES01508 não foi aberta: pode aprovar no próprio carregamento da página.
+  Os links levam `?codigo=<GUID da parcela>`. As faturas de energia lançadas pelo AutoSIGA ficam como **Lançado**, então só podem ser baixadas depois de aprovadas.
+
 - Filtros (`form#f_main`): `f_tipodata` (Dt. Vcto, Dt. Emissão, Dt. Lcto, Dt. Pagamento), `f_data1`/`f_data2`, `f_fornecedor`, `f_contaprovisao`, `f_centrocusto`, `f_valorfatura1`/`f_valorfatura2`, `f_agrupamento`, `f_statusfatura` (Aprovado, Lançado, Pago, Pago Parcialmente).
 - Visualizar (modal TES01503): rateio (despesa 3006 - ENERGIA ELÉTRICA e centro de custo), pagamentos parciais (data, valor pago, multa, juros, desconto, total) e anexos. Não mostra a forma nem a conta de pagamento.
 
+## TES01508 — Aprovar provisão (formulário, testado em 23/10/2026)
+
+- Abrir `TES01508.aspx?codigo=<GUID>` **não aprova**: é um formulário de confirmação.
+- Só leitura: `#f_lote`, `#f_documento` (Nº Doc., o número da fatura), `#f_valor`, rateio, `#f_credito` (conta provisão), `#f_historico`, fornecedor, `f_dataVencimento`, observação e anexos. O formulário `form#f_main` (POST para a própria página) leva os hidden `f_codigo=<GUID>` e `gravar=S`.
+- Único campo editável: `#f_motivo` (textarea, opcional).
+- O botão verde **Aprovar** (submit, sem id) grava. Em seguida aparece o bootbox "Informações armazenadas com sucesso!" (botão Ok, `data-bb-handler="botao"`); o Ok volta para a TES01501, onde a linha passa a **Aprovado**, com Desaprovar e Baixar.
 ## Como o extrato vira lançamento no SIGA (ADM, levantado em 23/10/2026)
 
 Cruzamento do OFX de maio/2026 de uma conta corrente da ADM com a grade da TES01701 (data e valor, um a um): 328 de 331 movimentos tinham par exato. O que cada movimento do banco vira:

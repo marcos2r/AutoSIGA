@@ -6,7 +6,9 @@ Caixas e Bancos (TES01701), cruza a grade com o banco e lança o que falta.
 import logging
 import time
 
+from bot.descoberta_contas import _JS_LER_CONTAS_TES
 from bot.extratos import MesFechadoError
+from controllers.catalogo_contas import escolher_opcao_conta
 from controllers.conciliador import Conciliador
 
 # Lê a grade #grid1 da TES01701 (Data, Lançto, Documento, Histórico, Origem, Entrada, Saída, Saldo)
@@ -102,6 +104,14 @@ class FluxoExtratosMixin:
         is_aplicacao = dados.get("tipo_extrato") == "APLICACAO"
         conta_alvo = dados.get("conta_siga_aplicacao" if is_aplicacao else "conta_siga_corrente", "")
         extrato_siga = self._abrir_consulta_tes01701(page, conta_alvo, dados.get("data_inicial", ""), data_final)
+        if extrato_siga is None:
+            # Sem a conta certa no filtro, consultar ou lançar cairia na conta que já estava selecionada
+            qtd = len(dados.get("transacoes", []))
+            telemetria_lote["pendentes"] += qtd
+            self.update_status(f"⛔ Conta {conta_alvo or '(vazia)'} não encontrada em {self.localidade_selecionada}: "
+                               f"extrato não lançado ({qtd} itens pendentes).", "#D9534F")
+            self._atualizar_progresso(idx)
+            return False
         dados["extrato_siga"] = extrato_siga
         telemetria_lote["siga_itens"] += len(extrato_siga)
 
@@ -121,7 +131,11 @@ class FluxoExtratosMixin:
         return True
 
     def _abrir_consulta_tes01701(self, page, conta_alvo, data_in, data_fim):
-        """Abre a TES01701, filtra a conta e o período e devolve as linhas da grade."""
+        """Abre a TES01701, filtra a conta e o período e devolve as linhas da grade.
+
+        Returns:
+            list | None: Linhas da grade, ou None se a conta não está na lista da localidade.
+        """
         self.update_status("Acessando rotina TES01701...", "#428BCA")
         input_programa = page.locator('#f_executar_programa')
         input_programa.wait_for(state="visible", timeout=10000)
@@ -139,20 +153,8 @@ class FluxoExtratosMixin:
         btn_extrato.click()
         time.sleep(1.5)
 
-        achou_conta = False
-        if conta_alvo:
-            opcoes = page.locator('#f_conta option')
-            for i in range(opcoes.count()):
-                texto_opt = opcoes.nth(i).text_content()
-                if conta_alvo in texto_opt:
-                    valor_id = opcoes.nth(i).get_attribute('value')
-                    page.evaluate(f'$("#f_conta").val("{valor_id}").trigger("change")')
-                    achou_conta = True
-                    break
-
-        if not achou_conta:
-            self.update_status(f"⚠️ Conta '{conta_alvo}' não encontrada na lista!", "#D9534F")
-            time.sleep(3)
+        if not self._selecionar_conta(page, conta_alvo):
+            return None
 
         if data_in:
             page.locator('#f_data1').fill(data_in)
@@ -168,6 +170,18 @@ class FluxoExtratosMixin:
         self.update_status("Lendo dados da tabela do SIGA...", "#428BCA")
         page.locator('#grid1').wait_for(state="visible", timeout=10000)
         return self._ler_grade_tes01701(page)
+
+    def _selecionar_conta(self, page, codigo):
+        """Seleciona no filtro a conta ativa de código exatamente igual ao do card.
+
+        Returns:
+            bool: False se a conta não está na lista da localidade (nada é selecionado).
+        """
+        valor = escolher_opcao_conta(page.evaluate(_JS_LER_CONTAS_TES) or [], codigo)
+        if not valor:
+            return False
+        page.evaluate('v => $("#f_conta").val(v).trigger("change")', valor)
+        return True
 
     def _ler_grade_tes01701(self, page):
         """Linhas da grade de movimentos da TES01701 como dicionários de texto."""

@@ -5,6 +5,7 @@ from controllers.catalogo_contas import (
     ContaSiga,
     cc_bate,
     consolidar,
+    escolher_opcao_conta,
     ler_linha_plano_contas,
     ler_rotulo_tesouraria,
     mascarar_cc,
@@ -161,3 +162,24 @@ def test_grade_do_plano_localiza_colunas_pelo_titulo():
     contas = ler_grade_plano_contas(cabecalho, linhas)
     assert [(c.codigo, c.localidade, c.cc) for c in contas] == [("10116", "PIA - CENTRAL", "333333")]
     assert ler_grade_plano_contas(["Nome"], linhas) == []
+
+
+@pytest.mark.parametrize("codigo, esperado", [
+    ("10130", "a"),        # código exato
+    (" 10130 ", "a"),      # espaços em volta do código do card
+    ("1013", None),        # trecho de um código maior
+    ("110130", "c"),       # código que contém outro
+    ("10199", None),       # só existe no INATIVO
+    ("", None),
+])
+def test_escolher_opcao_conta_compara_o_codigo_inteiro(codigo, esperado):
+    opcoes = [
+        {"texto": "10130 - SICREDI - AG: 0101 CC: 12345-6", "valor": "a", "inativa": False},
+        {"texto": "10199 - SICREDI - AG: 0101 CC: 99999-9", "valor": "b", "inativa": True},
+        {"texto": " 110130 -SICREDI - AG: 0101 CC: 22222-2", "valor": "c", "inativa": False},
+    ]
+    assert escolher_opcao_conta(opcoes, codigo) == esperado
+
+
+def test_escolher_opcao_conta_sem_opcoes():
+    assert escolher_opcao_conta([], "10130") is None

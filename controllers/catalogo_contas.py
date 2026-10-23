@@ -185,6 +185,34 @@ def _partes_do_nome(nome: str) -> tuple[str, str, str, str]:
     return banco, agencia, cc, finalidade
 
 
+def codigo_do_rotulo(rotulo: str) -> str | None:
+    """Código reduzido de uma opção da TES01701 ("10130 - SICREDI ..." → "10130"), ou None."""
+    m = _RE_CODIGO_TESOURARIA.match(rotulo or "")
+    return m.group(1) if m else None
+
+
+def escolher_opcao_conta(opcoes: list[dict[str, Any]], codigo: str) -> str | None:
+    """Valor da opção ativa do `select#f_conta` cujo código é exatamente `codigo`.
+
+    Compara o código inteiro, nunca um trecho do rótulo: "10130" não pode casar com
+    "110130 - ...". Contas do `optgroup` INATIVO são ignoradas.
+
+    Args:
+        opcoes: Opções lidas da página ({"texto", "valor", "inativa"}).
+        codigo: Código reduzido da conta escolhida no card.
+
+    Returns:
+        O `value` da opção, ou None se a conta não estiver na lista.
+    """
+    alvo = (codigo or "").strip()
+    if not alvo:
+        return None
+    for opcao in opcoes:
+        if not opcao.get("inativa") and codigo_do_rotulo(opcao.get("texto", "")) == alvo:
+            return str(opcao.get("valor", ""))
+    return None
+
+
 def ler_rotulo_tesouraria(rotulo: str, localidade: str, inativa: bool = False) -> ContaSiga | None:
     """Lê uma opção do `select#f_conta` da TES01701.
 

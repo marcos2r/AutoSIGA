@@ -46,6 +46,7 @@ _JS_LER_GRADE = '''() => ({
 
 _JS_LER_CONTAS_TES = '''() => Array.from(document.querySelectorAll('select#f_conta option')).map(o => ({
     texto: o.textContent.trim(),
+    valor: o.value,
     inativa: !!(o.parentElement && o.parentElement.tagName === 'OPTGROUP'
                 && o.parentElement.label.toUpperCase().indexOf('INATIV') > -1)
 }))'''

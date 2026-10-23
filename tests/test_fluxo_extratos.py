@@ -1,7 +1,6 @@
 """Laço de extratos do SigaBot de ponta a ponta, com uma Caixas e Bancos (TES01701) falsa."""
 
 import importlib
-import re
 from contextlib import nullcontext
 from types import SimpleNamespace
 
@@ -21,17 +20,6 @@ def _linha(data, valor):
     texto = f"{abs(valor):.2f}".replace(".", ",")
     return {"data": data, "lote": "", "documento": "", "historico": "", "origem": "",
             "entrada": texto if valor > 0 else "", "saida": texto if valor < 0 else "", "saldo": ""}
-
-
-class _Opcao:
-    def __init__(self, valor, texto):
-        self.valor, self.texto = valor, texto
-
-    def text_content(self):
-        return self.texto
-
-    def get_attribute(self, nome):
-        return self.valor
 
 
 class _Locator:
@@ -54,23 +42,16 @@ class _Locator:
     def fill(self, texto, **kwargs):
         self.pagina.acoes.append(("fill", self.seletor, texto))
 
-    def count(self):
-        return len(self.pagina.opcoes())
-
-    def nth(self, i):
-        return self.pagina.opcoes()[i]
-
 
 class PaginaTesouraria:
     """Imita a TES01701: lista de contas da localidade e a grade de movimentos por conta."""
 
-    def __init__(self, grades):
+    def __init__(self, grades, opcoes=None):
         self.grades = grades
+        self.opcoes = opcoes if opcoes is not None else [
+            {"texto": rotulo, "valor": f"id{codigo}", "inativa": False} for codigo, rotulo in ROTULOS.items()]
         self.conta = ""
         self.acoes = []
-
-    def opcoes(self):
-        return [_Opcao(f"id{codigo}", rotulo) for codigo, rotulo in ROTULOS.items()]
 
     def locator(self, seletor):
         return _Locator(self, seletor)
@@ -81,9 +62,10 @@ class PaginaTesouraria:
     def evaluate(self, script, arg=None):
         if "#grid1 tbody tr" in script:
             return [dict(linha) for linha in self.grades.get(self.conta, [])]
-        escolha = re.search(r'#f_conta"\)\.val\("id(\d+)"\)', script)
-        if escolha:
-            self.conta = escolha.group(1)
+        if "select#f_conta option" in script:
+            return [dict(o) for o in self.opcoes]
+        if '$("#f_conta").val(v)' in script:
+            self.conta = arg.removeprefix("id")
             self.acoes.append(("conta", self.conta))
         return None
 
@@ -101,7 +83,7 @@ def _extrato(tipo_adm, conta, transacoes, aplicacao=False):
     }
 
 
-def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False):
+def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False, opcoes=None):
     """Roda `fluxo_automacao` inteiro sem navegador e devolve o que aconteceu."""
     sem_espera = SimpleNamespace(sleep=lambda s: None, time=lambda: 0.0)
     monkeypatch.setattr(siga_bot, "time", sem_espera)
@@ -109,7 +91,7 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
         monkeypatch.setattr(importlib.import_module("bot.fluxo_extratos"), "time", sem_espera)
     except ModuleNotFoundError:
         pass
-    pagina = PaginaTesouraria(grades)
+    pagina = PaginaTesouraria(grades, opcoes)
     reg = SimpleNamespace(trocas=[], lancamentos=[], rendimentos=[], status=[], telemetria=None)
     callbacks = {"show_dashboard": lambda tel, t: setattr(reg, "telemetria", tel)}
     bot = SigaBot(lote, callbacks=callbacks)
@@ -203,3 +185,23 @@ def test_mes_fechado_nao_retenta_e_pula_o_resto_da_localidade(monkeypatch):
     assert reg.pagina.programas() == ["TES01701"] * 2
     assert reg.telemetria["pendentes"] == 2
     assert any("Meses fechados" in s for s in reg.status)
+
+
+def _opcao(texto, inativa=False):
+    return {"texto": texto, "valor": f"v-{texto.split()[0]}", "inativa": inativa}
+
+
+def test_conta_ausente_na_localidade_pula_o_extrato_sem_consultar_nem_lancar(monkeypatch):
+    lote = [_extrato("DR", "10130", [RESG]), _extrato("PIA", "10127", [APLIC])]
+    opcoes = [_opcao("110130 - SICREDI - AG: 0101 CC: 99999-9"),       # contém "10130", mas é outra
+              _opcao("10130 - SICREDI - AG: 0101 CC: 12345-6", inativa=True),
+              _opcao(ROTULOS["10127"])]
+
+    reg = _rodar(monkeypatch, lote, {}, opcoes=opcoes)
+
+    # A DR é pulada antes de consultar; a PIA segue normalmente
+    assert reg.lancamentos == [[APLIC]]
+    assert [a for a in reg.pagina.acoes if a[0] == "conta"] == [("conta", "v-10127")]
+    assert reg.pagina.acoes.count(("click", '#f_main button[type="submit"].btn-success')) == 1
+    assert reg.telemetria["pendentes"] == 1
+    assert any("Conta 10130 não encontrada em DR - CENTRAL" in s for s in reg.status)

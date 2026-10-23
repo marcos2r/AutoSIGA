@@ -10,6 +10,8 @@ import calendar
 import logging
 from datetime import datetime
 
+from controllers.prova_real import DIVERGE, resumo_resultado
+
 
 class Exportador:
     """
@@ -238,8 +240,12 @@ class Exportador:
                 for c in range(1, 7):
                     ws_detalhe.cell(row=row_idx, column=c).fill = cor_zebra
 
+        abas = [ws_resumo, ws_detalhe]
+        if telemetria.get("extratos"):
+            abas.append(Exportador._aba_prova_real(wb, telemetria["extratos"], cor_header, fonte_header, fonte_normal))
+
         # Redimensionamento dinâmico das colunas
-        for sheet in [ws_resumo, ws_detalhe]:
+        for sheet in abas:
             for col in sheet.columns:
                 max_len = 0
                 for cell in col:
@@ -249,4 +255,43 @@ class Exportador:
                 sheet.column_dimensions[col_letter].width = max(max_len + 3, 12)
 
         wb.save(filepath)
+
+    @staticmethod
+    def _aba_prova_real(wb, resultados, cor_header, fonte_header, fonte_normal):
+        """Aba "Prova Real": saldo do banco × SIGA por extrato e, abaixo, os lançamentos sem par."""
+        from openpyxl.styles import Alignment
+
+        ws = wb.create_sheet(title="Prova Real")
+        cabecalho = ["Localidade", "Conta SIGA", "Conta Bancária", "Saldo Banco", "Saldo SIGA", "Diferença",
+                     "Lançados", "Pendentes", "Resultado"]
+        for col, texto in enumerate(cabecalho, start=1):
+            cell = ws.cell(row=1, column=col, value=texto)
+            cell.fill, cell.font = cor_header, fonte_header
+            cell.alignment = Alignment(horizontal="center")
+
+        linha = 2
+        for r in resultados:
+            valores = [r.localidade, r.conta_siga, r.conta_id, r.saldo.saldo_banco, r.saldo.saldo_siga,
+                       r.saldo.diferenca if r.saldo.status == DIVERGE else None, r.lancados, r.pendentes,
+                       resumo_resultado(r)[1]]
+            for col, valor in enumerate(valores, start=1):
+                cell = ws.cell(row=linha, column=col, value=valor)
+                cell.font = fonte_normal
+                if 4 <= col <= 6:
+                    cell.number_format = 'R$ #,##0.00'
+            linha += 1
+
+        sobras = [(r, s) for r in resultados for s in (r.sobras or [])]
+        if sobras:
+            linha += 1
+            for col, texto in enumerate(["Lançamentos no SIGA sem par no banco", "Conta SIGA", "Data",
+                                         "Histórico", "Valor"], start=1):
+                cell = ws.cell(row=linha, column=col, value=texto)
+                cell.fill, cell.font = cor_header, fonte_header
+            for r, s in sobras:
+                linha += 1
+                for col, valor in enumerate([r.localidade, r.conta_siga, s.data, s.historico, s.valor], start=1):
+                    ws.cell(row=linha, column=col, value=valor).font = fonte_normal
+                ws.cell(row=linha, column=5).number_format = 'R$ #,##0.00'
+        return ws
 

@@ -8,6 +8,8 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 from controllers.exportador import Exportador
+from controllers.prova_real import resumo_resultado
+from ui import tema
 
 
 class DashboardMixin:
@@ -69,6 +71,23 @@ class DashboardMixin:
             self.bot_instance.autorizou_importacao = False
             self.bot_instance.esperando_autorizacao = False
         janela.destroy()
+
+    def _secao_prova_real(self, container, resultados):
+        """Lista o resultado de cada extrato: saldo do SIGA × banco e lançamentos sem par."""
+        cores = {"ok": tema.VERDE_TEXTO, "alerta": tema.VERMELHO_TEXTO, "neutro": tema.CINZA_TEXTO}
+        ctk.CTkLabel(container, text="PROVA REAL (SALDO DO SIGA × BANCO)", font=(tema.FONTE, 10, "bold"),
+                     text_color=tema.AZUL_TITULO).pack(anchor="w", padx=27, pady=(4, 2))
+        lista = ctk.CTkScrollableFrame(container, height=min(52 * len(resultados), 200), fg_color=tema.BRANCO,
+                                       border_width=1, border_color=tema.CINZA_BORDA)
+        lista.pack(fill="x", padx=15, pady=(0, 6))
+        for r in resultados:
+            nivel, texto = resumo_resultado(r)
+            linha = ctk.CTkFrame(lista, fg_color="transparent")
+            linha.pack(fill="x", padx=6, pady=3)
+            ctk.CTkLabel(linha, text=f"{r.conta_siga or r.conta_id} · {r.localidade}", font=(tema.FONTE, 11, "bold"),
+                         text_color=tema.CINZA_TEXTO, anchor="w").pack(fill="x")
+            ctk.CTkLabel(linha, text=texto, font=(tema.FONTE, 11), text_color=cores[nivel], anchor="w",
+                         justify="left", wraplength=540).pack(fill="x")
 
     def mostrar_dashboard_produtividade(self, telemetria, tempo_inicio):
         """Exibe o popup parabenizando a finalização dos trabalhos com métricas e ROI financeiro."""
@@ -175,6 +194,10 @@ class DashboardMixin:
         add_linha(frame_tabela, "Tempo estimado (Manual):", f"{h_minutos}m {h_segundos}s", cor_valor="#D9534F")
         add_linha(frame_tabela, "Tempo economizado:", f"🔥 {e_minutos}m {e_segundos}s", cor_valor="#5CB85C", negrito=True)
         add_linha(frame_tabela, "Retorno financeiro estimado (ROI):", roi_fmt, cor_valor="#5CB85C", negrito=True)
+
+        if telemetria.get("extratos"):
+            self._secao_prova_real(frame, telemetria["extratos"])
+            janela.geometry("640x760")
 
         # Função para salvar a planilha Excel
         def exportar_planilha():

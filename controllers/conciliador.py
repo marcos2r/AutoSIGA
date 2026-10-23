@@ -7,7 +7,7 @@ identifica exatamente quais transações estão no banco mas ainda não
 foram lançadas no sistema.
 """
 
-import logging
+from controllers.prova_real import normalizar_linhas_siga
 
 
 class Conciliador:
@@ -43,52 +43,9 @@ class Conciliador:
         if not ofx_txs:
             return []
 
-        # Proteção básica contra entrada nula vinda do Web Scraper
-        if not siga_txs_raw:
-            siga_txs_raw = []
-
-        # 1. Fase de Normalização e Sanitização dos Dados do SIGA
-        siga_txs = []
-        for entry in siga_txs_raw:
-            ent_str = entry.get('entrada', '').strip()
-            sai_str = entry.get('saida', '').strip()
-
-            # Limpa marcadores nulos do HTML manual ('-' ou '0,00' significam zerado)
-            if ent_str in ['-', '', '0,00', '0.00']:
-                ent_str = None
-            if sai_str in ['-', '', '0,00', '0.00']:
-                sai_str = None
-
-            is_saida = False
-            val_str = None
-
-            # Identifica a polaridade da transação (Entrada = +, Saída = -)
-            if ent_str:
-                val_str = ent_str
-            elif sai_str:
-                val_str = sai_str
-                is_saida = True
-
-            # Se não houver valor em ambas as colunas, ignora a linha da tabela
-            if not val_str:
-                continue
-
-            try:
-                # Transforma strings brasileiras '3.000,00' ou '-150,00' em float nativo
-                val_str_limpo = val_str.replace('.', '').replace(',', '.')
-                # abs() previne duplo negativo caso o SIGA já traga o sinal na string de Saída
-                val_float = abs(float(val_str_limpo))
-
-                if is_saida:
-                    val_float = -val_float
-
-                siga_txs.append({
-                    'data': entry.get('data', '').strip(),
-                    'valor': val_float,
-                    'matched': False # Flag para evitar que uma mesma transação invalide duas do OFX
-                })
-            except Exception as e:
-                logging.error(f"Erro ao converter valor numérico do SIGA: {val_str} - {e}")
+        # 1. Normalização dos dados do SIGA (entrada positiva, saída negativa)
+        siga_txs = [{'data': m.data, 'valor': m.valor, 'matched': False}  # matched: cada linha casa uma vez só
+                    for m in normalizar_linhas_siga(siga_txs_raw)]
 
         # 2. Fase de Cruzamento (Conciliação)
         a_lancar = []

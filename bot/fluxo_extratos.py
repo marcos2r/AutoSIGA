@@ -10,6 +10,21 @@ from bot.descoberta_contas import _JS_LER_CONTAS_TES
 from bot.extratos import MesFechadoError
 from controllers.catalogo_contas import escolher_opcao_conta
 from controllers.conciliador import Conciliador
+from controllers.exportador import Exportador
+from controllers.prova_real import (
+    CONCILIADO,
+    CONFERE,
+    CONTA_NAO_ENCONTRADA,
+    DIVERGE,
+    MES_FECHADO,
+    PENDENTE,
+    ResultadoExtrato,
+    conferir_saldo,
+    movimentos_do_banco,
+    nao_conferido,
+    sobras_no_siga,
+    valor_br,
+)
 
 # Lê a grade #grid1 da TES01701 (Data, Lançto, Documento, Histórico, Origem, Entrada, Saída, Saldo)
 _JS_LER_GRADE = '''() => {
@@ -26,6 +41,12 @@ _JS_LER_GRADE = '''() => {
         }
     }
     return r;
+}'''
+
+# Saldo final da conta no período: coluna Saldo da linha "Total" do rodapé da grade
+_JS_LER_SALDO = '''() => {
+    const celulas = document.querySelectorAll('#grid1 tfoot tr:first-child th, #grid1 tfoot tr:first-child td');
+    return celulas.length > 7 ? celulas[7].innerText.trim() : null;
 }'''
 
 _LIMITE_TENTATIVAS = 3
@@ -84,7 +105,12 @@ class FluxoExtratosMixin:
         mes_ano_alvo = data_final[3:] if len(data_final) >= 10 else ""
         localidade_atual = f"{self.tipo_alvo}-{self.nome_alvo}"
         chave_competencia = (f"{self.tipo_alvo} - {self.nome_alvo}".upper(), mes_ano_alvo)
+        is_aplicacao = dados.get("tipo_extrato") == "APLICACAO"
+        conta_alvo = dados.get("conta_siga_aplicacao" if is_aplicacao else "conta_siga_corrente", "")
+        qtd = len(dados.get("transacoes", []))
         if self._pular_competencia_fechada(chave_competencia, telemetria_lote, idx):
+            self._registrar_resultado(telemetria_lote, dados, conta_alvo, MES_FECHADO, pendentes=qtd,
+                                      saldo=nao_conferido("mês fechado no SIGA", dados.get("saldo_atual")))
             return False
 
         # Só troca de localidade e competência se for diferente do extrato anterior
@@ -92,7 +118,10 @@ class FluxoExtratosMixin:
             if not self._ajustar_localidade_competencia(page, self.tipo_alvo, self.nome_alvo, mes_ano_alvo):
                 # Não lança nada num mês/localidade diferente do extrato
                 self.competencias_fechadas.add(chave_competencia)
-                telemetria_lote["pendentes"] += len(dados.get("transacoes", []))
+                telemetria_lote["pendentes"] += qtd
+                self._registrar_resultado(telemetria_lote, dados, conta_alvo, MES_FECHADO, pendentes=qtd,
+                                          saldo=nao_conferido("localidade ou mês indisponível no SIGA",
+                                                              dados.get("saldo_atual")))
                 contexto["localidade"] = contexto["competencia"] = None
                 self._atualizar_progresso(idx)
                 return False
@@ -101,13 +130,12 @@ class FluxoExtratosMixin:
         sufixo = f" ({mes_ano_alvo})" if mes_ano_alvo else ""
         self.update_status(f"✅ Logado em: {self.localidade_selecionada}{sufixo}", "#3C763D")
 
-        is_aplicacao = dados.get("tipo_extrato") == "APLICACAO"
-        conta_alvo = dados.get("conta_siga_aplicacao" if is_aplicacao else "conta_siga_corrente", "")
         extrato_siga = self._abrir_consulta_tes01701(page, conta_alvo, dados.get("data_inicial", ""), data_final)
         if extrato_siga is None:
             # Sem a conta certa no filtro, consultar ou lançar cairia na conta que já estava selecionada
-            qtd = len(dados.get("transacoes", []))
             telemetria_lote["pendentes"] += qtd
+            self._registrar_resultado(telemetria_lote, dados, conta_alvo, CONTA_NAO_ENCONTRADA, pendentes=qtd,
+                                      saldo=nao_conferido("conta não encontrada no SIGA", dados.get("saldo_atual")))
             self.update_status(f"⛔ Conta {conta_alvo or '(vazia)'} não encontrada em {self.localidade_selecionada}: "
                                f"extrato não lançado ({qtd} itens pendentes).", "#D9534F")
             self._atualizar_progresso(idx)
@@ -118,9 +146,11 @@ class FluxoExtratosMixin:
         self.update_status(f"Cruzando {len(extrato_siga)} itens do SIGA com o OFX...", "#428BCA")
         novos_lancamentos = Conciliador.conciliar(dados.get("transacoes", []), extrato_siga)
 
+        pendentes, grade_atual = [], True
+        injecoes_antes = telemetria_lote["injecoes"]
         if novos_lancamentos:
-            pendentes = self._lancar_com_conferencia(page, novos_lancamentos, is_aplicacao,
-                                                     chave_competencia, telemetria_lote)
+            pendentes, grade_atual = self._lancar_com_conferencia(page, novos_lancamentos, is_aplicacao,
+                                                                  chave_competencia, telemetria_lote)
             if pendentes:
                 telemetria_lote["pendentes"] += len(pendentes)
                 if chave_competencia not in self.competencias_fechadas:
@@ -128,7 +158,62 @@ class FluxoExtratosMixin:
                                        f"bateram após {_LIMITE_TENTATIVAS} tentativas.", "#D9534F")
         else:
             self.update_status(f"✅ [{self.localidade_selecionada}] Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
+
+        if chave_competencia in self.competencias_fechadas:
+            situacao, saldo, sobras = MES_FECHADO, nao_conferido("mês fechado no SIGA", dados.get("saldo_atual")), None
+        else:
+            situacao = PENDENTE if pendentes else CONCILIADO
+            saldo, sobras = self._prova_real(page, dados, grade_atual)
+        self._registrar_resultado(telemetria_lote, dados, conta_alvo, situacao,
+                                  telemetria_lote["injecoes"] - injecoes_antes, len(pendentes), saldo, sobras)
         return True
+
+    def _prova_real(self, page, dados, grade_atual):
+        """Confere o saldo final da grade com o do banco e procura lançamentos sem par.
+
+        Só lê a grade que já está na tela; nunca lança nem corrige nada.
+
+        Returns:
+            tuple: (ResultadoSaldo, sobras ou None quando não dá para apontá-las).
+        """
+        saldo_banco = dados.get("saldo_atual")
+        if dados.get("periodo_filtrado"):
+            return nao_conferido("período filtrado à mão", saldo_banco), None
+        if not grade_atual:
+            return nao_conferido("a grade do SIGA não foi relida depois dos lançamentos", saldo_banco), None
+        data_saldo = dados.get("data_saldo")
+        if saldo_banco is not None and data_saldo and data_saldo != dados.get("data_final"):
+            return nao_conferido(f"o saldo do extrato é de {data_saldo}", saldo_banco), None
+
+        try:
+            texto = page.evaluate(_JS_LER_SALDO)
+        except Exception as e:
+            logging.warning(f"Saldo da TES01701 ilegível: {e}")
+            texto = None
+        saldo = conferir_saldo(saldo_banco, valor_br(texto) if texto is not None else None)
+
+        movimentos = movimentos_do_banco(dados)
+        sobras = sobras_no_siga(movimentos, dados.get("extrato_siga")) if movimentos is not None else None
+
+        if saldo.status == CONFERE:
+            self.update_status(f"🧾 Prova real: saldo confere ({Exportador.formatar_moeda(saldo.saldo_siga)}).", "#3C763D")
+        elif saldo.status == DIVERGE:
+            extra = f" · {len(sobras)} lançamento(s) no SIGA sem par no extrato" if sobras else ""
+            self.update_status(f"⚠️ Prova real: SIGA {Exportador.formatar_moeda(saldo.saldo_siga)} × banco "
+                               f"{Exportador.formatar_moeda(saldo.saldo_banco)} (diferença "
+                               f"{Exportador.formatar_moeda(saldo.diferenca)}){extra}.", "#F89406")
+        return saldo, sobras
+
+    def _registrar_resultado(self, telemetria_lote, dados, conta_siga, situacao, lancados=0, pendentes=0,
+                             saldo=None, sobras=None):
+        """Guarda o resultado do extrato em `telemetria_lote["extratos"]` para o painel e o Excel."""
+        resultado = ResultadoExtrato(
+            conta_id=str(dados.get("conta_id", "")), conta_siga=conta_siga or "",
+            localidade=dados.get("localidade_selecionada", ""), tipo=dados.get("tipo_extrato", ""),
+            situacao=situacao, lancados=lancados, pendentes=pendentes, sobras=sobras)
+        if saldo is not None:
+            resultado.saldo = saldo
+        telemetria_lote.setdefault("extratos", []).append(resultado)
 
     def _abrir_consulta_tes01701(self, page, conta_alvo, data_in, data_fim):
         """Abre a TES01701, filtra a conta e o período e devolve as linhas da grade.
@@ -191,7 +276,8 @@ class FluxoExtratosMixin:
         """Lança os pendentes e relê a grade até tudo bater, em até 3 tentativas.
 
         Returns:
-            list: Transações que continuaram sem par no SIGA.
+            tuple: (transações que continuaram sem par no SIGA, True se a grade na tela
+            é a relida depois do último lançamento).
         """
         for tentativa in range(1, _LIMITE_TENTATIVAS + 1):
             if tentativa > 1:
@@ -212,7 +298,7 @@ class FluxoExtratosMixin:
                 self.competencias_fechadas.add(chave_competencia)
                 self.update_status(f"⛔ [{self.localidade_selecionada}] Mês {chave_competencia[1]} fechado no SIGA. "
                                    f"{len(pendentes)} lançamento(s) ficaram pendentes.", "#D9534F")
-                return pendentes
+                return pendentes, False
 
             telemetria_lote["injecoes"] += self._qtd_injecoes_efetuadas
 
@@ -231,9 +317,9 @@ class FluxoExtratosMixin:
                 pendentes = Conciliador.conciliar(self.dados_processados.get("transacoes", []), extrato_recente)
                 if not pendentes:
                     self.update_status(f"✅ [{self.localidade_selecionada}] Conferência 100%: Nenhum item para trás!", "#3C763D")
-                    return []
+                    return [], True
             except Exception as e:
                 logging.error(f"Erro na conferência final: {e}")
                 self.update_status(f"✅ [{self.localidade_selecionada}] Finalizado sem prova real.", "#3C763D")
-                return pendentes
-        return pendentes
+                return pendentes, False
+        return pendentes, True

@@ -111,6 +111,8 @@ class AcoesSigaMixin:
                         continue
                     transacoes_filtradas.append(tx)
                 dados_exec["transacoes"] = transacoes_filtradas
+                # Um período parcial não fecha com o saldo do mês: a prova real fica de fora
+                dados_exec["periodo_filtrado"] = True
 
             dados_exec["conta_siga_corrente"] = info["corrente"]
             dados_exec["conta_siga_aplicacao"] = info["aplicacao"]
@@ -118,8 +120,8 @@ class AcoesSigaMixin:
             dados_exec["nome_adm"] = info["nome_adm"]
             dados_exec["localidade_selecionada"] = f"{info['tipo_adm']} - {info['nome_adm']}"
 
-            # Só adiciona extrato se houver transações remanescentes após o filtro
-            if dados_exec.get("transacoes"):
+            # Sem filtro, extrato sem transação entra só para a prova real do saldo
+            if dados_exec.get("transacoes") or not dados_exec.get("periodo_filtrado"):
                 lote_valido.append(dados_exec)
 
         if not lote_valido:

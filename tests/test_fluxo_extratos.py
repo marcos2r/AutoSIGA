@@ -46,8 +46,9 @@ class _Locator:
 class PaginaTesouraria:
     """Imita a TES01701: lista de contas da localidade e a grade de movimentos por conta."""
 
-    def __init__(self, grades, opcoes=None):
+    def __init__(self, grades, opcoes=None, saldos=None):
         self.grades = grades
+        self.saldos = saldos or {}
         self.opcoes = opcoes if opcoes is not None else [
             {"texto": rotulo, "valor": f"id{codigo}", "inativa": False} for codigo, rotulo in ROTULOS.items()]
         self.conta = ""
@@ -60,6 +61,8 @@ class PaginaTesouraria:
         pass
 
     def evaluate(self, script, arg=None):
+        if "tfoot" in script:
+            return self.saldos.get(self.conta)
         if "#grid1 tbody tr" in script:
             return [dict(linha) for linha in self.grades.get(self.conta, [])]
         if "select#f_conta option" in script:
@@ -83,7 +86,7 @@ def _extrato(tipo_adm, conta, transacoes, aplicacao=False):
     }
 
 
-def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False, opcoes=None):
+def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False, opcoes=None, saldos=None):
     """Roda `fluxo_automacao` inteiro sem navegador e devolve o que aconteceu."""
     sem_espera = SimpleNamespace(sleep=lambda s: None, time=lambda: 0.0)
     monkeypatch.setattr(siga_bot, "time", sem_espera)
@@ -91,7 +94,7 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
         monkeypatch.setattr(importlib.import_module("bot.fluxo_extratos"), "time", sem_espera)
     except ModuleNotFoundError:
         pass
-    pagina = PaginaTesouraria(grades, opcoes)
+    pagina = PaginaTesouraria(grades, opcoes, saldos)
     reg = SimpleNamespace(trocas=[], lancamentos=[], rendimentos=[], status=[], telemetria=None)
     callbacks = {"show_dashboard": lambda tel, t: setattr(reg, "telemetria", tel)}
     bot = SigaBot(lote, callbacks=callbacks)
@@ -205,3 +208,67 @@ def test_conta_ausente_na_localidade_pula_o_extrato_sem_consultar_nem_lancar(mon
     assert reg.pagina.acoes.count(("click", '#f_main button[type="submit"].btn-success')) == 1
     assert reg.telemetria["pendentes"] == 1
     assert any("Conta 10130 não encontrada em DR - CENTRAL" in s for s in reg.status)
+
+
+def _resultados(reg):
+    return {r.conta_siga: r for r in reg.telemetria["extratos"]}
+
+
+def test_prova_real_confere_o_saldo_e_nao_aponta_sobras(monkeypatch):
+    lote = [dict(_extrato("DR", "10130", [APLIC, RESG]), saldo_atual=1.0, data_saldo="31/05/2026")]
+    grades = {"10130": [_linha("05/05/2026", -200.0)]}
+
+    reg = _rodar(monkeypatch, lote, grades, saldos={"10130": "1,00"})
+
+    r = _resultados(reg)["10130"]
+    assert (r.situacao, r.lancados, r.pendentes) == ("conciliado", 1, 0)
+    assert r.saldo.status == "confere"
+    assert r.sobras == []
+    assert any("Prova real: saldo confere (R$ 1,00)" in s for s in reg.status)
+
+
+def test_prova_real_aponta_diferenca_e_lancamento_sem_par(monkeypatch):
+    lote = [dict(_extrato("DR", "10130", [APLIC]), saldo_atual=1.0)]
+    grades = {"10130": [_linha("05/05/2026", -200.0), _linha("05/05/2026", -200.0)]}   # duplicado
+
+    reg = _rodar(monkeypatch, lote, grades, saldos={"10130": "-199,00"})
+
+    r = _resultados(reg)["10130"]
+    assert r.saldo.status == "diverge"
+    assert r.saldo.diferenca == -200.0
+    assert [(s.data, s.valor) for s in r.sobras] == [("05/05/2026", -200.0)]
+    assert reg.lancamentos == []
+
+
+def test_extrato_sem_lancamento_novo_so_confere(monkeypatch):
+    lote = [dict(_extrato("DR", "10396", [], aplicacao=True), saldo_atual=50.0, movimentos=[])]
+
+    reg = _rodar(monkeypatch, lote, {}, saldos={"10396": "50,00"})
+
+    assert reg.rendimentos == []
+    assert _resultados(reg)["10396"].saldo.status == "confere"
+
+
+def test_periodo_filtrado_nao_confere_o_saldo(monkeypatch):
+    lote = [dict(_extrato("DR", "10130", [APLIC]), saldo_atual=1.0, periodo_filtrado=True)]
+
+    reg = _rodar(monkeypatch, lote, {"10130": [_linha("05/05/2026", -200.0)]}, saldos={"10130": "9,99"})
+
+    saldo = _resultados(reg)["10130"].saldo
+    assert saldo.status == "nao_conferido"
+    assert "filtrado" in saldo.motivo
+
+
+def test_saldo_do_banco_de_outra_data_nao_e_comparado(monkeypatch):
+    lote = [dict(_extrato("DR", "10130", []), saldo_atual=1.0, data_saldo="20/05/2026")]
+
+    reg = _rodar(monkeypatch, lote, {}, saldos={"10130": "1,00"})
+
+    assert _resultados(reg)["10130"].saldo.status == "nao_conferido"
+
+
+def test_resultado_registra_conta_nao_encontrada_e_mes_fechado(monkeypatch):
+    reg = _rodar(monkeypatch, _lote_padrao(), _grades_padrao(), mes_fechado=True)
+
+    situacoes = {(r.conta_siga, r.situacao) for r in reg.telemetria["extratos"]}
+    assert situacoes == {("10130", "mes_fechado"), ("10396", "mes_fechado"), ("10127", "conciliado")}

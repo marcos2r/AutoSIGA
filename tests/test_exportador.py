@@ -106,3 +106,26 @@ def test_resumo_ofertas_sem_datas_validas():
 def test_formatar_moeda_no_padrao_do_siga():
     assert Exportador.formatar_moeda(1120441.6) == "R$ 1.120.441,60"
     assert Exportador.formatar_moeda(5.5) == "R$ 5,50"
+
+
+def test_excel_do_lote_tem_a_aba_prova_real_com_as_sobras(tmp_path):
+    import openpyxl
+
+    from controllers.prova_real import MovimentoSiga, ResultadoExtrato, conferir_saldo
+
+    resultados = [
+        ResultadoExtrato("12345-6", "10130", "DR - CENTRAL", "CORRENTE", "conciliado", lancados=1,
+                         saldo=conferir_saldo(1.0, 1.0), sobras=[]),
+        ResultadoExtrato("12345-6", "10396", "DR - CENTRAL", "APLICACAO", "conciliado",
+                         saldo=conferir_saldo(50.0, 92.1), sobras=[MovimentoSiga("05/05/2026", 42.1, "DUPLICADO")]),
+    ]
+    filepath = tmp_path / "lote.xlsx"
+
+    Exportador.gerar_excel_lote({"extratos": resultados}, [], str(filepath))
+
+    ws = openpyxl.load_workbook(filepath)["Prova Real"]
+    linhas = list(ws.iter_rows(values_only=True))
+    assert linhas[0][:6] == ("Localidade", "Conta SIGA", "Conta Bancária", "Saldo Banco", "Saldo SIGA", "Diferença")
+    assert linhas[1][5] is None and linhas[1][8].startswith("✔ Saldo confere")
+    assert linhas[2][5] == 42.1
+    assert ("DR - CENTRAL", "10396", "05/05/2026", "DUPLICADO", 42.1) in [tuple(linha[:5]) for linha in linhas]

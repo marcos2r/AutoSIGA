@@ -107,9 +107,9 @@ def bot(monkeypatch):
 
 def _trocar_contexto(bot, pagina, sem_acesso=(), erro_em=None):
     """Substitui a troca de localidade: registra e muda o cabeçalho da página falsa."""
-    def ajustar(page, tipo, nome, mes, mudar_padrao=True):
+    def ajustar(page, tipo, nome, mes):
         loc = f"{tipo} - {nome}"
-        bot.registro.trocas.append((loc, mes, mudar_padrao))
+        bot.registro.trocas.append((loc, mes))
         if loc == erro_em:
             raise RuntimeError("SIGA caiu")
         if loc in sem_acesso:
@@ -148,9 +148,8 @@ def test_sem_acesso_a_contabilidade_percorre_a_tesouraria_e_restaura(bot):
         ("10304", DR, True), ("10396", ADM, True)]
     # PIA sem contas legíveis vai para "sem acesso"; SEC não é visitada
     assert catalogo.localidades_sem_acesso == [PIA]
-    # Nunca marca "mudar padrão" e volta ao contexto original no fim
-    assert all(mudar is False for _, _, mudar in bot.registro.trocas)
-    assert bot.registro.trocas[-1] == (ADM, "10/2026", False)
+    # Volta ao contexto original no fim
+    assert bot.registro.trocas[-1] == (ADM, "10/2026")
     assert pagina.localidade == ADM
 
 
@@ -171,7 +170,7 @@ def test_contexto_e_restaurado_mesmo_com_excecao(bot):
 
     bot._fluxo_descoberta(pagina)
 
-    assert bot.registro.trocas[-1] == (ADM, "10/2026", False)
+    assert bot.registro.trocas[-1] == (ADM, "10/2026")
     assert pagina.localidade == ADM
     assert "descoberta_tesouraria" in bot.registro.capturas
 
@@ -181,8 +180,8 @@ def test_falha_ao_restaurar_avisa_o_usuario(bot):
     _trocar_contexto(bot, pagina)
     original = bot._ajustar_localidade_competencia
 
-    def ajustar(page, tipo, nome, mes, mudar_padrao=True):
-        return False if mes else original(page, tipo, nome, mes, mudar_padrao)
+    def ajustar(page, tipo, nome, mes):
+        return False if mes else original(page, tipo, nome, mes)
     bot._ajustar_localidade_competencia = ajustar
 
     bot._fluxo_descoberta(pagina)
@@ -204,6 +203,7 @@ class _PaginaModal:
 
     def __init__(self):
         self.seletores = []
+        self.scripts = []
         self.args = []
 
     def locator(self, seletor):
@@ -213,23 +213,24 @@ class _PaginaModal:
                                    click=lambda **kw: None, wait_for=lambda **kw: None, evaluate=lambda js: None))
 
     def evaluate(self, script, arg=None):
+        self.scripts.append(script)
         self.args.append(arg)
 
     def wait_for_load_state(self, estado):
         pass
 
 
-@pytest.mark.parametrize("mudar_padrao", [True, False])
-def test_troca_usa_o_formulario_da_localidade(monkeypatch, mudar_padrao):
+def test_troca_usa_o_formulario_da_localidade_e_nao_lembra_a_escolha(monkeypatch):
     monkeypatch.setattr(sessao, "time", SimpleNamespace(sleep=lambda s: None))
     b = SigaBot([], callbacks={})
     monkeypatch.setattr(b, "update_status", lambda *a: None)
     monkeypatch.setattr(SigaBot, "_contexto_ativo_confere", staticmethod(lambda *a: True))
     pagina = _PaginaModal()
 
-    assert b._ajustar_localidade_competencia(pagina, "dr", "central", "", mudar_padrao=mudar_padrao)
+    assert b._ajustar_localidade_competencia(pagina, "dr", "central", "")
 
     botao = [s for s in pagina.seletores if "Confirmar" in s]
     assert botao and all('select[name="f_estabelecimento"]' in s for s in botao)
-    # Valores vão como argumento do JS, e "mudar padrão" segue o parâmetro
-    assert pagina.args == [["DR", "CENTRAL", "", mudar_padrao]]
+    # Valores vão como argumento do JS; "lembrar a escolha" é sempre desmarcado
+    assert pagina.args == [["DR", "CENTRAL", ""]]
+    assert any("'#f-mudarpadrao').prop('checked', false)" in s for s in pagina.scripts)

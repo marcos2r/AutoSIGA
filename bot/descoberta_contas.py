@@ -4,7 +4,7 @@ Descoberta das contas bancárias no SIGA (tipo_lote="descoberta"), somente leitu
 Tenta o Plano de Contas da Contabilidade (CTB00301), que traz todas as contas com a
 localidade dona numa página só. Se o usuário não tiver acesso, percorre a Caixas e
 Bancos (TES01701) em cada localidade ADM, DR e PIA e, no fim, volta sempre ao contexto
-em que o usuário estava, sem marcar "mudar padrão". Nada é gravado no SIGA.
+em que o usuário estava, sem "lembrar a escolha". Nada é gravado no SIGA.
 """
 
 import logging
@@ -208,7 +208,7 @@ class DescobertaContasMixin:
                 if trocou or not mesma_localidade(loc, local_original):
                     tipo, nome = separar_localidade(loc)
                     trocou = True
-                    if not self._ajustar_localidade_competencia(page, tipo, nome, "", mudar_padrao=False):
+                    if not self._ajustar_localidade_competencia(page, tipo, nome, ""):
                         sem_acesso.append(loc)
                         continue
                 try:
@@ -234,7 +234,7 @@ class DescobertaContasMixin:
         """Volta à localidade e ao mês em que o usuário estava antes da descoberta."""
         tipo, nome = separar_localidade(localidade)
         try:
-            ok = self._ajustar_localidade_competencia(page, tipo, nome, competencia, mudar_padrao=False)
+            ok = self._ajustar_localidade_competencia(page, tipo, nome, competencia)
         except Exception as e:
             logging.error(f"Erro ao restaurar o contexto do SIGA: {e}", exc_info=True)
             ok = False

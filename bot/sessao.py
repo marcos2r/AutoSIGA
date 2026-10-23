@@ -123,7 +123,7 @@ class SessaoMixin:
     # O modal "Outros Meses" tem dois form.modal-form; só o que contém a localidade troca o contexto
     _FORM_LOCALIDADE = 'form.modal-form:has(select[name="f_estabelecimento"])'
 
-    _JS_PREENCHER_CONTEXTO = '''([tipo, nome, mes, mudarPadrao]) => {
+    _JS_PREENCHER_CONTEXTO = '''([tipo, nome, mes]) => {
         var selectLoc = jQuery('select[name="f_estabelecimento"]').first();
         var form = selectLoc.closest('form');
         var opcoes = selectLoc.find('option');
@@ -150,10 +150,11 @@ class SessaoMixin:
                 selectMes.val(optMes.first().val()).trigger('change');
             }
         }
-        jQuery('#f-mudarpadrao').prop('checked', mudarPadrao);
+        // Nunca "lembra a escolha": a troca vale só para esta sessão e não muda o padrão do usuário
+        jQuery('#f-mudarpadrao').prop('checked', false);
     }'''
 
-    def _ajustar_localidade_competencia(self, page, tipo_adm, nome_adm, mes_ano_alvo, mudar_padrao=True):
+    def _ajustar_localidade_competencia(self, page, tipo_adm, nome_adm, mes_ano_alvo):
         """Troca a localidade e o Mês de Trabalho ativos no SIGA pelo modal "Outros Meses".
 
         Args:
@@ -161,8 +162,6 @@ class SessaoMixin:
             tipo_adm (str): Tipo da localidade (ex: "ADM").
             nome_adm (str): Nome da localidade (ex: "DOURADOS - MS").
             mes_ano_alvo (str): Competência "mm/aaaa"; vazio mantém a atual.
-            mudar_padrao (bool): Marca "mudar padrão" no SIGA. A descoberta de contas usa
-                False para não alterar a localidade padrão do usuário.
 
         Returns:
             bool: True se, após a troca, o cabeçalho do SIGA mostra a localidade e o mês pedidos.
@@ -180,7 +179,7 @@ class SessaoMixin:
 
         # Valores vão como argumento, não interpolados no JS
         page.evaluate(self._JS_PREENCHER_CONTEXTO,
-                      [tipo_adm.strip().upper(), nome_adm.strip().upper(), mes_ano_alvo or "", bool(mudar_padrao)])
+                      [tipo_adm.strip().upper(), nome_adm.strip().upper(), mes_ano_alvo or ""])
         time.sleep(1.5)
 
         btn_confirmar.evaluate("el => el.click()")

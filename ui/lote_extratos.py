@@ -6,6 +6,7 @@ import logging
 import os
 from tkinter import filedialog, messagebox
 
+from controllers.catalogo_contas import mesmo_extrato
 from controllers.exportador import Exportador
 from models.ofx_reader import OfxReader
 from models.xls_reader import XlsReader
@@ -41,10 +42,11 @@ class LoteExtratosMixin:
             card.destroy()
         self.cards_lote = []
 
-        assinaturas_lote = set()
         arquivos_descartados = []
 
-        for caminho in caminhos:
+        # OFX primeiro: se o XLS da mesma conta e período também vier, fica o OFX, que traz a
+        # descrição inteira (o XLS corta o código de débito automático da energia)
+        for caminho in sorted(caminhos, key=lambda c: os.path.splitext(c)[1].lower() in (".xls", ".xlsx")):
             try:
                 extensao = os.path.splitext(caminho)[1].lower()
                 if extensao in ['.xls', '.xlsx']:
@@ -52,20 +54,10 @@ class LoteExtratosMixin:
                 else:
                     dados = OfxReader.parse_file(caminho)
 
-                # Assinatura única baseada em conta_id, datas e tipo do extrato
-                chave_duplicado = (
-                    str(dados.get("conta_id", "")).strip(),
-                    str(dados.get("data_inicial", "")).strip(),
-                    str(dados.get("data_final", "")).strip(),
-                    str(dados.get("tipo_extrato", "")).strip(),
-                    str(dados.get("produto", "")).strip()
-                )
-
-                if chave_duplicado in assinaturas_lote:
+                if any(mesmo_extrato(dados, anterior) for anterior in self.dados_processados_lote):
                     arquivos_descartados.append(os.path.basename(caminho))
                     continue
 
-                assinaturas_lote.add(chave_duplicado)
                 dados["caminho_arquivo"] = caminho
                 self.dados_processados_lote.append(dados)
             except Exception as e:

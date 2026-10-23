@@ -317,3 +317,13 @@ def test_etapa_com_falha_ao_ler_a_contas_a_pagar_segue_sem_baixar(monkeypatch):
     assert bot._etapa_baixas_energia(pagina, _extrato([DEBITO]), "10123") == (None, False)
     assert reg.capturas == ["erro_ler_provisoes_energia"]
     assert reg.previas == [] and pagina.visitas == [] and reg.gravacoes == 0
+
+
+def test_etapa_so_com_debito_sem_codigo_lista_a_pendencia_sem_abrir_a_contas_a_pagar(monkeypatch):
+    bot, reg = _bot_lote(monkeypatch, autorizar=True)
+    sem_codigo = {"data": "26/08/2026", "valor": -224.25, "descricao": "DEBITO CONVENIOS-ENERGI 70 123 ENERGISA MS ID"}
+
+    resultados, fechado = bot._etapa_baixas_energia(PaginaBaixa(), _extrato([sem_codigo]), "10123")
+
+    assert not fechado and [r.situacao for r in resultados] == [SEM_FATURA]
+    assert reg.lidas == [] and reg.previas == []

@@ -11,6 +11,7 @@ Histórico das versões, da mais recente para a mais antiga. A versão atual é 
 - **Rastro no SIGA**: A aprovação grava no Motivo quem aprovou e a prova (valor, data, conta e código de débito do extrato), e a baixa leva o complemento "Débito automático".
 - **Painel e Excel**: O painel mostra, por extrato, quantas faturas foram baixadas e cada pendência com o motivo. O Excel ganha a aba **Baixas de Energia**.
 - **Prova Real com Tolerância de Data**: Um lançamento manual com até 3 dias de diferença do banco (fim de semana, feriado) deixa de aparecer como "sem par no banco".
+- **Extrato de Conta Corrente em XLS**: O XLS de conta corrente do Sicredi passa a ser lido como o OFX, com os mesmos movimentos, saldo e período. Se o OFX e o XLS da mesma conta e mês vierem juntos, o lote fica só com o OFX. O XLS corta a descrição do banco e, com ela, o código de débito automático da energia: nesse caso a fatura não é baixada e aparece como pendência pedindo o OFX.
 
 ## v1.9.0
 

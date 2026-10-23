@@ -148,6 +148,19 @@ def cc_bate(cc_catalogo: str, conta_extrato: str) -> bool:
     return a == b or a.endswith(b) or b.endswith(a)
 
 
+def mesmo_extrato(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Diz se dois extratos lidos são o mesmo (a mesma conta e período em OFX e em XLS, por exemplo).
+
+    Compara período, tipo e produto, e a conta por `cc_bate`, porque o OFX traz a conta com
+    o prefixo da agência e o XLS não.
+    """
+    campos = ("data_inicial", "data_final", "tipo_extrato", "produto")
+    if any(str(a.get(c) or "").strip() != str(b.get(c) or "").strip() for c in campos):
+        return False
+    conta_a, conta_b = str(a.get("conta_id", "")).strip(), str(b.get("conta_id", "")).strip()
+    return conta_a == conta_b or cc_bate(conta_a, conta_b)
+
+
 def separar_localidade(localidade: str) -> tuple[str, str]:
     """Converte "ADM - DOURADOS - MS" no par ("ADM", "DOURADOS - MS") que o bot usa."""
     texto = " ".join((localidade or "").upper().split())

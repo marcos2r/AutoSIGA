@@ -14,6 +14,8 @@ from typing import Any
 
 import xlrd
 
+from models.xls_conta_corrente import eh_conta_corrente, ler_conta_corrente
+
 # Número de conta Sicredi (ex.: "12345-6"), usado quando o rótulo da conta não é achado
 _RE_CONTA = re.compile(r"\d{4,6}-\d")
 # Mês/ano do período ("Dados referentes ao período 05/2026 a 05/2026.")
@@ -45,7 +47,10 @@ class XlsReader:
     @staticmethod
     def parse_file(caminho: str) -> dict[str, Any]:
         """
-        Abre e decodifica a planilha de extrato de aplicação do SICREDI.
+        Abre e decodifica a planilha de extrato do SICREDI.
+
+        O extrato de conta corrente vai para `ler_conta_corrente`, que devolve o formato
+        do `OfxReader`; o resto desta docstring descreve o extrato de aplicação.
 
         Realiza a leitura de metadados das primeiras linhas para detectar
         a conta bancária e o produto de investimento, mapeando as colunas
@@ -102,6 +107,8 @@ class XlsReader:
         sheet = workbook.sheet_by_index(0)
         if sheet.nrows < 5:
             raise ValueError("A planilha carregada contém poucas linhas para ser um extrato Sicredi válido.")
+        if eh_conta_corrente(sheet):
+            return ler_conta_corrente(sheet)  # mesmo extrato do OFX, no formato do OfxReader
 
         max_metadados = min(12, sheet.nrows)
         conta_id, produto, dados_periodo = XlsReader._ler_metadados(sheet, max_metadados)

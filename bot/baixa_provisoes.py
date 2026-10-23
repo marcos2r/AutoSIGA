@@ -167,8 +167,8 @@ class BaixaProvisoesMixin:
             return None, False
         transacoes = dados.get("transacoes", [])
         debitos, estornados = ler_debitos(transacoes)
-        if not debitos and not estornados:
-            return None, False
+        if not debitos:  # só estornos ou débitos sem código (XLS): nada a casar, a Contas a Pagar nem é lida
+            return (resultados_sem_execucao(estornados) if estornados else None), False
         periodo = periodo_de_vencimento(dados.get("data_inicial", ""), dados.get("data_final", ""))
         if periodo is None:
             logging.warning("Extrato sem período: baixas de energia não verificadas.")

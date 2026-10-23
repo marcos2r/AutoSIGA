@@ -148,3 +148,14 @@ def test_linhas_do_painel_contam_baixadas_e_ja_pagas_e_listam_pendencias():
     assert linhas[2] == ("alerta", "⚠ 26/08/2026 · R$ 133,48 · fatura 017000001 não baixada: "
                                    "grade de pagamentos inesperada")
     assert linhas_do_painel(None) == []
+
+
+def test_debito_sem_codigo_vira_pendencia_sem_casar():
+    # O XLS do banco corta a descrição, e o leitor descarta o código incompleto
+    sem_codigo = {"data": "26/08/2026", "valor": -133.48,
+                  "descricao": "DEBITO CONVENIOS-ENERGI 70 00000000000100 ENERGISA MS ID"}
+
+    decisoes = decidir_baixas([sem_codigo], INDICE, [_prov("017000001", 133.48)])
+
+    assert [d.acao for d in decisoes] == [SEM_FATURA]
+    assert "use o OFX" in decisoes[0].motivo

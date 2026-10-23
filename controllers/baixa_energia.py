@@ -33,7 +33,8 @@ TOLERANCIA = 0.01
 _DIAS_ANTES_DO_DEBITO = 40
 _DIAS_DEPOIS_DO_DEBITO = 5
 
-_RE_DEBITO_ENERGIA = re.compile(r"DEBITO\s+CONVENIOS-ENERGI.*?\bID\s*(\d+)", re.IGNORECASE)
+# O código pode faltar: o XLS do banco corta a descrição, e o leitor descarta o código incompleto
+_RE_DEBITO_ENERGIA = re.compile(r"DEBITO\s+CONVENIOS-ENERGI(?:.*?\bID\s*(\d+))?", re.IGNORECASE)
 _RE_GUID = re.compile(r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$")
 
 # Resultado da execução de uma decisão BAIXAR no SIGA (as outras decisões guardam a própria ação)
@@ -171,16 +172,24 @@ def ler_debitos(transacoes: list[dict[str, Any]]) -> tuple[list[DebitoEnergia], 
         transacoes: Transações do OFX ({"data", "valor", "descricao"}).
 
     Returns:
-        tuple: (débitos a casar, decisões ESTORNADO dos débitos anulados por um crédito).
+        tuple: (débitos a casar, decisões ESTORNADO dos débitos anulados por um crédito e
+        SEM_FATURA dos débitos sem código).
     """
     debitos: list[DebitoEnergia] = []
     estornos: list[DebitoEnergia] = []
+    sem_codigo: list[Decisao] = []
     for tx in transacoes:
         m = _RE_DEBITO_ENERGIA.search(str(tx.get("descricao", "")))
         if not m:
             continue
         valor = float(tx.get("valor", 0.0))
-        item = DebitoEnergia(str(tx.get("data", "")), round(abs(valor), 2), m.group(1))
+        item = DebitoEnergia(str(tx.get("data", "")), round(abs(valor), 2), m.group(1) or "")
+        if not item.codigo:
+            if valor < 0:
+                sem_codigo.append(Decisao(item, SEM_FATURA, "o extrato não traz o código de débito automático "
+                                                            "completo (o XLS do banco corta a descrição); "
+                                                            "use o OFX para baixar"))
+            continue
         (debitos if valor < 0 else estornos).append(item)
 
     anulados = []
@@ -189,7 +198,7 @@ def ler_debitos(transacoes: list[dict[str, Any]]) -> tuple[list[DebitoEnergia], 
         if par:
             debitos.remove(par)
             anulados.append(Decisao(par, ESTORNADO, f"débito de {moeda(par.valor)} estornado pelo banco em {estorno.data}"))
-    return debitos, anulados
+    return debitos, anulados + sem_codigo
 
 
 def _decidir(debito: DebitoEnergia, indice: dict[str, list[FaturaEnergia]], provisoes: list[ProvisaoSiga],

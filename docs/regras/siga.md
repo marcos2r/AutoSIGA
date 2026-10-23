@@ -34,6 +34,13 @@ Leia sob demanda, quando a tarefa mexer na automação do SIGA (`bot/`). Levanta
 ## TES01701 — Caixas e Bancos (consulta)
 
 - Grade de movimentos: Data, Lançto, Nº Documento, Histórico, Origem, Entrada, Saída, Saldo. Filtro por conta (`select#f_conta`) e período (`#f_data1`, `#f_data2`). É a fonte da conciliação OFX × SIGA.
+- **Saldo na grade** (levantado em 23/10/2026, só consulta):
+  - A 1ª linha do `tbody` é "Saldo Anterior", feita de `th` (sem `td`), com o saldo antes do período na coluna Saldo. Os leitores que exigem 8 `td` a ignoram.
+  - As linhas seguem a ordem de data; a coluna Saldo é acumulada a partir do saldo anterior.
+  - O `tfoot` tem uma linha "Total": Entrada e Saída somam só o período, e a coluna Saldo é o **saldo final** (anterior + entradas − saídas). Ele bateu com o `LEDGERBAL` do OFX e com o "Saldo Atual" do XLS de aplicação.
+  - Período sem movimento: a grade traz só o "Saldo Anterior", e o `tfoot` continua com o saldo, então ele é sempre legível.
+  - Valores no formato brasileiro (`10.977,40`), negativo com `-` na frente (`-27,50`); `-` sozinho significa zero.
+- No `select#f_conta`, os grupos aparecem como opções de 3 dígitos (`100 - CAIXA`, `101 - BANCOS CONTA MOVIMENTO`, `103 - APLICAÇÕES FINANCEIRAS`), não como `optgroup`; o único `optgroup` é o INATIVO.
 - Blocos de saldo por grupo de conta: **Caixas** (1000 Caixa Geral, 1001 Numerários a Depositar, 1002 Numerários Coletas, 1009 Caixa de Manutenção), **Bancos Conta Movimento** (101xx, um por conta corrente, rótulo `"<cód> - <BANCO> - AG: <ag> CC: <conta> <finalidade>"`) e **Aplicações Financeiras**.
 - Botão **Novo**: Receita (TES01703), Despesa (TES01702), Despesa em Lote (TES01705), Movimentação Interna (TES01704). **Imprimir**: PDF/Excel.
 

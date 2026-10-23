@@ -86,3 +86,45 @@ def test_rendimentos_em_ordem_de_data_na_conta_de_aplicacao(monkeypatch):
     assert ("f_historico_debito", "029") in reg.select2
     assert reg.gravacoes == 2
     assert len(reg.mensagens) == 1
+
+
+def test_mes_fechado_interrompe_lancamentos_sem_gravar(monkeypatch):
+    import pytest
+
+    from bot.extratos import MesFechadoError
+    bot, reg = criar_bot(monkeypatch, extratos, "extrato", DADOS)
+
+    with pytest.raises(MesFechadoError):
+        bot.inserir_lancamentos_siga(PaginaGravadora(competencia_fechada=True), _lancamentos())
+
+    assert reg.gravacoes == 0
+    assert reg.capturas == []  # não é tratado como erro genérico
+
+
+def test_mes_fechado_interrompe_rendimentos_sem_gravar(monkeypatch):
+    import pytest
+
+    from bot.extratos import MesFechadoError
+    bot, reg = criar_bot(monkeypatch, extratos, "extrato", DADOS)
+
+    with pytest.raises(MesFechadoError):
+        bot.inserir_rendimentos_siga(PaginaGravadora(competencia_fechada=True),
+                                     [{"valor": 4.5, "descricao": "REND", "data": "03/08/2026"}])
+
+    assert reg.gravacoes == 0
+
+
+def test_mes_fechado_vale_por_localidade_e_so_nesta_execucao(monkeypatch):
+    from bot.siga_bot import SigaBot
+    bot, reg = criar_bot(monkeypatch, extratos, "extrato", {"conta_id": "1", "transacoes": [{}, {}]})
+    bot.lote_processados = [{}, {}]
+    telemetria = {"pendentes": 0}
+    bot.competencias_fechadas.add(("PIA - CENTRAL", "05/2026"))
+
+    assert bot._pular_competencia_fechada(("PIA - CENTRAL", "05/2026"), telemetria, 0)
+    assert telemetria["pendentes"] == 2
+    # A DR no mesmo mês e a PIA em outro mês continuam sendo tentadas
+    assert not bot._pular_competencia_fechada(("DR - CENTRAL", "05/2026"), telemetria, 0)
+    assert not bot._pular_competencia_fechada(("PIA - CENTRAL", "06/2026"), telemetria, 0)
+    # Uma nova execução começa sem memória: o mês pode ter sido reaberto
+    assert SigaBot([], callbacks={}).competencias_fechadas == set()

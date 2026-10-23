@@ -15,7 +15,7 @@ from playwright.sync_api import sync_playwright
 from bot.descoberta_contas import DescobertaContasMixin
 from bot.energia import EnergiaMixin
 from bot.energia_auditoria import AuditoriaEnergiaMixin
-from bot.extratos import ExtratosMixin
+from bot.extratos import ExtratosMixin, MesFechadoError
 from bot.ofertas import OfertasMixin
 from bot.sessao import SessaoMixin
 from bot.siga_helpers import HelpersMixin
@@ -61,12 +61,27 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
         self.esperando_autorizacao = False
         self.autorizou_importacao = False
         self.faturas_energia_sucesso = []
+        # (localidade, mm/aaaa) que o SIGA recusou nesta execução. Fica só em memória:
+        # numa nova execução o mês pode ter sido reaberto, então tenta de novo.
+        self.competencias_fechadas = set()
 
         # Atributos reativos que serão setados a cada iteração do lote:
         self.dados_processados = None
         self.localidade_selecionada = ""
         self.tipo_alvo = ""
         self.nome_alvo = ""
+
+    def _pular_competencia_fechada(self, chave, telemetria_lote, idx):
+        """Pula o extrato se a localidade e o mês já se mostraram fechados nesta execução."""
+        if chave not in self.competencias_fechadas:
+            return False
+        qtd = len(self.dados_processados.get("transacoes", []))
+        telemetria_lote["pendentes"] += qtd
+        self.update_status(f"⏭️ [{chave[0]}] Mês {chave[1]} fechado no SIGA: extrato da conta "
+                           f"{self.dados_processados.get('conta_id', '')} pulado ({qtd} itens pendentes).", "#D9534F")
+        if "update_progress" in self.callbacks:
+            self.callbacks["update_progress"]((idx + 1) / len(self.lote_processados))
+        return True
 
     def update_status(self, msg, color="#666666"):
         """Envia um log de texto simples para o painel da interface."""
@@ -225,11 +240,15 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
                         mes_ano_alvo = ""
 
                     localidade_atual = f"{self.tipo_alvo}-{self.nome_alvo}"
+                    chave_competencia = (f"{self.tipo_alvo} - {self.nome_alvo}".upper(), mes_ano_alvo)
+                    if self._pular_competencia_fechada(chave_competencia, telemetria_lote, idx):
+                        continue
 
                     # Só troca de localidade e competência se for diferente do extrato anterior
                     if localidade_atual != localidade_anterior or mes_ano_alvo != competencia_anterior:
                         if not self._ajustar_localidade_competencia(page, self.tipo_alvo, self.nome_alvo, mes_ano_alvo):
                             # Não lança nada num mês/localidade diferente do extrato
+                            self.competencias_fechadas.add(chave_competencia)
                             telemetria_lote["pendentes"] += len(self.dados_processados.get("transacoes", []))
                             localidade_anterior = competencia_anterior = None
                             if "update_progress" in self.callbacks:
@@ -347,10 +366,17 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
                                 self.update_status(f"🚀 Importando automaticamente {len(pendentes)} lançamentos em {self.localidade_selecionada}...", "#428BCA")
 
                             self._qtd_injecoes_efetuadas = 0
-                            if is_aplicacao:
-                                self.inserir_rendimentos_siga(page, pendentes)
-                            else:
-                                self.inserir_lancamentos_siga(page, pendentes)
+                            try:
+                                if is_aplicacao:
+                                    self.inserir_rendimentos_siga(page, pendentes)
+                                else:
+                                    self.inserir_lancamentos_siga(page, pendentes)
+                            except MesFechadoError:
+                                # Não adianta tentar de novo: os outros extratos desta localidade e mês são pulados
+                                self.competencias_fechadas.add(chave_competencia)
+                                self.update_status(f"⛔ [{self.localidade_selecionada}] Mês {mes_ano_alvo} fechado no SIGA. "
+                                                   f"{len(pendentes)} lançamento(s) ficaram pendentes.", "#D9534F")
+                                break
 
                             telemetria_lote["injecoes"] += self._qtd_injecoes_efetuadas
 
@@ -398,7 +424,8 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
 
                         if pendentes:
                             telemetria_lote["pendentes"] += len(pendentes)
-                            self.update_status(f"⚠️ [{self.localidade_selecionada}] Alerta: {len(pendentes)} itens não bateram após {limite_tentativas} tentativas.", "#D9534F")
+                            if chave_competencia not in self.competencias_fechadas:
+                                self.update_status(f"⚠️ [{self.localidade_selecionada}] Alerta: {len(pendentes)} itens não bateram após {limite_tentativas} tentativas.", "#D9534F")
 
                     else:
                         self.update_status(f"✅ [{self.localidade_selecionada}] Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
@@ -410,7 +437,11 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, AuditoriaEnergiaMixin, E
 
                     time.sleep(2)
 
-                self.update_status("✅ Todos os extratos do lote foram processados!", "#3C763D")
+                if self.competencias_fechadas:
+                    fechadas = ", ".join(f"{loc} {mes}" for loc, mes in sorted(self.competencias_fechadas))
+                    self.update_status(f"⚠️ Lote processado. Meses fechados ou indisponíveis no SIGA: {fechadas}.", "#D9534F")
+                else:
+                    self.update_status("✅ Todos os extratos do lote foram processados!", "#3C763D")
                 if "show_dashboard" in self.callbacks:
                     self.callbacks["show_dashboard"](telemetria_lote, tempo_inicio)
 

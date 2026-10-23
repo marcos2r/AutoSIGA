@@ -69,6 +69,33 @@ class HelpersMixin:
             }
         }''', valores)
 
+    _JS_MES_FECHADO = '''() => {
+        let fechado = false;
+        document.querySelectorAll('.bootbox.modal').forEach(m => {
+            const t = m.innerText;
+            if (t.includes('Fechamento de competência já realizado') || t.includes('fora da Competência')
+                    || t.includes('Fechamento mensal')) {
+                fechado = true;
+                const fechar = m.querySelector('.bootbox-close-button') || m.querySelector('.close')
+                    || m.querySelector('.btn-primary');
+                if (fechar) fechar.click(); else m.remove();
+            }
+        });
+        if (fechado) {
+            const fundo = document.querySelector('.modal-backdrop');
+            if (fundo) fundo.remove();
+        }
+        return fechado;
+    }'''
+
+    def _mes_fechado_na_tela(self, page):
+        """True se o SIGA mostrou o aviso de competência fechada (e fecha o aviso)."""
+        try:
+            return bool(page.evaluate(self._JS_MES_FECHADO))
+        except Exception as e:
+            logging.debug(f"Não foi possível checar o aviso de mês fechado: {e}")
+            return False
+
     def _capturar_tela_e_log(self, page, identificador):
         """
         Tira um screenshot da página ativa e grava no diretório de logs.

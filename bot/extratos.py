@@ -6,6 +6,10 @@ import logging
 import time
 
 
+class MesFechadoError(Exception):
+    """O SIGA recusou o lançamento porque a competência da localidade está fechada."""
+
+
 class ExtratosMixin:
     """Lançamentos de extrato e de rendimentos no SIGA."""
 
@@ -71,6 +75,8 @@ class ExtratosMixin:
                 }}''')
 
                 time.sleep(1)
+                if self._mes_fechado_na_tela(page):
+                    raise MesFechadoError(data_tx)
                 # O SIGA pode emitir um pop-up avisando que a data do lançamento
                 # diverge do mês de competência atual. Vamos prever e clicar 'Sim'.
                 try:
@@ -135,6 +141,10 @@ class ExtratosMixin:
                     page.locator('button.btn-success:has(i.icon-ok)').first.click()
 
                 page.wait_for_load_state("domcontentloaded")
+                time.sleep(1)
+                # O aviso de mês fechado também pode vir só ao gravar
+                if self._mes_fechado_na_tela(page):
+                    raise MesFechadoError(data_tx)
 
                 # Bypassa a modal de confirmação de gravação bem sucedida
                 self._confirmar_gravacao(page, timeout_ms=25000)
@@ -142,6 +152,8 @@ class ExtratosMixin:
             self._qtd_injecoes_efetuadas = len(lanc_ordenados)
             self.update_status(f"✅ Finalizado! {len(lanc_ordenados)} registros injetados no SIGA.", "#3C763D")
 
+        except MesFechadoError:
+            raise  # tratado no laço do lote, que pula os extratos da mesma localidade e mês
         except Exception as e:
             logging.error(f"Erro inserindo lançamentos: {e}", exc_info=True)
             self._capturar_tela_e_log(page, "erro_inserir_lancamentos")
@@ -210,6 +222,8 @@ class ExtratosMixin:
                 }}''')
 
                 time.sleep(1)
+                if self._mes_fechado_na_tela(page):
+                    raise MesFechadoError(data_tx)
                 # Popup de competência bootbox
                 try:
                     btn_sim = page.locator('.bootbox button:has-text("Sim")').first
@@ -265,6 +279,10 @@ class ExtratosMixin:
                     page.locator('button.btn-success:has(i.icon-ok)').first.click()
 
                 page.wait_for_load_state("domcontentloaded")
+                time.sleep(1)
+                # O aviso de mês fechado também pode vir só ao gravar
+                if self._mes_fechado_na_tela(page):
+                    raise MesFechadoError(data_tx)
 
                 # Bypassa a modal de confirmação de gravação bem sucedida
                 self._confirmar_gravacao(page, timeout_ms=25000)
@@ -274,6 +292,8 @@ class ExtratosMixin:
             if "show_message" in self.callbacks:
                 self.callbacks["show_message"]("info", "AutoSIGA", "Todos os rendimentos foram importados com sucesso! O robô agora fará a validação.")
 
+        except MesFechadoError:
+            raise  # tratado no laço do lote, que pula os extratos da mesma localidade e mês
         except Exception as e:
             logging.error(f"Erro inserindo rendimentos: {e}", exc_info=True)
             self._capturar_tela_e_log(page, "erro_inserir_rendimentos")

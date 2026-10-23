@@ -11,7 +11,7 @@ Leia sob demanda, quando a tarefa mexer na automação do SIGA (`bot/`). Levanta
   - **Front novo**: `/SIS/Programa.aspx?programa=<COD>` carrega um iframe **cross-origin** de `https://siga-front.congregacao.org.br/login/token/...`. Do contexto da página principal não dá para ler o DOM do iframe; com Playwright é preciso usar `page.frame_locator(...)`. Usam o front novo: Importação Extrato, Cartão de Débito e Transferências, Boletos e Repartição Ofertas.
 - **Executar rotina**: o campo `#f_executar_programa` (cabeçalho, placeholder "Executar") + botão `#btn_executar_programa` abre qualquer programa pelo código. Também é possível navegar direto pela URL `.aspx`.
 - **Contexto de trabalho (cabeçalho)**: o **Mês de Trabalho** (competência) e a **Localidade/Unidade Fiscal** ativas valem para todos os lançamentos. Trocam pelo modal "Mês de Trabalho" (campos Usuário, Unidade Fiscal, Localidade e Mês de Trabalho; `select#f_competencia_webmaster`, confirmar em `#btn-adicionar-competencia`).
-- **Avisos fixos**: um banner vermelho "O(s) mês(es) de MM/AAAA ainda não foram fechados!" e um de LGPD. Um mês **fechado** recusa lançamentos (o bot guarda as competências fechadas em cache).
+- **Avisos fixos**: um banner vermelho "O(s) mês(es) de MM/AAAA ainda não foram fechados!" e um de LGPD. Um mês **fechado** recusa lançamentos com um aviso bootbox ("Fechamento de competência já realizado", "fora da Competência" ou "Fechamento mensal"). O fechamento é **por localidade** (normalmente, ADM fechada implica as demais fechadas). O bot guarda em memória, só durante a execução, o par localidade + mês recusado e pula os outros lançamentos dele.
 - **Carregamento**: overlay "Aguarde..." após cada navegação (`esperar_loading`).
 - **Rodapé**: cada tela mostra seu código (ex.: `TES01703 - Versão 6.71.0`), útil para confirmar em que tela se está.
 - **Selects**: a maioria é `<select>` nativo envolvido por Select2 (inputs `s2id_autogen*`); alguns são AJAX (fornecedor). As opções seguem o formato `"<código> - <descrição>"`.
@@ -100,7 +100,7 @@ Levantado em 23/10/2026.
 - Contas desativadas ficam num `<optgroup label="INATIVO">`; a Contabilidade não as mostra.
 - Os rótulos são texto livre e variam (`AG:0101` / `AG: 0101`, CC com e sem hífen, `CC: CONTA CAPITAL`): compare só os dígitos.
 - Uma conta corrente pode ter várias contas 103 (ex.: aplicação e poupança da mesma CC).
-- **Troca de localidade**: no modal "Outros Meses" há dois `form.modal-form`; o certo é o que contém `select[name="f_estabelecimento"]` (o outro recusa com "Formulário incompleto"). Depois de Confirmar, o SIGA redireciona para `/SIS/SIS99908.aspx`; é preciso abrir a rotina de novo. Sem marcar `#f-mudarpadrao`, a troca não altera a localidade padrão do usuário.
+- **Troca de localidade**: no modal "Outros Meses" há dois `form.modal-form`; o certo é o que contém `select[name="f_estabelecimento"]` (o outro recusa com "Formulário incompleto"). Depois de Confirmar, o SIGA redireciona para `/SIS/SIS99908.aspx`; é preciso abrir a rotina de novo. O AutoSIGA sempre desmarca `#f-mudarpadrao` ("lembrar a escolha"): a troca vale só para a sessão e não altera a localidade padrão do usuário.
 - O modal lista ADM, DR, PIA, SEC, setores e casas de oração. Ainda não foi visto o comportamento de um usuário sem acesso a uma localidade (o levantamento teve acesso a todas).
 
 ## Ainda não levantado

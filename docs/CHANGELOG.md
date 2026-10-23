@@ -2,6 +2,16 @@
 
 Histórico das versões, da mais recente para a mais antiga. A versão atual é definida em `version.py`.
 
+## v1.9.0
+
+- **Prova Real do Saldo**: Ao terminar cada extrato, o robô lê o saldo final da conta na Caixas e Bancos (TES01701) e o compara com o saldo do banco (OFX da conta corrente ou XLS da aplicação). O painel do lote ganha a seção **Prova real**, com uma linha por extrato: "✔ Saldo confere", "⚠ Diferença de R$ X" ou "— Não conferido" com o motivo. A prova real só lê: nada é lançado, apagado ou corrigido no SIGA.
+- **Lançamentos do SIGA sem Par no Banco**: Além do que falta no SIGA, o robô passa a apontar o que sobra nele (lançamento duplicado, valor digitado errado, estorno esquecido), comparando data e valor um a um com o extrato. A lista aparece no painel e na nova aba **Prova Real** do Excel do lote.
+- **Extratos sem Lançamento Novo também São Conferidos**: Um extrato sem nada a lançar (ex: aplicação sem rendimento no mês) entra no lote só para a prova real do saldo. Com o filtro manual de datas, o saldo não é conferido, porque um período parcial não fecha com o saldo do mês.
+- **Nunca Lançar na Conta Errada**: Se a conta do card não aparece na lista da Caixas e Bancos da localidade, o extrato é pulado sem consulta e sem lançamento, e os itens ficam pendentes. Antes, o robô seguia e lançava na conta que já estava selecionada. A conta também passa a ser escolhida pelo código exato (`10130` não casa mais com `110130`), ignorando as inativas.
+- **Rendimento do Dia 31 sem Duplicidade**: No extrato XLS de aplicação, a consulta ia só até o dia 30, e o rendimento do dia 31 era lançado de novo; em fevereiro a data nem existia. Agora vale o último dia real do mês.
+- **Prévia Opcional dos Lançamentos**: Com a caixa **Revisar os lançamentos antes de gravar no SIGA** marcada (desligada por padrão), o robô mostra o que vai lançar em cada extrato, com a conta e a localidade, e só grava com **Lançar N itens**. **Pular este extrato** não grava nada.
+- **Extrato de Capital Social Identificado**: O extrato de Capital Social é recusado com a mensagem "ainda não é suportado", em vez de um erro confuso sobre colunas.
+
 ## v1.8.0
 
 - **Contas do SIGA Descobertas Sozinhas**: O botão **Buscar no SIGA** lê as contas bancárias direto do SIGA, só para leitura: pelo Plano de Contas da Contabilidade e, para quem não tem esse acesso, pela Caixas e Bancos de cada localidade (ADM, DR e PIA). No fim o SIGA volta à localidade e ao mês em que o usuário estava, sem alterar a localidade padrão dele. Cada card de extrato já vem com a localidade, a C. Corrente e a C. Aplicação sugeridas.

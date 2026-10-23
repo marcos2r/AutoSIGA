@@ -81,7 +81,7 @@ class DashboardMixin:
         cores = {"ok": tema.VERDE_TEXTO, "alerta": tema.VERMELHO_TEXTO, "neutro": tema.CINZA_TEXTO}
         ctk.CTkLabel(container, text="PROVA REAL (SALDO DO SIGA × BANCO)", font=(tema.FONTE, 10, "bold"),
                      text_color=tema.AZUL_TITULO).pack(anchor="w", padx=27, pady=(4, 2))
-        lista = ctk.CTkScrollableFrame(container, height=min(52 * len(resultados), 200), fg_color=tema.BRANCO,
+        lista = ctk.CTkScrollableFrame(container, height=min(52 * len(resultados), 160), fg_color=tema.BRANCO,
                                        border_width=1, border_color=tema.CINZA_BORDA)
         lista.pack(fill="x", padx=15, pady=(0, 6))
         for r in resultados:
@@ -200,8 +200,9 @@ class DashboardMixin:
         add_linha(frame_tabela, "Retorno financeiro estimado (ROI):", roi_fmt, cor_valor="#5CB85C", negrito=True)
 
         if telemetria.get("extratos"):
+            # As métricas deixam de ocupar a sobra de altura, senão empurram os botões para fora da janela
+            frame_tabela.pack_configure(expand=False, fill="x")
             self._secao_prova_real(frame, telemetria["extratos"])
-            janela.geometry("640x760")
 
         # Função para salvar a planilha Excel
         def exportar_planilha():
@@ -238,3 +239,9 @@ class DashboardMixin:
             command=janela.destroy
         )
         btn_fechar.grid(row=0, column=1, padx=5)
+
+        if telemetria.get("extratos"):
+            # Altura pelo conteúdo, sem passar da tela, para os botões nunca ficarem de fora
+            janela.update_idletasks()
+            altura = min(frame.winfo_reqheight() + 48, janela.winfo_screenheight() - 80)
+            janela.geometry(f"640x{altura}")

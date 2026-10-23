@@ -302,3 +302,18 @@ def test_etapa_sem_nada_a_baixar_nao_pede_previa(monkeypatch):
 
     assert [r.situacao for r in resultados] == [JA_BAIXADA]
     assert reg.previas == []
+
+
+def test_etapa_com_falha_ao_ler_a_contas_a_pagar_segue_sem_baixar(monkeypatch):
+    # No SIGA real a leitura já falhou por causa do DataTables antigo: o lote não pode parar por isso
+    bot, reg = _bot_lote(monkeypatch, autorizar=True)
+
+    def falhar(page, periodo):
+        raise RuntimeError("TypeError: $.fn.dataTable.isDataTable is not a function")
+
+    monkeypatch.setattr(bot, "_ler_provisoes_energisa", falhar)
+    pagina = PaginaBaixa()
+
+    assert bot._etapa_baixas_energia(pagina, _extrato([DEBITO]), "10123") == (None, False)
+    assert reg.capturas == ["erro_ler_provisoes_energia"]
+    assert reg.previas == [] and pagina.visitas == [] and reg.gravacoes == 0

@@ -39,12 +39,18 @@ FORMA_DEBITO_AUTOMATICO = "9"
 HISTORICO_NF = "021"
 COMPLEMENTO_BAIXA = "Débito automático"
 
-# Linhas da grade #grid1 da TES01501, inclusive as das outras páginas do DataTable
+# Linhas da grade #grid1 da TES01501, inclusive as das outras páginas do DataTable. O SIGA usa o
+# DataTables 1.9 (sem `isDataTable`/`DataTable()`): `fnGetNodes` é a API antiga, que vale nas duas versões.
 _JS_LER_PROVISOES = '''() => {
     const $ = window.jQuery;
-    const linhas = ($ && $.fn.dataTable && $.fn.dataTable.isDataTable('#grid1'))
-        ? $('#grid1').DataTable().rows().nodes().toArray()
-        : Array.from(document.querySelectorAll('#grid1 tbody tr'));
+    const grade = document.querySelector('#grid1');
+    let linhas = [];
+    try {
+        if ($ && grade && $.fn.dataTable && $(grade).hasClass('dataTable')) {
+            linhas = Array.from($(grade).dataTable().fnGetNodes());
+        }
+    } catch (e) { linhas = []; }
+    if (!linhas.length) linhas = Array.from(document.querySelectorAll('#grid1 tbody tr'));
     return linhas.map(tr => {
         const tds = tr.querySelectorAll('td');
         if (tds.length < 12) return null;
@@ -171,7 +177,15 @@ class BaixaProvisoesMixin:
         if self._indice_energia is None:
             self.update_status("Lendo as faturas de energia guardadas...", "#428BCA")
             self._indice_energia = montar_indice()
-        decisoes = decidir_baixas(transacoes, self._indice_energia, self._ler_provisoes_energisa(page, periodo))
+        try:
+            provisoes = self._ler_provisoes_energisa(page, periodo)
+        except Exception as erro:  # só leitura: sem as provisões não se baixa nada, mas a conciliação segue
+            logging.exception("Falha ao ler as provisões de energia na TES01501.")
+            self._capturar_tela_e_log(page, "erro_ler_provisoes_energia")
+            self.update_status(f"⚠️ Baixas de energia puladas: não consegui ler a Contas a Pagar ({erro}).",
+                               "#F89406")
+            return None, False
+        decisoes = decidir_baixas(transacoes, self._indice_energia, provisoes)
         a_baixar = [d for d in decisoes if d.acao == BAIXAR]
         if not a_baixar:
             return resultados_sem_execucao(decisoes), False

@@ -47,8 +47,7 @@ class AcoesSigaMixin:
             "on_finish": lambda: self.after(0, lambda: self.botao_conectar.configure(state="normal"))
         }
 
-        self.bot_instance = SigaBot(lote_valido, callbacks,
-                                    revisar_antes_de_lancar=self.config_manager.get_revisar_antes_de_lancar(),
+        self.bot_instance = SigaBot(lote_valido, callbacks, revisar_antes_de_lancar=True,
                                     baixar_energia=self.config_manager.get_baixar_energia_pelo_extrato(),
                                     revisar_baixas=self.config_manager.get_revisar_baixas())
         threading.Thread(target=self.bot_instance.fluxo_automacao, daemon=True).start()

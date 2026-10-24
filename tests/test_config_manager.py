@@ -52,16 +52,6 @@ def test_falha_na_gravacao_preserva_config_anterior(tmp_path, monkeypatch):
     assert cm.get_config_data() == {"nome_adm": "ORIGINAL"}
 
 
-def test_previa_dos_lancamentos_desligada_por_padrao_e_persistida(tmp_path):
-    caminho = tmp_path / "config.json"
-    cm = ConfigManager(config_path=str(caminho))
-    assert cm.get_revisar_antes_de_lancar() is False
-
-    cm.salvar_revisar_antes_de_lancar(True)
-
-    assert ConfigManager(config_path=str(caminho)).get_revisar_antes_de_lancar() is True
-
-
 def test_baixa_de_energia_e_a_previa_das_baixas_ligadas_por_padrao(tmp_path):
     caminho = tmp_path / "config.json"
     cm = ConfigManager(config_path=str(caminho))

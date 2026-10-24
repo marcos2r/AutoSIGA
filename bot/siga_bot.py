@@ -36,7 +36,7 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
     perguntas/alertas para a View (via callbacks), sem nunca importar nada de GUI.
     """
 
-    def __init__(self, lote_processados, callbacks, tipo_lote="extrato", revisar_antes_de_lancar=False,
+    def __init__(self, lote_processados, callbacks, tipo_lote="extrato", revisar_antes_de_lancar=True,
                  baixar_energia=False, revisar_baixas=True):
         """
         Inicializa a configuração do bot de automação em lote.
@@ -52,6 +52,7 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
                 - on_catalogo(catalogo) (só na descoberta de contas)
             tipo_lote (str): Tipo de lote ("extrato", "energia", "ofertas" ou "descoberta").
             revisar_antes_de_lancar (bool): Mostra a prévia de cada extrato e só grava com autorização.
+                A tela sempre liga; False só serve aos testes, que rodam sem prévia.
             baixar_energia (bool): Aprova e baixa as faturas de energia debitadas nos extratos.
             revisar_baixas (bool): Mostra a prévia das baixas de energia e só grava com autorização.
         """

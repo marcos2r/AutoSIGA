@@ -80,6 +80,13 @@ class FluxoExtratosMixin:
         """Processa todos os extratos do lote e mostra o status final."""
         contexto = {"localidade": None, "competencia": None}
 
+        # Com o e-mail conectado, provisiona as faturas de energia do período antes dos extratos
+        try:
+            telemetria_lote["provisoes_energia"] = self._etapa_provisoes_energia(page)
+        except Exception as erro:
+            logging.exception("Falha na etapa de provisões de energia.")
+            telemetria_lote["provisoes_energia"] = [("alerta", f"⚡ Provisões de energia interrompidas: {erro}")]
+
         for idx, dados in enumerate(self.lote_processados):
             if not self.browser_aberto:
                 break
@@ -226,17 +233,18 @@ class FluxoExtratosMixin:
         Args:
             pendentes: Itens da prévia ({"data", "valor", "historico"/"descricao"}).
             conta_siga: Conta do extrato, mostrada no topo da prévia.
-            tipo: "lancamentos" (prévia `revisar_antes_de_lancar`) ou "baixas" (`revisar_baixas`).
+            tipo: "lancamentos" (prévia `revisar_antes_de_lancar`), "baixas" ou "provisoes" de
+                energia (as duas pela `revisar_baixas`).
 
         Returns:
             bool: True para gravar; False se o usuário recusou ou o navegador foi fechado.
         """
-        revisar = self.revisar_baixas if tipo == "baixas" else self.revisar_antes_de_lancar
+        revisar = self.revisar_baixas if tipo in ("baixas", "provisoes") else self.revisar_antes_de_lancar
         if not revisar or "request_authorization" not in self.callbacks:
             return True
         self._autorizado = False
         self._evento_autorizacao.clear()
-        rotulo = "baixa(s) de energia" if tipo == "baixas" else "lançamento(s)"
+        rotulo = {"baixas": "baixa(s) de energia", "provisoes": "provisão(ões) de energia"}.get(tipo, "lançamento(s)")
         self.update_status(f"⏸️ Aguardando sua revisão de {len(pendentes)} {rotulo}...", "#F89406")
         self.callbacks["request_authorization"](list(pendentes), {"conta": conta_siga, "tipo": tipo,
                                                                   "localidade": self.localidade_selecionada})

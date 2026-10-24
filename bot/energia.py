@@ -25,6 +25,9 @@ class EnergiaMixin:
 
             qtd_injetada = 0
             competencias_fechadas = set()
+            # Por que cada fatura não foi lançada (número -> motivo), para o painel
+            self.motivos_energia = {}
+            self.faturas_energia_sucesso = []
             faturas_sucesso = []
 
             for i, fat in enumerate(faturas):
@@ -57,6 +60,7 @@ class EnergiaMixin:
                     competencia_fatura = f"{partes[1]}/{partes[2]}"
 
                 if competencia_fatura and competencia_fatura in competencias_fechadas:
+                    self.motivos_energia[numero_fatura] = f"competência {competencia_fatura} fechada no SIGA"
                     self.update_status(f"⚠️ Competência {competencia_fatura} já mapeada como fechada. Pulando fatura {numero_fatura}...", "#D9534F")
                     time.sleep(1)
                     continue
@@ -68,13 +72,26 @@ class EnergiaMixin:
                     logging.warning(f"Não foi possível garantir localidade/competência no cabeçalho: {e_loc}")
 
                 # --- PRÉ-CHECK DE DUPLICIDADE ---
-                if numero_fatura:
-                    ja_lancada = self.verificar_fatura_ja_lancada(page, numero_fatura, emissao=emissao, vencimento=vencimento)
-                    if ja_lancada:
-                        config_mgr.marcar_fatura_processada(numero_fatura)
-                        self.update_status(f"⚠️ Fatura Nº {numero_fatura} já foi lançada anteriormente. Pulando...", "#F89406")
-                        time.sleep(1.5)
-                        continue
+                # Sempre no SIGA e logo antes de gravar: outra pessoa pode ter lançado em outra
+                # máquina. Sem número ou sem conseguir conferir, a fatura não é lançada.
+                if not numero_fatura:
+                    self.motivos_energia[numero_fatura] = "o PDF não traz o número da fatura"
+                    self.update_status(f"⚠️ Fatura da UC {uc} sem número: não lançada.", "#F89406")
+                    continue
+                try:
+                    ja_lancada = self.verificar_fatura_ja_lancada(page, numero_fatura, emissao=emissao,
+                                                                  vencimento=vencimento, fatura=fat)
+                except Exception as e_check:
+                    logging.error(f"Não foi possível conferir a fatura {numero_fatura} no SIGA: {e_check}", exc_info=True)
+                    self.motivos_energia[numero_fatura] = "não deu para conferir no SIGA se já estava lançada"
+                    self.update_status(f"⚠️ Não consegui conferir a fatura {numero_fatura} no SIGA: não lançada.", "#D9534F")
+                    continue
+                if ja_lancada:
+                    config_mgr.marcar_fatura_processada(numero_fatura)
+                    self.motivos_energia[numero_fatura] = "já estava no SIGA (lançada em outra execução ou à mão)"
+                    self.update_status(f"⚠️ Fatura Nº {numero_fatura} já foi lançada anteriormente. Pulando...", "#F89406")
+                    time.sleep(1.5)
+                    continue
 
                 # Navega para a rotina de lançamento de contas a pagar / provisão (TES01502)
                 page.locator('#f_executar_programa').fill("TES01502")
@@ -140,6 +157,7 @@ class EnergiaMixin:
 
                     if mes_fechado:
                         competencias_fechadas.add(competencia_fatura)
+                        self.motivos_energia[numero_fatura] = f"competência {competencia_fatura} fechada no SIGA"
                         self.update_status(f"⚠️ Competência {competencia_fatura} fechada ou data inválida. Pulando fatura {numero_fatura}...", "#D9534F")
                         time.sleep(2)
                         continue
@@ -191,6 +209,7 @@ class EnergiaMixin:
                         }''')
                         if erro_fatal:
                             competencias_fechadas.add(competencia_fatura)
+                            self.motivos_energia[numero_fatura] = f"competência {competencia_fatura} fechada no SIGA"
                             self.update_status(f"⚠️ Competência fechada ou data inválida. Pulando fatura {numero_fatura}...", "#D9534F")
                             time.sleep(2)
                             continue
@@ -328,6 +347,7 @@ class EnergiaMixin:
                     }''')
                     if erro_fatal_gravar:
                         competencias_fechadas.add(competencia_fatura)
+                        self.motivos_energia[numero_fatura] = f"competência {competencia_fatura} fechada no SIGA"
                         self.update_status(f"⚠️ Competência fechada impediu a gravação. Pulando fatura {numero_fatura}...", "#D9534F")
                         time.sleep(2)
                         continue
@@ -370,7 +390,11 @@ class EnergiaMixin:
                             logging.warning(f"Auditoria: Erro ao ajustar competência para {comp_aud}: {e}")
 
                     # O verificar_fatura_ja_lancada vai cuidar de ir para o TES01501 e buscar a nota
-                    existe = self.verificar_fatura_ja_lancada(page, num_doc, emissao=emissao_aud, vencimento=venc_aud)
+                    try:
+                        existe = self.verificar_fatura_ja_lancada(page, num_doc, emissao=emissao_aud, vencimento=venc_aud)
+                    except Exception as e_aud:
+                        logging.error(f"Auditoria: falha ao consultar a fatura {num_doc}: {e_aud}", exc_info=True)
+                        existe = False
                     if existe:
                         self.update_status(f"✅ Auditoria: Fatura {num_doc} confirmada com SUCESSO!", "#3C763D")
                         sucessos_auditados += 1

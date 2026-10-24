@@ -20,13 +20,14 @@ from bot.energia_auditoria import AuditoriaEnergiaMixin
 from bot.extratos import ExtratosMixin
 from bot.fluxo_extratos import FluxoExtratosMixin
 from bot.ofertas import OfertasMixin
+from bot.provisoes_energia import ProvisoesEnergiaMixin
 from bot.sessao import SessaoMixin
 from bot.siga_helpers import HelpersMixin
 from controllers.exportador import Exportador
 
 
 class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, AuditoriaEnergiaMixin, EnergiaMixin,
-             OfertasMixin, DescobertaContasMixin, BaixaProvisoesMixin):
+             OfertasMixin, DescobertaContasMixin, BaixaProvisoesMixin, ProvisoesEnergiaMixin):
     """
     Controlador do Navegador Playwright.
 
@@ -73,6 +74,7 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
         self._evento_autorizacao = threading.Event()
         self._autorizado = False
         self.faturas_energia_sucesso = []
+        self.motivos_energia = {}
         # (localidade, mm/aaaa) que o SIGA recusou nesta execução. Fica só em memória:
         # numa nova execução o mês pode ter sido reaberto, então tenta de novo.
         self.competencias_fechadas = set()

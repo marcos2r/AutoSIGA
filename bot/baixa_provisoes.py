@@ -64,6 +64,26 @@ _JS_LER_PROVISOES = '''() => {
     }).filter(Boolean);
 }'''
 
+# A grade da TES01501 é paginada no servidor (100 por página): pede tudo de uma vez e
+# devolve quantas linhas vieram e quantas existem, para nunca decidir com a grade cortada
+_JS_MOSTRAR_TODAS = '''async () => {
+    const $ = window.jQuery;
+    const grade = document.querySelector('#grid1');
+    if (!$ || !grade || !$.fn.dataTable || !$(grade).hasClass('dataTable')) return null;
+    const tabela = $(grade).dataTable();
+    const ajustes = tabela.fnSettings();
+    if (ajustes.fnRecordsDisplay() > tabela.fnGetNodes().length) {
+        ajustes._iDisplayLength = 1000;
+        ajustes._iDisplayStart = 0;
+        tabela.fnDraw();
+        for (let i = 0; i < 100; i++) {
+            await new Promise(r => setTimeout(r, 200));
+            if (!ajustes.bDrawing && tabela.fnGetNodes().length >= Math.min(ajustes.fnRecordsDisplay(), 1000)) break;
+        }
+    }
+    return {lidas: tabela.fnGetNodes().length, total: ajustes.fnRecordsDisplay()};
+}'''
+
 # Filtro por vencimento na TES01501 e envio do formulário (o botão pode estar num modal fechado)
 _JS_FILTRAR_VENCIMENTO = '''([inicio, fim]) => {
     const tipo = document.getElementById('f_tipodata');
@@ -129,6 +149,10 @@ _SUBMIT_FORMULARIO = 'form#f_main button[type="submit"].btn-success'
 _ESPERA_CONTAS_S = 10
 
 
+class GradeIncompletaError(Exception):
+    """A Contas a Pagar não mostrou todas as linhas; decidir com ela poderia duplicar um lançamento."""
+
+
 class BaixaNaoConferidaError(Exception):
     """A tela do SIGA não mostra o que se esperava; a fatura fica sem gravar."""
 
@@ -152,6 +176,9 @@ class BaixaProvisoesMixin:
             page.wait_for_load_state("domcontentloaded")
             time.sleep(2)
             self.esperar_loading(page)
+        contagem = page.evaluate(_JS_MOSTRAR_TODAS)
+        if contagem and contagem.get("lidas", 0) < contagem.get("total", 0):
+            raise GradeIncompletaError(f"a Contas a Pagar mostrou {contagem['lidas']} de {contagem['total']} linhas")
         return provisoes_da_grade(page.evaluate(_JS_LER_PROVISOES))
 
     def _etapa_baixas_energia(self, page, dados, conta_codigo):

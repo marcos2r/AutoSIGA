@@ -23,10 +23,14 @@ class DashboardMixin:
         A thread do robô espera até o usuário gravar ou pular; fechar a janela é pular.
         """
         contexto = contexto or {}
-        baixas = contexto.get("tipo") == "baixas"
-        titulo = f"Faturas de Energia a Baixar ({len(lancamentos)})" if baixas             else f"Lançamentos a Importar ({len(lancamentos)})"
-        rotulo_ok = f"Aprovar e baixar {len(lancamentos)} fatura(s)" if baixas else f"Lançar {len(lancamentos)} itens"
-        rotulo_pular = "Pular as baixas" if baixas else "Pular este extrato"
+        tipo = contexto.get("tipo")
+        baixas = tipo in ("baixas", "provisoes")  # descrição inteira, sem cortar
+        qtd = len(lancamentos)
+        titulo, rotulo_ok, rotulo_pular = {
+            "baixas": (f"Faturas de Energia a Baixar ({qtd})", f"Aprovar e baixar {qtd} fatura(s)", "Pular as baixas"),
+            "provisoes": (f"Faturas de Energia a Provisionar ({qtd})", f"Provisionar {qtd} fatura(s)",
+                          "Pular as provisões"),
+        }.get(tipo, (f"Lançamentos a Importar ({qtd})", f"Lançar {qtd} itens", "Pular este extrato"))
         janela = ctk.CTkToplevel(self)
         janela.title("Ação Necessária: Lançamentos Pendentes")
         janela.geometry("650x500")
@@ -39,7 +43,8 @@ class DashboardMixin:
         lbl_titulo = ctk.CTkLabel(janela, text=titulo, font=self.fonte_titulo, text_color=self.cor_azul_header)
         lbl_titulo.pack(pady=(20, 2))
         if contexto:
-            ctk.CTkLabel(janela, text=f"Conta {contexto.get('conta', '')} · {contexto.get('localidade', '')}",
+            cabecalho = "Faturas do e-mail sem provisão no SIGA" if tipo == "provisoes"                 else f"Conta {contexto.get('conta', '')} · {contexto.get('localidade', '')}"
+            ctk.CTkLabel(janela, text=cabecalho,
                          font=(tema.FONTE, 12), text_color=tema.CINZA_TEXTO).pack(pady=(0, 8))
 
         frame_scroll = ctk.CTkScrollableFrame(janela, width=600, height=300, fg_color="#F8F9FA", corner_radius=6)
@@ -82,6 +87,18 @@ class DashboardMixin:
         if self.bot_instance:
             self.bot_instance.responder_autorizacao(False)
         janela.destroy()
+
+    def _secao_provisoes(self, container, linhas):
+        """Provisões de energia do período: o resumo e cada fatura que ficou pendente, com o motivo."""
+        cores = {"ok": tema.VERDE_TEXTO, "alerta": tema.VERMELHO_TEXTO, "neutro": tema.CINZA_TEXTO}
+        ctk.CTkLabel(container, text="PROVISÕES DE ENERGIA (E-MAIL × CONTAS A PAGAR)", font=(tema.FONTE, 10, "bold"),
+                     text_color=tema.AZUL_TITULO).pack(anchor="w", padx=27, pady=(4, 2))
+        lista = ctk.CTkScrollableFrame(container, height=min(24 * len(linhas), 120), fg_color=tema.BRANCO,
+                                       border_width=1, border_color=tema.CINZA_BORDA)
+        lista.pack(fill="x", padx=15, pady=(0, 6))
+        for nivel, texto in linhas:
+            ctk.CTkLabel(lista, text=texto, font=(tema.FONTE, 11), text_color=cores.get(nivel, tema.CINZA_TEXTO),
+                         anchor="w", justify="left", wraplength=540).pack(fill="x", padx=6, pady=1)
 
     def _secao_prova_real(self, container, resultados):
         """Lista o resultado de cada extrato: saldo do SIGA × banco e lançamentos sem par."""
@@ -211,9 +228,12 @@ class DashboardMixin:
         add_linha(frame_tabela, "Tempo economizado:", f"🔥 {e_minutos}m {e_segundos}s", cor_valor="#5CB85C", negrito=True)
         add_linha(frame_tabela, "Retorno financeiro estimado (ROI):", roi_fmt, cor_valor="#5CB85C", negrito=True)
 
-        if telemetria.get("extratos"):
+        if telemetria.get("extratos") or telemetria.get("provisoes_energia"):
             # As métricas deixam de ocupar a sobra de altura, senão empurram os botões para fora da janela
             frame_tabela.pack_configure(expand=False, fill="x")
+        if telemetria.get("provisoes_energia"):
+            self._secao_provisoes(frame, telemetria["provisoes_energia"])
+        if telemetria.get("extratos"):
             self._secao_prova_real(frame, telemetria["extratos"])
 
         # Função para salvar a planilha Excel

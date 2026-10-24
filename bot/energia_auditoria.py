@@ -2,92 +2,46 @@
 Auditoria de faturas de energia no SIGA (TES01501) e ajuste de localidade/competência.
 """
 
-import logging
-import time
+from datetime import datetime, timedelta
+
+from controllers.provisao_energia import JA_LANCADA, JA_LANCADA_MANUAL, provisao_existente
+
+# Janela de vencimento lida na Contas a Pagar em volta do vencimento da fatura
+_JANELA_DIAS = 60
+
+
+def _data(texto):
+    try:
+        return datetime.strptime((texto or "").strip(), "%d/%m/%Y")
+    except ValueError:
+        return None
 
 
 class AuditoriaEnergiaMixin:
     """Consulta se a fatura já foi lançada e garante localidade e competência corretas."""
 
-    def verificar_fatura_ja_lancada(self, page, numero_fatura, emissao=None, vencimento=None):
+    def verificar_fatura_ja_lancada(self, page, numero_fatura, emissao=None, vencimento=None, fatura=None):
         """
-        Consulta na rotina TES01501 se a fatura já foi lançada anteriormente.
-        Retorna True se já existir lançamento, False caso contrário.
+        Consulta na Contas a Pagar (TES01501) se a fatura já tem provisão.
+
+        Lê todas as provisões da Energisa com vencimento até 60 dias antes ou depois do da
+        fatura. Com `fatura`, também reconhece a provisão lançada à mão (código de débito da
+        UC no Nº Doc. e mesmo valor). Não engole erro: quem chama decide não lançar quando
+        não dá para conferir, porque o SIGA é a única referência entre as máquinas.
+
+        Returns:
+            bool: True se a provisão já existe.
+
+        Raises:
+            Exception: Se a consulta falhar ou a grade vier cortada.
         """
-        try:
-            self.update_status(f"Verificando no SIGA se fatura Nº {numero_fatura} já foi lançada...", "#428BCA")
-
-            # Navega para a rotina de Consulta de Contas a Pagar (TES01501)
-            page.locator('#f_executar_programa').fill("TES01501")
-            page.locator('#btn_executar_programa').click()
-            page.wait_for_load_state("domcontentloaded")
-            time.sleep(2)
-            self.esperar_loading(page)
-
-            # Ajusta o período de busca com base na data da fatura
-            data_ini = "01/01/2026"
-            data_fim = "31/12/2026"
-            ref_data = emissao or vencimento
-            if ref_data:
-                try:
-                    from datetime import datetime, timedelta
-                    dt_ref = datetime.strptime(ref_data, "%d/%m/%Y")
-                    data_ini = (dt_ref - timedelta(days=60)).strftime("%d/%m/%Y")
-                    data_fim = (dt_ref + timedelta(days=60)).strftime("%d/%m/%Y")
-                except (TypeError, ValueError):
-                    logging.warning(f"Data de referência inválida ({ref_data}); auditoria usa o período padrão {data_ini} a {data_fim}.")
-
-            # Preenche as datas no formulário de filtro via JS para evitar erros de elemento invisível
-            try:
-                page.evaluate(f'''() => {{
-                    let inp1 = document.getElementById("f_data1");
-                    if (inp1) {{
-                        inp1.value = "{data_ini}";
-                        if (window.jQuery) window.jQuery(inp1).trigger('change');
-                    }}
-                    let inp2 = document.getElementById("f_data2");
-                    if (inp2) {{
-                        inp2.value = "{data_fim}";
-                        if (window.jQuery) window.jQuery(inp2).trigger('change');
-                    }}
-                }}''')
-            except Exception as e_datas:
-                logging.warning(f"Erro ao preencher datas de filtro: {e_datas}")
-            time.sleep(0.5)
-
-            # Se o modal de filtros f_main estiver aberto, clica em Consultar diretamente
-            btn_consultar = page.locator('form#f_main button[type="submit"]:has-text("Consultar")')
-            if btn_consultar.count() > 0 and btn_consultar.first.is_visible():
-                btn_consultar.first.click()
-                page.wait_for_load_state("domcontentloaded")
-                time.sleep(2)
-                self.esperar_loading(page)
-
-            # Filtra pelo número do documento no campo de busca do datatable
-            search_input = page.locator('div#grid1_filter input[type="search"], input[aria-controls="grid1"], div#grid1_filter input')
-            if search_input.count() > 0:
-                search_input.first.fill(str(numero_fatura))
-                search_input.first.press("Enter")
-                time.sleep(1.5)
-                self.esperar_loading(page)
-
-                # Verifica se há alguma linha na tabela contendo o número do documento exato na coluna de Nº Doc. (5ª coluna)
-                rows = page.locator('table#grid1 tbody tr')
-                for k in range(rows.count()):
-                    row = rows.nth(k)
-                    row_text = row.text_content() or ""
-                    if "nenhum registro" in row_text.lower() or "não encontrado" in row_text.lower():
-                        continue
-
-                    doc_cell = row.locator('td').nth(4) # 5ª coluna (index 4)
-                    if doc_cell.count() > 0:
-                        doc_val = doc_cell.text_content() or ""
-                        if str(numero_fatura).strip() in doc_val.strip():
-                            return True
-            return False
-        except Exception as e_check:
-            logging.error(f"Erro ao verificar se fatura {numero_fatura} já foi lançada: {e_check}", exc_info=True)
-            return False
+        self.update_status(f"Verificando no SIGA se a fatura Nº {numero_fatura} já foi lançada...", "#428BCA")
+        referencia = _data(vencimento) or _data(emissao) or datetime.now()
+        periodo = ((referencia - timedelta(days=_JANELA_DIAS)).strftime("%d/%m/%Y"),
+                   (referencia + timedelta(days=_JANELA_DIAS)).strftime("%d/%m/%Y"))
+        provisoes = self._ler_provisoes_energisa(page, periodo)
+        acao, _ = provisao_existente(fatura or {"numero_fatura": numero_fatura}, provisoes)
+        return acao in (JA_LANCADA, JA_LANCADA_MANUAL)
 
     def _garantir_localidade_competencia(self, page, uc, competencia_fatura):
         """Garante que a localidade ativa é 'ADM - DOURADOS - MS' e a competência bate com a fatura"""

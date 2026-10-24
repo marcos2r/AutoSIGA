@@ -32,9 +32,12 @@ def bot_energia(monkeypatch):
     reg.consultas = []
     reg.ja_lancadas = set()
     reg.no_banco = set()
+    reg.consulta_falha = set()
 
-    def verificar(page, numero, emissao=None, vencimento=None):
+    def verificar(page, numero, emissao=None, vencimento=None, fatura=None):
         reg.consultas.append(numero)
+        if numero in reg.consulta_falha:
+            raise RuntimeError("grade cortada")
         # Na primeira consulta (pré-check) responde pelo que já existia; depois, pelo banco
         if reg.consultas.count(numero) == 1:
             return numero in reg.ja_lancadas
@@ -111,3 +114,33 @@ def test_centro_de_custo_vem_do_codigo_ou_do_nome(bot_energia, monkeypatch, codi
     bot.inserir_faturas_energia_siga(PaginaGravadora(), [_fatura(localidade=codigo)])
 
     assert ("f_centrocusto_rateio", esperado) in reg.select2
+
+
+def test_sem_conseguir_conferir_no_siga_a_fatura_nao_e_lancada(bot_energia):
+    bot, reg = bot_energia
+    reg.consulta_falha = {"F1"}
+    pagina = PaginaGravadora()
+
+    bot.inserir_faturas_energia_siga(pagina, [_fatura("F1")])
+
+    assert pagina.valores("#f_executar_programa", "fill") == []
+    assert reg.gravacoes == 0
+    assert "conferir" in bot.motivos_energia["F1"]
+
+
+def test_fatura_sem_numero_nao_e_lancada(bot_energia):
+    bot, reg = bot_energia
+
+    bot.inserir_faturas_energia_siga(PaginaGravadora(), [_fatura("")])
+
+    assert reg.gravacoes == 0
+    assert reg.consultas == []
+
+
+def test_ja_lancada_por_outra_pessoa_fica_com_o_motivo(bot_energia):
+    bot, reg = bot_energia
+    reg.ja_lancadas = {"F1"}
+
+    bot.inserir_faturas_energia_siga(PaginaGravadora(), [_fatura("F1")])
+
+    assert "já estava no SIGA" in bot.motivos_energia["F1"]

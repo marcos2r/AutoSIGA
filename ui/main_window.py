@@ -267,7 +267,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.var_baixar_energia = ctk.BooleanVar(value=self.config_manager.get_baixar_energia_pelo_extrato())
         self.var_revisar_baixas = ctk.BooleanVar(value=self.config_manager.get_revisar_baixas())
         self.check_revisar_baixas = ctk.CTkCheckBox(
-            self.frame_botoes, text="Revisar as baixas de energia antes de gravar", font=("Open Sans", 12),
+            self.frame_botoes, text="Revisar as provisões e baixas de energia antes de gravar", font=("Open Sans", 12),
             variable=self.var_revisar_baixas,
             command=lambda: self.config_manager.salvar_revisar_baixas(self.var_revisar_baixas.get()))
         ctk.CTkCheckBox(
@@ -317,8 +317,6 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.attributes('-topmost', False)
 
     def _alternar_baixa_energia(self, salvar=True):
-        """Salva a opção da baixa de energia; a prévia das baixas só vale com ela ligada."""
-        ativo = self.var_baixar_energia.get()
+        """Salva a opção da baixa de energia (a prévia vale também para as provisões, então fica sempre ativa)."""
         if salvar:
-            self.config_manager.salvar_baixar_energia_pelo_extrato(ativo)
-        self.check_revisar_baixas.configure(state="normal" if ativo else "disabled")
+            self.config_manager.salvar_baixar_energia_pelo_extrato(self.var_baixar_energia.get())

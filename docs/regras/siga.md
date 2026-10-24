@@ -97,6 +97,12 @@ Usada para as faturas de energia.
 
 - Filtros (`form#f_main`): `f_tipodata` (Dt. Vcto, Dt. Emissão, Dt. Lcto, Dt. Pagamento), `f_data1`/`f_data2`, `f_fornecedor`, `f_contaprovisao`, `f_centrocusto`, `f_valorfatura1`/`f_valorfatura2`, `f_agrupamento`, `f_statusfatura` (Aprovado, Lançado, Pago, Pago Parcialmente).
 - Visualizar (modal TES01503): rateio (despesa 3006 - ENERGIA ELÉTRICA e centro de custo), pagamentos parciais (data, valor pago, multa, juros, desconto, total) e anexos. Não mostra a forma nem a conta de pagamento.
+- **Paginação no servidor** (levantado em 24/10/2026): o DataTables 1.9 da grade é `bServerSide`, então `fnGetNodes()` traz só a página da tela (até 100). Para ler tudo, o bot ajusta `fnSettings()._iDisplayLength = 1000` e chama `fnDraw()`; se ainda vierem menos linhas que `fnRecordsDisplay()`, não decide nada (`GradeIncompletaError`).
+- **Provisão de energia lançada pelo AutoSIGA × à mão** (24/10/2026, só consulta):
+  - pelo robô: Tipo Documento NOTA FISCAL, Nº Doc. = número da fatura (9 dígitos, ex.: `018666467`), datas de emissão e vencimento da fatura, Observação "PROVISÃO ENERGIA ELÉTRICA - UC … - REF … - CONSUMO …", PDF anexado;
+  - à mão pelas tesoureiras: Tipo Documento GUIA, Nº Doc. com **o código de débito automático da UC** (`1012345678` para o débito `00012345678`), data do documento e vencimento no dia do débito, sem observação, comprovante anexado.
+
+  Antes de provisionar, o robô considera a fatura lançada se houver provisão da Energisa com o mesmo número, ou com o código de débito no Nº Doc. e o mesmo valor (`controllers/provisao_energia.py`).
 
 ## TES01508 — Aprovar provisão (formulário, testado em 23/10/2026)
 

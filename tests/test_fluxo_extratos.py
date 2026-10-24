@@ -119,6 +119,8 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
     monkeypatch.setattr(bot, "_validar_sessao", lambda page: None)
     monkeypatch.setattr(bot, "_verificar_sessao_ativa", lambda page: None)
     monkeypatch.setattr(bot, "update_status", lambda msg, color=None: reg.status.append(msg))
+    # Provisões de energia (e-mail) têm testes próprios; aqui nunca tocam o e-mail real
+    monkeypatch.setattr(bot, "_etapa_provisoes_energia", lambda page: None)
     if etapa_baixas:
         monkeypatch.setattr(bot, "_etapa_baixas_energia", lambda page, dados, conta: etapa_baixas)
 

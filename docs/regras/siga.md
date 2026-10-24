@@ -5,7 +5,7 @@ Leia sob demanda, quando a tarefa mexer na automação do SIGA (`bot/`). Levanta
 ## Visão geral
 
 - **Nome**: Sistema Integrado de Gerenciamento Administrativo (CCB). URL: `https://siga.congregacao.org.br/`.
-- **Login**: e-mail/usuário + senha + **reCAPTCHA**. O bot reaproveita a sessão do perfil persistente (`siga_browser_data/`); um login novo exige interação humana.
+- **Login**: e-mail/usuário + senha + **reCAPTCHA**. O bot reaproveita a sessão do perfil (`siga_browser_data/`) e, se o Edge do AutoSIGA ainda estiver aberto, a própria janela; um login novo exige interação humana.
 - **Duas gerações de tela**:
   - **Legado ASP.NET**: `/<MÓDULO>/<PROGRAMA>.aspx` (ex.: `/TES/TES01701.aspx`), com jQuery, Bootstrap e Select2. É onde o bot trabalha hoje.
   - **Front novo**: `/SIS/Programa.aspx?programa=<COD>` carrega um iframe **cross-origin** de `https://siga-front.congregacao.org.br/login/token/...`. Do contexto da página principal não dá para ler o DOM do iframe; com Playwright é preciso usar `page.frame_locator(...)`. Usam o front novo: Importação Extrato, Cartão de Débito e Transferências, Boletos e Repartição Ofertas.

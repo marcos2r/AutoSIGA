@@ -28,9 +28,9 @@ class AcoesSigaMixin:
         # Bloqueia reentrância
         self.botao_conectar.configure(state="disabled")
 
-        # Destrói navegador órfão antes de abrir um novo
+        # Encerra uma execução anterior que ainda esteja rodando (o Edge continua aberto)
         if getattr(self, 'bot_instance', None) and getattr(self.bot_instance, 'browser_aberto', False):
-            self.atualizar_status("Encerrando janela antiga do SIGA...", "#F89406")
+            self.atualizar_status("Encerrando a execução anterior do robô...", "#F89406")
             self.bot_instance.fechar_browser()
             self.update()
             time.sleep(2)

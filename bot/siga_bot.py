@@ -118,17 +118,6 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
         """Força a finalização do loop principal do Playwright."""
         self.browser_aberto = False
 
-    def _aguardar_fechamento(self, context):
-        """Mantém o navegador aberto para conferência até o usuário fechá-lo."""
-        self.browser_aberto = True
-        while self.browser_aberto:
-            try:
-                if not context.pages:
-                    break
-            except Exception:
-                break
-            time.sleep(1)
-
     def _fluxo_ofertas(self, page):
         """Importa o TXT de ofertas de cada conta corrente do lote na TES05602."""
         contas = [d for d in self.lote_processados if d.get("tipo_extrato") != "APLICACAO"]
@@ -188,14 +177,13 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
                 # O e-mail vem antes do navegador: o usuário acompanha o download no status
                 self._busca_energia = self._buscar_faturas_do_periodo()
             with sync_playwright() as p:
-                context, page = self._iniciar_navegador(p)
+                # O Edge é à parte: ao sair deste bloco o robô só se desconecta e o Edge fica aberto
+                _, page = self._iniciar_navegador(p)
 
                 self._validar_sessao(page)
 
                 if self.tipo_lote == "descoberta":
-                    # Só leitura: fecha o navegador sozinho ao terminar
                     self._fluxo_descoberta(page)
-                    context.close()
                     return
 
                 if self.tipo_lote == "energia":
@@ -217,34 +205,15 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
                     self.update_status("✅ Processamento de faturas de energia concluído!", "#3C763D")
                     if "show_dashboard" in self.callbacks:
                         self.callbacks["show_dashboard"](telemetria_lote, tempo_inicio)
-
-                    self.browser_aberto = True
-                    while self.browser_aberto:
-                        try:
-                            if not context.pages:
-                                break
-                        except Exception:
-                            break
-                        time.sleep(1)
                     return
 
                 if self.tipo_lote == "ofertas":
                     self._fluxo_ofertas(page)
-                    self._aguardar_fechamento(context)
                     return
 
                 self._fluxo_extratos(page, telemetria_lote)
                 if "show_dashboard" in self.callbacks:
                     self.callbacks["show_dashboard"](telemetria_lote, tempo_inicio)
-
-                self.browser_aberto = True
-                while self.browser_aberto:
-                    try:
-                        if not context.pages:
-                            break
-                    except Exception:
-                        break
-                    time.sleep(1)
 
         except Exception as e:
             msg_erro = f"Erro inesperado na automação do SIGA: {e}"
@@ -265,5 +234,7 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
             erro_resumido = str(e).split('\n')[0][:50]
             self.update_status(f"Erro no navegador: {erro_resumido}...", "#D9534F")
         finally:
+            # O robô terminou; o Edge segue aberto e logado para o usuário
+            self.browser_aberto = False
             if "on_finish" in self.callbacks:
                 self.callbacks["on_finish"]()

@@ -6,6 +6,7 @@ import logging
 import os
 import time
 
+from bot.navegador import conectar_edge
 from caminhos import diretorio_base
 
 
@@ -13,29 +14,23 @@ class SessaoMixin:
     """Inicialização do Edge persistente e login no SIGA."""
 
     def _iniciar_navegador(self, p):
-        """Abre o Edge em contexto persistente e instala o log de cliques.
+        """Conecta ao Edge do AutoSIGA (abrindo-o se preciso) e instala o log de cliques.
+
+        O Edge é um programa à parte: continua aberto e logado quando o robô termina ou o
+        AutoSIGA fecha, e a próxima execução reaproveita a mesma janela.
 
         Returns:
             tuple: (context, page) do Playwright.
         """
         # Ao lado do executável, independente da pasta de início do atalho
         user_data_dir = os.path.join(diretorio_base(), 'siga_browser_data')
+        browser = conectar_edge(p, user_data_dir)
+        context = browser.contexts[0] if browser.contexts else browser.new_context(no_viewport=True)
 
-        # Utiliza o Microsoft Edge nativo
-        context = p.chromium.launch_persistent_context(
-            user_data_dir=user_data_dir,
-            headless=False,
-            no_viewport=True,
-            channel="msedge",
-            args=[
-                "--start-maximized",
-                "--disable-gpu",
-                "--disable-software-rasterizer",
-                "--disable-gpu-compositing"
-            ]
-        )
-
-        page = context.pages[0] if context.pages else context.new_page()
+        # No Edge reaproveitado, prefere a aba que já está no SIGA (o Edge pode abrir abas de propaganda)
+        abas_siga = [aba for aba in context.pages if "siga.congregacao" in aba.url]
+        page = (abas_siga or context.pages or [None])[0] or context.new_page()
+        page.bring_to_front()
 
         page.on("console", lambda msg: logging.info(msg.text) if "SIGA-CLIQUE" in msg.text else None)
         page.add_init_script('''

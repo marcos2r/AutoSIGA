@@ -96,7 +96,7 @@ class CatalogoSigaMixin:
         if not self.verificar_e_solicitar_credenciais():
             return
         if getattr(self, "bot_instance", None) and getattr(self.bot_instance, "browser_aberto", False):
-            self.atualizar_status("Feche a janela do SIGA aberta antes de buscar as contas.", tema.AMARELO_TEXTO)
+            self.atualizar_status("Aguarde o robô terminar antes de buscar as contas.", tema.AMARELO_TEXTO)
             return
 
         self.btn_buscar_siga.configure(state="disabled", text="Buscando no SIGA...")

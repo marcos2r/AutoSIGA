@@ -8,9 +8,10 @@ baixa de cada extrato já encontra a provisão. Sem e-mail, a etapa é pulada co
 """
 
 import logging
+import threading
 from datetime import timedelta
 
-from controllers.fatura_energia_controller import FaturaEnergiaController
+from controllers.fatura_energia_controller import FaturaEnergiaController, relacionar_localidades
 from controllers.periodo_energia import janela_de_busca, meses_do_lote
 from controllers.provisao_energia import (
     LANCADA,
@@ -21,6 +22,7 @@ from controllers.provisao_energia import (
     item_da_previa,
     linhas_do_painel,
 )
+from models.config_manager import ConfigManager
 from models.email_reader import EmailReader, mensagem_de_erro
 
 # A fatura vence semanas depois da emissão: a leitura da Contas a Pagar vai até 60 dias além da busca
@@ -51,7 +53,38 @@ class ProvisoesEnergiaMixin:
             motivo = mensagem_de_erro(erro)
             self.update_status(f"⚠️ Provisões de energia puladas: não consegui ler o e-mail ({motivo}).", "#F89406")
             return {"linhas": [("alerta", f"⚡ Provisões de energia não verificadas: {motivo}")]}
-        return {"meses": meses, "faturas": faturas}
+        return {"meses": meses, "faturas": self._relacionar_ucs_novas(*faturas)}
+
+    def _relacionar_ucs_novas(self, validas, sem_localidade, sem_emissao):
+        """Pergunta a localidade das UCs sem relação, ainda antes de abrir o SIGA.
+
+        O usuário acabou de iniciar o lote e está diante da tela; perguntar aqui evita uma
+        pausa no meio dos lançamentos com a sessão do SIGA aberta. Quem for pulado continua
+        pendente na aba Energia, como antes.
+        """
+        if not sem_localidade or "request_uc_mapping" not in self.callbacks:
+            return validas, sem_localidade, sem_emissao
+        ucs = len({f.get("uc", "") for f in sem_localidade})
+        self.update_status(f"⏸️ {ucs} unidade(s) consumidora(s) sem localidade: escolha na janela aberta.", "#F89406")
+        relacionadas, puladas = relacionar_localidades(sem_localidade, self._perguntar_localidade_uc, ConfigManager())
+        if relacionadas:
+            self.update_status(f"{len(relacionadas)} fatura(s) relacionada(s) a uma localidade.", "#3C763D")
+        return validas + relacionadas, puladas, sem_emissao
+
+    def _perguntar_localidade_uc(self, fatura):
+        """Abre na UI a janela de relacionar a UC e espera a resposta (código ou None para pular)."""
+        evento, resposta = threading.Event(), [None]
+
+        def responder(codigo):
+            resposta[0] = codigo
+            evento.set()
+
+        self.callbacks["request_uc_mapping"](fatura, responder)
+        # Em fatias, para terminar como "pular" se o AutoSIGA for fechado com a janela aberta
+        while not evento.wait(1):
+            if not self.browser_aberto:
+                return None
+        return resposta[0]
 
     def _etapa_provisoes_energia(self, page):
         """Provisiona as faturas de energia emitidas nos meses do lote.

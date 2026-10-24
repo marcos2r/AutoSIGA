@@ -8,6 +8,7 @@ import time
 from tkinter import messagebox
 
 from bot.siga_bot import SigaBot
+from controllers.prova_real import moeda
 from models.faturas_pendentes import FaturasPendentes
 from ui.modais_energia import ModalPerguntaMapeamentoUC
 
@@ -43,6 +44,7 @@ class AcoesSigaMixin:
             "update_progress": lambda val: self.after(0, lambda: self.progress_bar.set(val)),
             "show_message": lambda t, tit, m: self.after(0, lambda: self.exibir_mensagem_topo(t, tit, m)),
             "request_authorization": lambda pend, ctx: self.after(0, lambda: self.mostrar_janela_lancamentos(pend, ctx)),
+            "request_uc_mapping": lambda fat, responder: self.after(0, lambda: self._perguntar_uc_do_lote(fat, responder)),
             "show_dashboard": lambda tel, t: self.after(0, lambda: self.mostrar_dashboard_produtividade(tel, t)),
             "on_finish": lambda: self.after(0, lambda: self.botao_conectar.configure(state="normal"))
         }
@@ -51,6 +53,21 @@ class AcoesSigaMixin:
                                     baixar_energia=self.config_manager.get_baixar_energia_pelo_extrato(),
                                     revisar_baixas=self.config_manager.get_revisar_baixas())
         threading.Thread(target=self.bot_instance.fluxo_automacao, daemon=True).start()
+
+    def _perguntar_uc_do_lote(self, fatura, responder):
+        """Janela de relacionar a UC à localidade, aberta pelo lote de extratos antes de abrir o SIGA."""
+        partes = [moeda(float(fatura.get("valor") or 0.0)), f"ref. {fatura.get('referencia', '')}",
+                  f"venc. {fatura.get('vencimento', '')}", fatura.get("origem", "")]
+        detalhe = " · ".join(p for p in partes if p and not p.endswith(". "))
+
+        def ao_responder(codigo):
+            responder(codigo)
+            # A fatura saiu (ou continua) na lista de pendentes da aba Energia
+            self.after(0, self.panel_energia.atualizar_pendentes)
+
+        ModalPerguntaMapeamentoUC(self, fatura.get("uc", ""), self.config_manager, ao_responder,
+                                  caminho_pdf=fatura.get("caminho_arquivo", ""), detalhe=detalhe,
+                                  rotulo_confirmar="Relacionar e Seguir", rotulo_pular="Pular por Agora")
 
     def _montar_lote_extratos(self):
         """

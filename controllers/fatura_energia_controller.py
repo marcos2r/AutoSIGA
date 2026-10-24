@@ -246,3 +246,38 @@ class FaturaEnergiaController:
             if os.path.exists(pdf_path):
                 os.remove(pdf_path)
             return None
+
+
+def relacionar_localidades(sem_localidade: list[dict], perguntar, config_mgr: ConfigManager) -> tuple[list[dict], list[dict]]:
+    """Pergunta a localidade das UCs sem relação e devolve as faturas que passam a ter uma.
+
+    Pergunta uma vez por UC (a resposta vale para todas as faturas dela). Quem responde
+    salva o mapeamento; aqui só se aplica a localidade e se tiram as faturas das pendentes.
+
+    Args:
+        sem_localidade: Faturas cuja UC não tem localidade (já gravadas como pendentes).
+        perguntar: Função (fatura) -> código da localidade escolhida, ou None para pular.
+        config_mgr: Configuração com os mapeamentos de UC e as localidades.
+
+    Returns:
+        tuple: (relacionadas, puladas). As puladas continuam pendentes na aba Energia.
+    """
+    pendentes = FaturasPendentes(config_mgr)
+    localidades = {l["codigo"]: l["nome"] for l in config_mgr.get_localidades_energia()}
+    respostas: dict[str, str | None] = {}
+    relacionadas, puladas = [], []
+    for fat in sem_localidade:
+        uc = fat.get("uc", "")
+        if uc not in respostas:
+            # A UC pode ter sido relacionada em outra tela enquanto o lote rodava
+            mapeados = {m["uc"]: m["localidade_codigo"] for m in config_mgr.get_mapeamentos_uc()}
+            respostas[uc] = mapeados.get(uc) or perguntar(fat)
+        codigo = respostas[uc]
+        if not codigo:
+            puladas.append(fat)
+            continue
+        fat["localidade_codigo"] = codigo
+        fat["localidade_nome"] = localidades.get(codigo, "DESCONHECIDA")
+        pendentes.remover(fat)
+        relacionadas.append(fat)
+    return relacionadas, puladas

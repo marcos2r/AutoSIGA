@@ -290,16 +290,25 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
     janela ou escolher "Deixar Pendente" nunca a perde: ela aparece na aba Energia e
     volta a ser perguntada na próxima importação.
     """
-    def __init__(self, parent, uc, config_manager, callback_resposta, caminho_pdf=None):
+    def __init__(self, parent, uc, config_manager, callback_resposta, caminho_pdf=None, detalhe="",
+                 rotulo_confirmar="Mapear e Lançar", rotulo_pular="Deixar Pendente"):
+        """
+        Args:
+            detalhe: Linha com os dados da fatura (valor, referência, origem), para ajudar a escolher.
+            rotulo_confirmar: Texto do botão principal (no lote de extratos, "Relacionar e Seguir").
+            rotulo_pular: Texto do botão de deixar a fatura pendente.
+        """
         super().__init__(parent)
         self.parent = parent
         self.uc = uc
         self.config_manager = config_manager
         self.callback_resposta = callback_resposta
         self.caminho_pdf = caminho_pdf
+        self.detalhe = detalhe
+        self.rotulo_confirmar, self.rotulo_pular = rotulo_confirmar, rotulo_pular
 
         self.title("Mapear Unidade Consumidora")
-        self.geometry("380x360")
+        self.geometry("380x360" if detalhe else "380x330")
         self.resizable(False, False)
         self.configure(fg_color="#FFFFFF")
 
@@ -321,6 +330,9 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
             font=("Open Sans", 11), text_color="#333333", wraplength=320
         )
         lbl_desc.pack(pady=8)
+        if self.detalhe:
+            ctk.CTkLabel(self, text=self.detalhe, font=("Open Sans", 11, "bold"), text_color="#333333",
+                         wraplength=320).pack(pady=(0, 4))
 
         # Botão para visualizar nota fiscal (PDF) se houver
         if self.caminho_pdf and os.path.exists(self.caminho_pdf):
@@ -340,7 +352,11 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
             self, values=combo_values if combo_values else ["Cadastre Localidades Primeiro"],
             width=280, height=30, font=("Open Sans", 10)
         )
-        self.combo_loc.pack(pady=8)
+        # Começa vazio: sem sugestão confiável, uma localidade pré-escolhida vira relação errada num clique
+        if combo_values:
+            self.combo_loc.set("")
+        ctk.CTkLabel(self, text="Localidade:", font=("Open Sans", 11), text_color="#333333").pack(pady=(4, 0))
+        self.combo_loc.pack(pady=(0, 8))
 
         # Botões: a ação principal em destaque; a secundária é neutra e afastada,
         # para reduzir cliques acidentais
@@ -348,13 +364,13 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         frame_btn.pack(pady=(10, 4))
 
         btn_confirmar = ctk.CTkButton(
-            frame_btn, text="Mapear e Lançar", font=("Open Sans", 12, "bold"),
+            frame_btn, text=self.rotulo_confirmar, font=("Open Sans", 12, "bold"),
             fg_color="#5CB85C", hover_color="#4CAE4C", width=160, height=38, command=self.confirmar
         )
         btn_confirmar.grid(row=0, column=0, padx=(0, 16))
 
         btn_pendente = ctk.CTkButton(
-            frame_btn, text="Deixar Pendente", font=("Open Sans", 11),
+            frame_btn, text=self.rotulo_pular, font=("Open Sans", 11),
             fg_color="#E6E6E6", hover_color="#D4D4D4", text_color="#333333",
             width=110, height=32, command=self.deixar_pendente
         )

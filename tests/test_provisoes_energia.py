@@ -171,3 +171,22 @@ def test_etapa_registra_a_fatura_que_nao_foi_confirmada(monkeypatch):
     linhas = bot._etapa_provisoes_energia(None)
 
     assert linhas[1] == ("alerta", "   ⚠ fatura F1 · UC 123.456.051-00: não confirmada no SIGA: veja o log")
+
+
+def test_etapa_usa_as_faturas_baixadas_antes_de_abrir_o_navegador(monkeypatch):
+    bot, reg = _bot_etapa(monkeypatch)
+    bot._busca_energia = {"meses": ["10/2026"], "faturas": ([_fatura("F1")], [], [])}
+
+    linhas = bot._etapa_provisoes_energia(None)
+
+    assert reg.buscas == []  # o e-mail não é lido de novo
+    assert reg.lancadas == [["F1"]]
+    assert linhas[0][0] == "ok" and bot._busca_energia is None
+
+
+def test_falha_no_email_antes_do_navegador_vai_para_o_painel(monkeypatch):
+    bot, reg = _bot_etapa(monkeypatch)
+    bot._busca_energia = {"linhas": [("alerta", "⚡ falha ao ler o e-mail")]}
+
+    assert bot._etapa_provisoes_energia(None) == [("alerta", "⚡ falha ao ler o e-mail")]
+    assert reg.lancadas == []

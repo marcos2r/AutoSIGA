@@ -9,6 +9,7 @@ que as marca como lidas) ou todas as de um período (provisões do lote de extra
 import base64
 import logging
 import os
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -138,7 +139,8 @@ class EmailReader:
         return caminhos
 
     @staticmethod
-    def buscar_faturas_periodo(inicio: date, fim: date, pasta_destino: str, service: Any = None) -> list[str]:
+    def buscar_faturas_periodo(inicio: date, fim: date, pasta_destino: str, service: Any = None,
+                               progresso: Callable[[int, int], None] | None = None) -> list[str]:
         """Baixa os PDFs da Energisa recebidos entre duas datas, lidos ou não.
 
         Só lê a caixa: não marca nada como lido, para não mudar o e-mail de quem usa o robô.
@@ -149,6 +151,7 @@ class EmailReader:
             fim: Último dia da busca (inclusive).
             pasta_destino: Pasta onde os PDFs são salvos.
             service: Cliente da API do Gmail (None autentica pelo token.json).
+            progresso: Recebe (mensagens lidas, total) a cada 10 mensagens e no fim.
 
         Returns:
             list[str]: Caminhos dos PDFs salvos.
@@ -162,8 +165,10 @@ class EmailReader:
         mensagens = EmailReader._listar_mensagens(service, query)
         logging.info(f"Gmail API: {len(mensagens)} mensagem(ns) da Energisa no período.")
         caminhos: list[str] = []
-        for msg in mensagens:
+        for n, msg in enumerate(mensagens, start=1):
             caminhos.extend(EmailReader._baixar_pdfs_da_mensagem(service, msg['id'], pasta_destino))
+            if progresso and (n % 10 == 0 or n == len(mensagens)):
+                progresso(n, len(mensagens))
         return caminhos
 
     @staticmethod

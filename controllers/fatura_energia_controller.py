@@ -126,7 +126,9 @@ class FaturaEnergiaController:
         inicio, fim = janela_de_busca(meses)
         log_msg(f"Buscando no e-mail as faturas de energia de {meses[0]} a {meses[-1]}...", "#428BCA")
         try:
-            pdfs = EmailReader.buscar_faturas_periodo(inicio, fim, pasta_temp, service=service)
+            pdfs = EmailReader.buscar_faturas_periodo(
+                inicio, fim, pasta_temp, service=service,
+                progresso=lambda n, total: log_msg(f"Baixando as faturas do e-mail: {n} de {total} mensagens...", "#428BCA"))
             lidas = [d for pdf in pdfs if (d := FaturaEnergiaController._extrair_e_organizar(
                 pdf, "", pasta_organizada, log_msg))]
         finally:

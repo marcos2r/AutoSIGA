@@ -75,6 +75,8 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
         self._autorizado = False
         self.faturas_energia_sucesso = []
         self.motivos_energia = {}
+        # Faturas de energia baixadas do e-mail antes de abrir o navegador (lote de extratos)
+        self._busca_energia = None
         # (localidade, mm/aaaa) que o SIGA recusou nesta execução. Fica só em memória:
         # numa nova execução o mês pode ter sido reaberto, então tenta de novo.
         self.competencias_fechadas = set()
@@ -181,6 +183,9 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
         }
 
         try:
+            if self.tipo_lote == "extrato":
+                # O e-mail vem antes do navegador: o usuário acompanha o download no status
+                self._busca_energia = self._buscar_faturas_do_periodo()
             with sync_playwright() as p:
                 context, page = self._iniciar_navegador(p)
 

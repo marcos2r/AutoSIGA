@@ -94,6 +94,16 @@ def test_busca_por_periodo_le_todas_as_paginas_lidas_ou_nao_sem_marcar_como_lida
     assert gmail.modificadas == []
 
 
+def test_busca_por_periodo_avisa_o_progresso(tmp_path):
+    gmail = GmailFalso({f"m{i}": [f"f{i}.pdf"] for i in range(12)}, por_pagina=100)
+    avisos = []
+
+    EmailReader.buscar_faturas_periodo(date(2026, 9, 1), date(2026, 9, 30), str(tmp_path), service=gmail,
+                                       progresso=lambda n, total: avisos.append((n, total)))
+
+    assert avisos == [(10, 12), (12, 12)]
+
+
 def test_busca_da_aba_energia_tambem_pagina_e_marca_como_lida(tmp_path):
     gmail = GmailFalso({"m1": ["f1.pdf"], "m2": ["f2.pdf"], "m3": ["f3.pdf"]})
 
@@ -118,7 +128,7 @@ def _preparar(tmp_path, monkeypatch, lidas):
     monkeypatch.setattr("controllers.fatura_energia_controller.diretorio_base", lambda: str(tmp_path))
     janelas = []
     monkeypatch.setattr("controllers.fatura_energia_controller.EmailReader.buscar_faturas_periodo",
-                        lambda inicio, fim, pasta, service=None: janelas.append((inicio, fim)) or
+                        lambda inicio, fim, pasta, service=None, progresso=None: janelas.append((inicio, fim)) or
                         [f"temp_{i}.pdf" for i in range(len(lidas))])
     fila = list(lidas)
     monkeypatch.setattr(FaturaEnergiaController, "_extrair_e_organizar", staticmethod(lambda *a, **k: fila.pop(0)))

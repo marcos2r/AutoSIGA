@@ -30,12 +30,13 @@ _DIAS_DE_VENCIMENTO = 60
 class ProvisoesEnergiaMixin:
     """Etapa de provisões de energia no início do lote de extratos."""
 
-    def _etapa_provisoes_energia(self, page):
-        """Provisiona as faturas de energia emitidas nos meses do lote.
+    def _buscar_faturas_do_periodo(self):
+        """Baixa do e-mail as faturas dos meses do lote. Roda antes de abrir o navegador, para o
+        usuário ver o progresso em vez de uma tela do SIGA parada.
 
         Returns:
-            list[tuple[str, str]] | None: Linhas (nível, texto) para o painel; None se a
-            etapa não rodou (e-mail não conectado ou lote sem período).
+            dict | None: {"meses", "faturas": (validas, sem_localidade, sem_emissao)}; {"linhas"}
+            se a leitura do e-mail falhou; None se a etapa não roda (sem e-mail ou sem período).
         """
         meses = meses_do_lote(self.lote_processados)
         if not meses:
@@ -43,14 +44,30 @@ class ProvisoesEnergiaMixin:
         if not EmailReader.conectado():
             self.update_status("E-mail não conectado: provisões de energia não buscadas.", "#666666")
             return None
-
         try:
-            validas, sem_localidade, sem_emissao = FaturaEnergiaController.buscar_faturas_do_periodo(
-                meses, self.update_status)
+            faturas = FaturaEnergiaController.buscar_faturas_do_periodo(meses, self.update_status)
         except Exception as erro:
             logging.exception("Falha ao buscar as faturas de energia no e-mail.")
             self.update_status(f"⚠️ Provisões de energia puladas: não consegui ler o e-mail ({erro}).", "#F89406")
-            return [("alerta", f"⚡ Provisões de energia não verificadas: falha ao ler o e-mail ({erro})")]
+            return {"linhas": [("alerta", f"⚡ Provisões de energia não verificadas: falha ao ler o e-mail ({erro})")]}
+        return {"meses": meses, "faturas": faturas}
+
+    def _etapa_provisoes_energia(self, page):
+        """Provisiona as faturas de energia emitidas nos meses do lote.
+
+        Usa as faturas já baixadas em `self._busca_energia` (antes de abrir o navegador) ou
+        busca agora, se ninguém buscou.
+
+        Returns:
+            list[tuple[str, str]] | None: Linhas (nível, texto) para o painel; None se a
+            etapa não rodou (e-mail não conectado ou lote sem período).
+        """
+        busca = self._busca_energia if self._busca_energia is not None else self._buscar_faturas_do_periodo()
+        self._busca_energia = None
+        if busca is None or "linhas" in busca:
+            return busca and busca["linhas"]
+        meses = busca["meses"]
+        validas, sem_localidade, sem_emissao = busca["faturas"]
         if not (validas or sem_localidade or sem_emissao):
             return [("neutro", f"⚡ Provisões de energia: nenhuma fatura emitida de {meses[0]} a {meses[-1]} no e-mail")]
 

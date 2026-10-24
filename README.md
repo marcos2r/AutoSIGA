@@ -21,6 +21,7 @@ A conciliação bancária entre múltiplas jurisdições (como a de Administraç
 - **Extrato de Conta Corrente em XLS**: O XLS de conta corrente do Sicredi passa a ser lido como o OFX, com os mesmos movimentos, saldo e período. Se o OFX e o XLS da mesma conta e mês vierem juntos, o lote fica só com o OFX. O XLS corta a descrição do banco e, com ela, o código de débito automático da energia: nesse caso a fatura não é baixada e aparece como pendência pedindo o OFX.
 - **Prévia dos Lançamentos Sempre Ligada**: A caixa **Revisar os lançamentos antes de gravar no SIGA** sai da tela. O robô sempre mostra o que vai lançar em cada extrato e só grava com **Lançar N itens**, para ninguém gravar em duplicidade sem ver.
 - **UC sem Localidade Perguntada no Começo do Lote**: Fatura de UC sem localidade é perguntada logo depois do download do e-mail, antes de abrir o SIGA, com a opção de pular.
+- **Localidades Lidas do SIGA**: O robô cadastra sozinho as localidades novas que aparecem no seletor "Local de Trabalho" do SIGA, só lendo. Na janela de UC nova, **+ Nova localidade** cadastra na hora a casa que falta.
 - **SIGA Continua Aberto Depois do Robô**: O Edge do AutoSIGA passa a ser um programa à parte. Ao terminar o lote, ou ao fechar o AutoSIGA, ele continua aberto e logado para consultar os lançamentos ou seguir trabalhando no SIGA. Na execução seguinte, o robô reaproveita essa mesma janela, sem novo login.
 
 Histórico completo das versões em [docs/CHANGELOG.md](docs/CHANGELOG.md). Arquitetura em [docs/arquitetura.md](docs/arquitetura.md).

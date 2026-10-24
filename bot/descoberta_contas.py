@@ -10,6 +10,7 @@ em que o usuário estava, sem "lembrar a escolha". Nada é gravado no SIGA.
 import logging
 import time
 
+from bot.sessao import JS_LER_LOCALIDADES
 from controllers.catalogo_contas import (
     TIPOS_LOCALIDADE,
     Catalogo,
@@ -51,10 +52,6 @@ _JS_LER_CONTAS_TES = '''() => Array.from(document.querySelectorAll('select#f_con
                 && o.parentElement.label.toUpperCase().indexOf('INATIV') > -1)
 }))'''
 
-_JS_LER_LOCALIDADES = '''() => Array.from(document.querySelectorAll('select[name="f_estabelecimento"] option'))
-    .map(o => o.textContent.trim())'''
-
-
 class DescobertaContasMixin:
     """Lê o catálogo de contas do SIGA e o entrega à UI pelo callback `on_catalogo`."""
 
@@ -80,6 +77,12 @@ class DescobertaContasMixin:
                      f"sem acesso: {catalogo.localidades_sem_acesso}")
         if "on_catalogo" in self.callbacks:
             self.callbacks["on_catalogo"](catalogo)
+        # Pelo Plano de Contas o seletor de localidade não chega a abrir: abre só para ler
+        if "on_localidades_siga" in self.callbacks and not getattr(self, "_localidades_enviadas", False):
+            try:
+                self._localidades_disponiveis(page)
+            except Exception as e:
+                logging.warning(f"Não foi possível ler as localidades na descoberta: {e}")
         return catalogo
 
     def _esperar(self, condicao, tentativas=60, intervalo=0.5):
@@ -159,8 +162,9 @@ class DescobertaContasMixin:
         page.locator('#a_competencia').click()
         page.locator('a.showModal:has-text("Outros Meses")').click()
         page.locator('select[name="f_estabelecimento"]').first.wait_for(state="attached", timeout=15000)
-        textos = page.evaluate(_JS_LER_LOCALIDADES) or []
+        textos = page.evaluate(JS_LER_LOCALIDADES) or []
         page.keyboard.press("Escape")
+        self._enviar_localidades_do_seletor(page, textos)
 
         localidades = []
         for texto in textos:

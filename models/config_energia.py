@@ -76,6 +76,12 @@ class ConfigEnergiaMixin:
         config["localidades_energia"] = localidades
         self.save_config_data(config)
 
+    def salvar_localidades_energia(self, localidades):
+        """Substitui o cadastro inteiro de localidades numa gravação só (sincronização com o SIGA)."""
+        config = self.get_config_data()
+        config["localidades_energia"] = localidades
+        self.save_config_data(config)
+
     def remover_localidade_energia(self, codigo):
         """
         Remove uma localidade de energia.

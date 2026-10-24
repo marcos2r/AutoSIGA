@@ -8,6 +8,7 @@ import time
 from tkinter import messagebox
 
 from bot.siga_bot import SigaBot
+from controllers.localidades_siga import sincronizar_localidades
 from controllers.prova_real import moeda
 from models.faturas_pendentes import FaturasPendentes
 from ui.modais_energia import ModalPerguntaMapeamentoUC
@@ -43,6 +44,7 @@ class AcoesSigaMixin:
             "update_status": self.atualizar_status,
             "update_progress": lambda val: self.after(0, lambda: self.progress_bar.set(val)),
             "show_message": lambda t, tit, m: self.after(0, lambda: self.exibir_mensagem_topo(t, tit, m)),
+            "on_localidades_siga": lambda textos: self.after(0, lambda: self.receber_localidades_siga(textos)),
             "request_authorization": lambda pend, ctx: self.after(0, lambda: self.mostrar_janela_lancamentos(pend, ctx)),
             "request_uc_mapping": lambda fat, responder: self.after(0, lambda: self._perguntar_uc_do_lote(fat, responder)),
             "show_dashboard": lambda tel, t: self.after(0, lambda: self.mostrar_dashboard_produtividade(tel, t)),
@@ -53,6 +55,18 @@ class AcoesSigaMixin:
                                     baixar_energia=self.config_manager.get_baixar_energia_pelo_extrato(),
                                     revisar_baixas=self.config_manager.get_revisar_baixas())
         threading.Thread(target=self.bot_instance.fluxo_automacao, daemon=True).start()
+
+    def receber_localidades_siga(self, textos):
+        """Grava no cadastro as localidades novas do seletor "Local de Trabalho" do SIGA."""
+        try:
+            novas, renomeadas = sincronizar_localidades(textos, self.config_manager)
+        except Exception as e:
+            logging.error(f"Erro ao sincronizar as localidades do SIGA: {e}", exc_info=True)
+            return
+        if renomeadas:
+            logging.info(f"Localidades com o nome do SIGA: {', '.join(renomeadas)}")
+        if novas:
+            self.atualizar_status(f"📍 {len(novas)} localidade(s) nova(s) do SIGA: {', '.join(novas)}", "#428BCA")
 
     def _perguntar_uc_do_lote(self, fatura, responder):
         """Janela de relacionar a UC à localidade, aberta pelo lote de extratos antes de abrir o SIGA."""
@@ -125,6 +139,7 @@ class AcoesSigaMixin:
             "update_status": self.atualizar_status,
             "update_progress": lambda val: self.after(0, lambda: self.progress_bar.set(val)),
             "show_message": lambda t, tit, m: self.after(0, lambda: self.exibir_mensagem_topo(t, tit, m)),
+            "on_localidades_siga": lambda textos: self.after(0, lambda: self.receber_localidades_siga(textos)),
             "on_finish": lambda: self.after(0, lambda: self.botao_importar_ofertas.configure(state="normal"))
         }
         self.bot_instance = SigaBot(lote_valido, callbacks, tipo_lote="ofertas")
@@ -227,6 +242,7 @@ class AcoesSigaMixin:
                 "update_status": self.atualizar_status,
                 "update_progress": lambda val: self.after(0, lambda: self.progress_bar.set(val)),
                 "show_message": lambda t, tit, m: self.after(0, lambda: self.exibir_mensagem_topo(t, tit, m)),
+                "on_localidades_siga": lambda textos: self.after(0, lambda: self.receber_localidades_siga(textos)),
                 "request_authorization": lambda pend: self.after(0, lambda: self.mostrar_janela_lancamentos(pend)),
                 "show_dashboard": lambda tel, t: self.after(0, lambda: self.mostrar_dashboard_produtividade(tel, t)),
                 "on_finish": lambda: self.after(0, lambda: [

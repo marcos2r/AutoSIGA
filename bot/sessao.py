@@ -12,6 +12,10 @@ from caminhos import diretorio_base
 # Tela só de consulta usada para testar se a sessão do Edge reaproveitado ainda vale
 _TELA_CONSULTA = "https://siga.congregacao.org.br/TES/TES01701.aspx"
 
+# Opções do seletor de localidade do modal "Outros Meses" (Local de Trabalho)
+JS_LER_LOCALIDADES = '''() => Array.from(document.querySelectorAll('select[name="f_estabelecimento"] option'))
+    .map(o => o.textContent.trim())'''
+
 
 class SessaoMixin:
     """Inicialização do Edge persistente e login no SIGA."""
@@ -197,6 +201,7 @@ class SessaoMixin:
         btn_confirmar = page.locator(f'{self._FORM_LOCALIDADE} button[type="submit"]:has-text("Confirmar")').first
         btn_confirmar.wait_for(state="attached", timeout=15000)
         time.sleep(1.5)
+        self._enviar_localidades_do_seletor(page)
 
         # Valores vão como argumento, não interpolados no JS
         page.evaluate(self._JS_PREENCHER_CONTEXTO,
@@ -216,6 +221,23 @@ class SessaoMixin:
                            "Confira se o mês de trabalho existe e está aberto.", "#D9534F")
         self._capturar_tela_e_log(page, "contexto_divergente")
         return False
+
+    def _enviar_localidades_do_seletor(self, page, textos=None):
+        """Entrega à UI, uma vez por execução, as opções do seletor de localidade (só leitura).
+
+        A UI grava no cadastro as localidades novas do SIGA (`on_localidades_siga`). Uma
+        falha aqui só vai para o log: não pode atrapalhar a troca de localidade.
+        """
+        if getattr(self, "_localidades_enviadas", False) or "on_localidades_siga" not in self.callbacks:
+            return
+        try:
+            if textos is None:
+                textos = page.evaluate(JS_LER_LOCALIDADES) or []
+            if textos:
+                self._localidades_enviadas = True
+                self.callbacks["on_localidades_siga"](list(textos))
+        except Exception as e:
+            logging.warning(f"Não foi possível ler as localidades do seletor do SIGA: {e}")
 
     @staticmethod
     def _contexto_ativo_confere(page, tipo_adm, nome_adm, mes_ano_alvo):

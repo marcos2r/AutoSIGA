@@ -234,3 +234,15 @@ def test_troca_usa_o_formulario_da_localidade_e_nao_lembra_a_escolha(monkeypatch
     # Valores vão como argumento do JS; "lembrar a escolha" é sempre desmarcado
     assert pagina.args == [["DR", "CENTRAL", ""]]
     assert any("'#f-mudarpadrao').prop('checked', false)" in s for s in pagina.scripts)
+
+
+def test_descoberta_entrega_as_localidades_do_seletor(bot):
+    recebidas = []
+    bot.callbacks["on_localidades_siga"] = recebidas.append
+    pagina = PaginaSiga(acesso_ctb=True)
+    _trocar_contexto(bot, pagina)
+
+    bot._fluxo_descoberta(pagina)
+
+    # Pelo Plano de Contas o seletor não abriria: a descoberta abre só para ler, uma vez
+    assert recebidas == [[ADM, DR, PIA, "SEC - CENTRAL"]]

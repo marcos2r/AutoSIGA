@@ -158,7 +158,7 @@ Levantado em 23/10/2026.
 - Os rótulos são texto livre e variam (`AG:0101` / `AG: 0101`, CC com e sem hífen, `CC: CONTA CAPITAL`): compare só os dígitos.
 - Uma conta corrente pode ter várias contas 103 (ex.: aplicação e poupança da mesma CC).
 - **Troca de localidade**: no modal "Outros Meses" há dois `form.modal-form`; o certo é o que contém `select[name="f_estabelecimento"]` (o outro recusa com "Formulário incompleto"). Depois de Confirmar, o SIGA redireciona para `/SIS/SIS99908.aspx`; é preciso abrir a rotina de novo. O AutoSIGA sempre desmarca `#f-mudarpadrao` ("lembrar a escolha"): a troca vale só para a sessão e não altera a localidade padrão do usuário.
-- O modal lista ADM, DR, PIA, SEC, setores e casas de oração. Ainda não foi visto o comportamento de um usuário sem acesso a uma localidade (o levantamento teve acesso a todas).
+- O modal lista ADM, DR, PIA, SEC, setores e casas de oração (`BR 10-0054 - VILA PLANALTO`). O AutoSIGA lê essas opções (só leitura) para cadastrar as localidades de energia novas. Ainda não foi visto o comportamento de um usuário sem acesso a uma localidade (o levantamento teve acesso a todas).
 
 ## Ainda não levantado
 

@@ -10,6 +10,8 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
+from controllers.localidades_siga import codigo_localidade_valido
+
 
 class ModalLocalidades(ctk.CTkToplevel):
     """
@@ -308,7 +310,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         self.rotulo_confirmar, self.rotulo_pular = rotulo_confirmar, rotulo_pular
 
         self.title("Mapear Unidade Consumidora")
-        self.geometry("380x360" if detalhe else "380x330")
+        self.geometry("380x390" if detalhe else "380x360")
         self.resizable(False, False)
         self.configure(fg_color="#FFFFFF")
 
@@ -344,19 +346,11 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
             btn_ver_nota.pack(pady=5)
 
         # Dropdown
-        localidades = self.config_manager.get_localidades_energia()
-        self.localidades_list = localidades
-        combo_values = [f"{l['codigo']} - {l['nome']}" if l['codigo'] != l['nome'] else l['nome'] for l in localidades]
-
-        self.combo_loc = ctk.CTkComboBox(
-            self, values=combo_values if combo_values else ["Cadastre Localidades Primeiro"],
-            width=280, height=30, font=("Open Sans", 10)
-        )
-        # Começa vazio: sem sugestão confiável, uma localidade pré-escolhida vira relação errada num clique
-        if combo_values:
-            self.combo_loc.set("")
+        self.combo_loc = ctk.CTkComboBox(self, values=[], width=280, height=30, font=("Open Sans", 10))
+        self._carregar_localidades()
         ctk.CTkLabel(self, text="Localidade:", font=("Open Sans", 11), text_color="#333333").pack(pady=(4, 0))
-        self.combo_loc.pack(pady=(0, 8))
+        self.combo_loc.pack(pady=(0, 2))
+        self._construir_nova_localidade()
 
         # Botões: a ação principal em destaque; a secundária é neutra e afastada,
         # para reduzir cliques acidentais
@@ -385,6 +379,61 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
     def abrir_nota(self):
         abrir_pdf(self.caminho_pdf, self)
 
+    def _carregar_localidades(self, escolher=""):
+        """Recarrega a lista do cadastro; começa vazia salvo quando `escolher` é dado."""
+        self.localidades_list = self.config_manager.get_localidades_energia()
+        valores = [_rotulo_localidade(l) for l in self.localidades_list]
+        self.combo_loc.configure(values=valores or ["Cadastre Localidades Primeiro"])
+        # Sem sugestão confiável, uma localidade pré-escolhida vira relação errada num clique
+        self.combo_loc.set(escolher if valores else "Cadastre Localidades Primeiro")
+
+    def _construir_nova_localidade(self):
+        """Link "+ Nova localidade" e o formulário curto (código e nome), escondido até o clique."""
+        self.btn_nova = ctk.CTkButton(
+            self, text="+ Nova localidade (não está na lista)", font=("Open Sans", 10, "underline"),
+            fg_color="transparent", text_color="#428BCA", hover_color="#EEEEEE",
+            width=280, height=22, command=self._alternar_nova_localidade
+        )
+        self.btn_nova.pack(pady=(0, 4))
+        self.frame_nova = ctk.CTkFrame(self, fg_color="#F5F5F5", corner_radius=6)
+        ctk.CTkLabel(self.frame_nova, text="Código:", font=("Open Sans", 10)).grid(row=0, column=0, padx=(8, 4), pady=(6, 2), sticky="w")
+        self.entry_nova_codigo = ctk.CTkEntry(self.frame_nova, placeholder_text="BR 10-0000", width=200, height=26)
+        self.entry_nova_codigo.grid(row=0, column=1, padx=(0, 8), pady=(6, 2))
+        ctk.CTkLabel(self.frame_nova, text="Nome:", font=("Open Sans", 10)).grid(row=1, column=0, padx=(8, 4), pady=2, sticky="w")
+        self.entry_nova_nome = ctk.CTkEntry(self.frame_nova, placeholder_text="como no SIGA", width=200, height=26)
+        self.entry_nova_nome.grid(row=1, column=1, padx=(0, 8), pady=2)
+        ctk.CTkButton(self.frame_nova, text="Cadastrar e Escolher", font=("Open Sans", 10, "bold"),
+                      fg_color="#428BCA", hover_color="#3071A9", width=160, height=26,
+                      command=self.cadastrar_nova_localidade).grid(row=2, column=0, columnspan=2, pady=(4, 8))
+
+    def _alternar_nova_localidade(self):
+        largura, altura = self.winfo_width(), self.winfo_height()
+        if self.frame_nova.winfo_ismapped():
+            self.frame_nova.pack_forget()
+            self.geometry(f"{largura}x{altura - _ALTURA_NOVA_LOCALIDADE}")
+        else:
+            self.frame_nova.pack(after=self.btn_nova, pady=(0, 6))
+            self.geometry(f"{largura}x{altura + _ALTURA_NOVA_LOCALIDADE}")
+
+    def cadastrar_nova_localidade(self):
+        """Grava a localidade digitada e já a deixa escolhida (não relaciona a UC sozinho)."""
+        codigo = " ".join(self.entry_nova_codigo.get().upper().split())
+        nome = " ".join(self.entry_nova_nome.get().upper().split())
+        if not codigo_localidade_valido(codigo) or not nome:
+            messagebox.showerror("Localidade", "Informe o código como no SIGA (ex.: BR 10-0054) e o nome.", parent=self)
+            return
+        existente = next((l for l in self.localidades_list if l["codigo"] == codigo), None)
+        if existente:
+            messagebox.showinfo("Localidade", f"{_rotulo_localidade(existente)} já está cadastrada; "
+                                "ela ficou escolhida na lista.", parent=self)
+            self.combo_loc.set(_rotulo_localidade(existente))
+            return
+        self.config_manager.salvar_localidade_energia(codigo, nome)
+        self._carregar_localidades(escolher=f"{codigo} - {nome}")
+        self.entry_nova_codigo.delete(0, "end")
+        self.entry_nova_nome.delete(0, "end")
+        self._alternar_nova_localidade()
+
     def confirmar(self):
         loc_txt = self.combo_loc.get().strip()
         if "Cadastre" in loc_txt or not loc_txt:
@@ -393,8 +442,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
 
         codigo_loc = None
         for l in self.localidades_list:
-            comb = f"{l['codigo']} - {l['nome']}" if l['codigo'] != l['nome'] else l['nome']
-            if comb == loc_txt or l["nome"] == loc_txt or l["codigo"] == loc_txt:
+            if _rotulo_localidade(l) == loc_txt or l["nome"] == loc_txt or l["codigo"] == loc_txt:
                 codigo_loc = l["codigo"]
                 break
 
@@ -410,3 +458,12 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
     def deixar_pendente(self):
         self.callback_resposta(None)
         self.destroy()
+
+
+# Altura extra da janela da UC quando o formulário de nova localidade está aberto
+_ALTURA_NOVA_LOCALIDADE = 110
+
+
+def _rotulo_localidade(loc):
+    """Texto da localidade na lista: "BR 10-0054 - VILA PLANALTO" (ou só o nome, se igual ao código)."""
+    return f"{loc['codigo']} - {loc['nome']}" if loc["codigo"] != loc["nome"] else loc["nome"]

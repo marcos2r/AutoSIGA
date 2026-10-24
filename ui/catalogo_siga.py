@@ -106,6 +106,7 @@ class CatalogoSigaMixin:
             "update_status": self.atualizar_status,
             "update_progress": lambda val: self.after(0, lambda: self.progress_bar.set(val)),
             "show_message": lambda t, tit, m: self.after(0, lambda: self.exibir_mensagem_topo(t, tit, m)),
+            "on_localidades_siga": lambda textos: self.after(0, lambda: self.receber_localidades_siga(textos)),
             "on_catalogo": lambda cat: self.after(0, lambda: self.receber_catalogo(cat)),
             "on_finish": lambda: self.after(0, self._fim_descoberta),
         }

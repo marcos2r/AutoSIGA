@@ -67,7 +67,7 @@ Botões: Salvar, Salvar e Novo, Cancelar. O bot usa esta tela para rendimentos d
 ## TES01704 — Movimentação Interna (novo)
 
 Transferência entre contas (aplicações e resgates do extrato).
-- Cabeçalho: Data * `#f_data`, Forma Transferência `select#f_formapagamento` (inclui SAQUE), Nº Documento `#f_documento`, Valor * `#f_valor`, Favorecido * `#f_nomefavorecido`.
+- Cabeçalho: Data * `#f_data`, Forma Transferência `select#f_formapagamento` (inclui SAQUE), Nº Documento `#f_documento` (opcional; o bot deixa em branco, como no lançamento manual), Valor * `#f_valor`, Favorecido * `#f_nomefavorecido`.
 - **Origem**: Conta * `select#f_contaorigem`, Histórico * `select#f_historicoorigem`, Complemento `#f_complementoorigem`.
 - **Destino**: Conta * `select#f_conta`, Histórico `select#f_historico` (**bloqueado**, fixo em "032 - TRANSFER..."), Complemento `#f_complemento`.
 - **As contas nascem vazias** (só "* Selecione *"). O `change` de `#f_formapagamento` chama `Siga.CTB.Conta.SelecionarFormaPagamentoTesouraria` (origem) e `...DestinoParaTesouraria` (destino) e monta as opções (`"  10313 - SICREDI ..."`, as sintéticas 101/103 vêm `disabled`). Para TRANSF. BANCÁRIA (5) vêm as contas 101 e 103 da localidade. Pesquisar no Select2 antes disso falha (visto em 23/10/2026): o bot espera as opções, dispara a forma de novo se não vierem e escolhe pelo `value` do código exato. `#f_data` tem máscara `__/__/____`; a injeção com `datepicker('update')` funciona.

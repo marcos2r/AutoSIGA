@@ -48,6 +48,8 @@ def test_resgate_vem_primeiro_e_inverte_origem_e_destino(monkeypatch):
     assert [t for c, t in reg.select2 if c == "f_historico"] == ["031", "002"]
     assert pagina.valores("#f_valor") == ["1500,50", "200,00"]
     assert reg.campos[0]["f_complemento"] == "RESGATE - RESGATE"
+    # Nº Documento em branco, como num lançamento manual
+    assert all(c["f_documento"] == c["f_documentoorigem"] == c["f_documentodestino"] == "" for c in reg.campos)
     assert bot._qtd_injecoes_efetuadas == 2
 
 

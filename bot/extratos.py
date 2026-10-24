@@ -139,9 +139,11 @@ class ExtratosMixin:
                     "f_complementoorigem": msg_comp,
                     "f_complementodestino": msg_comp,
                     "f_complemento": msg_comp,
-                    "f_documentoorigem": "OFX",
-                    "f_documentodestino": "OFX",
-                    "f_documento": "OFX",
+                    # Nº Documento em branco, como num lançamento manual: o extrato não traz
+                    # número útil para aplicação e resgate, e o campo não é obrigatório na TES01704
+                    "f_documentoorigem": "",
+                    "f_documentodestino": "",
+                    "f_documento": "",
                 })
                 time.sleep(1)
 

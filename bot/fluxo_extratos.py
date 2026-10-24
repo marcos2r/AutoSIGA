@@ -259,8 +259,6 @@ class FluxoExtratosMixin:
             tuple: (ResultadoSaldo, sobras ou None quando não dá para apontá-las).
         """
         saldo_banco = dados.get("saldo_atual")
-        if dados.get("periodo_filtrado"):
-            return nao_conferido("período filtrado à mão", saldo_banco), None
         if not grade_atual:
             return nao_conferido("a grade do SIGA não foi relida depois dos lançamentos", saldo_banco), None
         data_saldo = dados.get("data_saldo")

@@ -21,23 +21,22 @@ class ConfigEnergiaMixin:
         Retorna as configurações de e-mail e corte.
 
         Returns:
-            dict: {email, servidor, mes_corte}
+            dict: {email, servidor}
         """
         config = self.get_config_data()
         return {
             "email": config.get("email_energia", ""),
             "servidor": config.get("servidor_imap_energia", "imap.gmail.com"),
-            "mes_corte": config.get("mes_corte_energia", "")
         }
 
-    def salvar_email_config(self, email, servidor, mes_corte):
+    def salvar_email_config(self, email, servidor):
         """
-        Salva as configurações de e-mail e corte.
+        Salva as configurações de e-mail.
         """
         config = self.get_config_data()
         config["email_energia"] = str(email).strip()
         config["servidor_imap_energia"] = str(servidor).strip()
-        config["mes_corte_energia"] = str(mes_corte).strip()
+        config.pop("mes_corte_energia", None)  # o corte agora é automático (mês anterior)
         self.save_config_data(config)
 
     def get_localidades_energia(self):

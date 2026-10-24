@@ -4,7 +4,7 @@ import base64
 from datetime import date
 
 from controllers.fatura_energia_controller import FaturaEnergiaController
-from controllers.periodo_energia import competencia_da_fatura, janela_de_busca, meses_do_lote
+from controllers.periodo_energia import competencia_da_fatura, janela_de_busca, mes_de_corte, meses_do_lote
 from models.config_manager import ConfigManager
 from models.email_reader import EmailReader
 from models.faturas_pendentes import FaturasPendentes
@@ -69,6 +69,11 @@ def test_meses_do_lote_cobre_o_periodo_e_o_mes_anterior():
 
 def test_janela_de_busca_vai_alem_do_ultimo_mes():
     assert janela_de_busca(["09/2026", "10/2026"]) == (date(2026, 9, 1), date(2026, 11, 10))
+
+
+def test_corte_da_aba_energia_e_o_mes_anterior():
+    assert mes_de_corte(date(2026, 10, 23)) == "09/2026"
+    assert mes_de_corte(date(2027, 1, 5)) == "12/2026"
 
 
 def test_competencia_e_o_mes_da_emissao():

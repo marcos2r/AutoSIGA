@@ -207,22 +207,6 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         )
         self.botao_carregar.pack(pady=2)
 
-        # Campos de Filtro Manual de Datas (Intervalo opcional)
-        self.frame_filtro_datas = ctk.CTkFrame(self.frame_card, fg_color="transparent")
-        self.frame_filtro_datas.pack(pady=(2, 4))
-
-        self.lbl_filtro_de = ctk.CTkLabel(self.frame_filtro_datas, text="Período Opcional: De ", font=("Open Sans", 11), text_color="#555555")
-        self.lbl_filtro_de.grid(row=0, column=0, padx=2)
-
-        self.entry_data_inicio = ctk.CTkEntry(self.frame_filtro_datas, placeholder_text="DD/MM/AAAA", width=95, height=22, font=("Open Sans", 11))
-        self.entry_data_inicio.grid(row=0, column=1, padx=2)
-
-        self.lbl_filtro_ate = ctk.CTkLabel(self.frame_filtro_datas, text=" até ", font=("Open Sans", 11), text_color="#555555")
-        self.lbl_filtro_ate.grid(row=0, column=2, padx=2)
-
-        self.entry_data_fim = ctk.CTkEntry(self.frame_filtro_datas, placeholder_text="DD/MM/AAAA", width=95, height=22, font=("Open Sans", 11))
-        self.entry_data_fim.grid(row=0, column=3, padx=2)
-
         self.label_arquivo = ctk.CTkLabel(self.frame_card, text="Nenhum arquivo selecionado.", font=("Open Sans", 11), text_color="#666666", wraplength=500)
         self.label_arquivo.pack(pady=(2, 5))
 

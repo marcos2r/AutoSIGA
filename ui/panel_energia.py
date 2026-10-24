@@ -42,15 +42,11 @@ class PanelEnergia(ctk.CTkFrame):
         self.entry_email = ctk.CTkEntry(frame_config, placeholder_text="ccbdourados@gmail.com", width=250, height=24, font=("Open Sans", 11))
         self.entry_email.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
-        ctk.CTkLabel(frame_config, text="Mês de Corte:", font=("Open Sans", 11)).grid(row=1, column=0, padx=5, pady=5, sticky="e")
-        self.entry_corte = ctk.CTkEntry(frame_config, placeholder_text="MM/AAAA (Ex: 06/2026)", width=130, height=24, font=("Open Sans", 11))
-        self.entry_corte.grid(row=1, column=1, padx=5, pady=5, sticky="w")
-
         btn_save_cfg = ctk.CTkButton(
             frame_config, text="Salvar Configuração 💾", font=("Open Sans", 11, "bold"),
             fg_color="#428BCA", hover_color="#3071A9", width=150, height=24, command=self.salvar_dados_email
         )
-        btn_save_cfg.grid(row=1, column=2, padx=5, pady=5, sticky="e")
+        btn_save_cfg.grid(row=0, column=2, padx=5, pady=5, sticky="e")
 
         # Cadastro de Tabelas (Localidades e UCs)
         frame_tabelas = ctk.CTkFrame(self, fg_color="transparent")
@@ -134,17 +130,15 @@ class PanelEnergia(ctk.CTkFrame):
     def carregar_dados(self):
         cfg = self.config_manager.get_email_config()
         self.entry_email.insert(0, cfg.get("email", ""))
-        self.entry_corte.insert(0, cfg.get("mes_corte", ""))
 
     def salvar_dados_email(self):
         email_str = self.entry_email.get().strip()
-        corte_str = self.entry_corte.get().strip()
 
         if not email_str:
             messagebox.showerror("Erro", "Informe o e-mail do Gmail.", parent=self)
             return
 
-        self.config_manager.salvar_email_config(email_str, "imap.gmail.com", corte_str)
+        self.config_manager.salvar_email_config(email_str, "imap.gmail.com")
 
         messagebox.showinfo("Sucesso", "Configurações de energia gravadas com sucesso!", parent=self)
 

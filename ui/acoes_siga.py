@@ -55,7 +55,7 @@ class AcoesSigaMixin:
 
     def _montar_lote_extratos(self):
         """
-        Coleta os cards da tela, aplica o filtro manual de datas e monta o lote para o bot.
+        Coleta os cards da tela e monta o lote para o bot (o período é o do próprio extrato).
 
         Returns:
             list | None: Extratos prontos para o SigaBot, ou None se houve aviso ao usuário.
@@ -68,29 +68,6 @@ class AcoesSigaMixin:
         for card in self.cards_lote:
             card.salvar_e_notificar()
 
-        # Coleta os filtros manuais de datas (opcionais)
-        data_ini_raw = self.entry_data_inicio.get().strip()
-        data_fim_raw = self.entry_data_fim.get().strip()
-
-        def formatar_para_data(str_d):
-            import datetime
-            if not str_d:
-                return None
-            for fmt in ("%d/%m/%Y", "%d/%m/%y"):
-                try:
-                    return datetime.datetime.strptime(str_d, fmt).date()
-                except ValueError:
-                    pass
-            return None
-
-        d_ini = formatar_para_data(data_ini_raw)
-        d_fim = formatar_para_data(data_fim_raw)
-
-        # Alerta se o formato de data estiver incorreto
-        if (data_ini_raw and not d_ini) or (data_fim_raw and not d_fim):
-            messagebox.showwarning("Aviso de Formato", "As datas inseridas no filtro manual são inválidas. Use o formato DD/MM/AAAA.")
-            return None
-
         lote_valido = []
         for card in self.cards_lote:
             info = card.obter_dados_mapeados()
@@ -100,36 +77,14 @@ class AcoesSigaMixin:
 
             dados_exec = card.dados_extrato.copy()
 
-            # Aplica o filtro manual de datas sobre a lista de transações se os campos forem preenchidos
-            if d_ini or d_fim:
-                transacoes_filtradas = []
-                for tx in dados_exec.get("transacoes", []):
-                    tx_date = formatar_para_data(tx.get("data", ""))
-                    if not tx_date:
-                        transacoes_filtradas.append(tx)
-                        continue
-                    if d_ini and tx_date < d_ini:
-                        continue
-                    if d_fim and tx_date > d_fim:
-                        continue
-                    transacoes_filtradas.append(tx)
-                dados_exec["transacoes"] = transacoes_filtradas
-                # Um período parcial não fecha com o saldo do mês: a prova real fica de fora
-                dados_exec["periodo_filtrado"] = True
-
             dados_exec["conta_siga_corrente"] = info["corrente"]
             dados_exec["conta_siga_aplicacao"] = info["aplicacao"]
             dados_exec["tipo_adm"] = info["tipo_adm"]
             dados_exec["nome_adm"] = info["nome_adm"]
             dados_exec["localidade_selecionada"] = f"{info['tipo_adm']} - {info['nome_adm']}"
 
-            # Sem filtro, extrato sem transação entra só para a prova real do saldo
-            if dados_exec.get("transacoes") or not dados_exec.get("periodo_filtrado"):
-                lote_valido.append(dados_exec)
-
-        if not lote_valido:
-            messagebox.showinfo("Lote Vazio", "Nenhum lançamento restante no lote após aplicar os filtros de datas informados.")
-            return None
+            # Extrato sem transação também entra, só para a prova real do saldo
+            lote_valido.append(dados_exec)
         return lote_valido
 
     def iniciar_importacao_ofertas(self, event=None):

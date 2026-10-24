@@ -9,11 +9,11 @@ import logging
 import os
 import shutil
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from caminhos import diretorio_base
-from controllers.periodo_energia import competencia_da_fatura, janela_de_busca
+from controllers.periodo_energia import competencia_da_fatura, janela_de_busca, mes_de_corte
 from models.config_manager import ConfigManager
 from models.email_reader import EmailReader
 from models.faturas_pendentes import FaturasPendentes
@@ -46,7 +46,8 @@ class FaturaEnergiaController:
 
         email_user = email_cfg.get("email", "")
         servidor = email_cfg.get("servidor", "imap.gmail.com")
-        mes_corte = email_cfg.get("mes_corte", "")
+        # Corte automático: só faturas emitidas a partir do mês anterior ao atual
+        mes_corte = mes_de_corte(date.today())
 
         # Define pastas de trabalho
         base_dir = diretorio_base()

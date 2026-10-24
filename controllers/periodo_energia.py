@@ -67,6 +67,16 @@ def janela_de_busca(meses: list[str]) -> tuple[date, date]:
     return date(ano_ini, mes_ini, 1), date(ano_fim, mes_fim, ultimo_dia) + timedelta(days=_DIAS_APOS_O_MES)
 
 
+def mes_de_corte(hoje: date) -> str:
+    """Corte da importação da aba Energia ("MM/AAAA"): o mês anterior ao atual.
+
+    Faturas mais antigas não são importadas por ali; as que faltarem entram pelo lote de
+    extratos, que busca pelo período de cada extrato.
+    """
+    ano, mes = _anterior(hoje.year, hoje.month)
+    return f"{mes:02d}/{ano}"
+
+
 def competencia_da_fatura(fatura: dict[str, Any]) -> str:
     """Mês de competência da fatura ("MM/AAAA", o da emissão); vazio se a emissão não foi lida."""
     mes = _mes(fatura.get("emissao") or "")

@@ -302,16 +302,6 @@ def test_extrato_sem_lancamento_novo_so_confere(monkeypatch):
     assert _resultados(reg)["10396"].saldo.status == "confere"
 
 
-def test_periodo_filtrado_nao_confere_o_saldo(monkeypatch):
-    lote = [dict(_extrato("DR", "10130", [APLIC]), saldo_atual=1.0, periodo_filtrado=True)]
-
-    reg = _rodar(monkeypatch, lote, {"10130": [_linha("05/05/2026", -200.0)]}, saldos={"10130": "9,99"})
-
-    saldo = _resultados(reg)["10130"].saldo
-    assert saldo.status == "nao_conferido"
-    assert "filtrado" in saldo.motivo
-
-
 def test_saldo_do_banco_de_outra_data_nao_e_comparado(monkeypatch):
     lote = [dict(_extrato("DR", "10130", []), saldo_atual=1.0, data_saldo="20/05/2026")]
 

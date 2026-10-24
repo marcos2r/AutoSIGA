@@ -15,7 +15,6 @@ from controllers.baixa_energia import linhas_do_painel
 from controllers.prova_real import DIVERGE, TOLERANCIA, MovimentoBanco, MovimentoSiga, ResultadoExtrato, moeda
 
 _RE_ENERGIA = re.compile(r"DEBITO\s+CONVENIOS-ENERGI", re.IGNORECASE)
-_TIPOS = {"CORRENTE": "Conta corrente", "APLICACAO": "Aplicação"}
 _RECUO = "   "
 
 ORIGEM_SOBRA = "No SIGA sem par no banco"
@@ -51,8 +50,8 @@ def compor_diferenca(diferenca: float, sobras: list[MovimentoSiga], faltas: list
 
 
 def tipo_legivel(tipo: str) -> str:
-    """"CORRENTE" → "Conta corrente"; tipo desconhecido fica como veio."""
-    return _TIPOS.get(tipo, tipo)
+    """Nome do tipo para o usuário. O OFX não traz o tipo: o que não é aplicação é conta corrente."""
+    return "Aplicação" if tipo == "APLICACAO" else "Conta corrente"
 
 
 def cabecalho_extrato(r: ResultadoExtrato) -> str:

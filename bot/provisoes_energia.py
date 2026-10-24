@@ -21,7 +21,7 @@ from controllers.provisao_energia import (
     item_da_previa,
     linhas_do_painel,
 )
-from models.email_reader import EmailReader
+from models.email_reader import EmailReader, mensagem_de_erro
 
 # A fatura vence semanas depois da emissão: a leitura da Contas a Pagar vai até 60 dias além da busca
 _DIAS_DE_VENCIMENTO = 60
@@ -48,8 +48,9 @@ class ProvisoesEnergiaMixin:
             faturas = FaturaEnergiaController.buscar_faturas_do_periodo(meses, self.update_status)
         except Exception as erro:
             logging.exception("Falha ao buscar as faturas de energia no e-mail.")
-            self.update_status(f"⚠️ Provisões de energia puladas: não consegui ler o e-mail ({erro}).", "#F89406")
-            return {"linhas": [("alerta", f"⚡ Provisões de energia não verificadas: falha ao ler o e-mail ({erro})")]}
+            motivo = mensagem_de_erro(erro)
+            self.update_status(f"⚠️ Provisões de energia puladas: não consegui ler o e-mail ({motivo}).", "#F89406")
+            return {"linhas": [("alerta", f"⚡ Provisões de energia não verificadas: {motivo}")]}
         return {"meses": meses, "faturas": faturas}
 
     def _etapa_provisoes_energia(self, page):

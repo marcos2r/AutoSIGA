@@ -27,6 +27,21 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 # tenta de novo com espera crescente, que com 7 tentativas cobre a virada do minuto da cota.
 _TENTATIVAS_API = 7
 
+def mensagem_de_erro(erro: Exception) -> str:
+    """Frase curta para o usuário sobre uma falha do Gmail, sem URL nem detalhe técnico (que vão para o log)."""
+    status = getattr(getattr(erro, "resp", None), "status", None)
+    if status is None:
+        texto = " ".join(str(erro).split())
+        return texto if len(texto) <= 150 else texto[:149] + "…"
+    conteudo = getattr(erro, "content", b"") or b""
+    detalhe = f"{erro} {conteudo.decode('utf-8', 'replace') if isinstance(conteudo, bytes) else conteudo}"
+    if status == 429 or "rateLimitExceeded" in detalhe or "Quota exceeded" in detalhe:
+        return "o Gmail limitou as leituras por minuto; rode de novo daqui a alguns minutos"
+    if status in (401, 403):
+        return f"o Gmail recusou o acesso (erro {status}); conecte o e-mail de novo na aba Energia"
+    return f"o Gmail não respondeu (erro {status}); tente de novo mais tarde"
+
+
 class EmailReader:
     """
     Controla a autenticação OAuth2 do Google e download de faturas em formato PDF via Gmail API.

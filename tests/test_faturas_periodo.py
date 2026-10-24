@@ -194,3 +194,16 @@ def test_cota_por_minuto_do_gmail_espera_e_tenta_de_novo(tmp_path):
     EmailReader.buscar_faturas_periodo(date(2026, 10, 1), date(2026, 10, 31), str(tmp_path), service=gmail)
 
     assert _Chamada.tentativas and min(_Chamada.tentativas) >= 5
+
+
+def test_erro_do_gmail_vira_frase_curta():
+    from googleapiclient.errors import HttpError
+    from httplib2 import Response
+
+    from models.email_reader import mensagem_de_erro
+
+    cota = HttpError(Response({"status": 403}), b'{"error": {"errors": [{"reason": "rateLimitExceeded"}]}}',
+                     uri="https://gmail.googleapis.com/gmail/v1/users/me/messages/x/attachments/y")
+    assert mensagem_de_erro(cota) == "o Gmail limitou as leituras por minuto; rode de novo daqui a alguns minutos"
+    assert "googleapis" not in mensagem_de_erro(HttpError(Response({"status": 500}), b"", uri="https://googleapis/x"))
+    assert mensagem_de_erro(PermissionError("A autorização do e-mail expirou.")) == "A autorização do e-mail expirou."

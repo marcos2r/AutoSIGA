@@ -107,7 +107,7 @@ def test_aprova_e_baixa_com_debito_automatico_na_conta_do_extrato(monkeypatch):
     assert reg.campos == [
         {"f_motivo": "Aprovado automaticamente pelo AutoSIGA: débito automático de R$ 224,25 em 26/08/2026 "
                      "no extrato da conta 10123 (código de débito 00012345678)."},
-        {"f_valorpagamento": "224,25", "f_complementobaixa": bp.COMPLEMENTO_BAIXA}]
+        {"f_valorpagamento": "224,25", "f_documento_baixa": "018000001", "f_complementobaixa": bp.COMPLEMENTO_BAIXA}]
     # Aprovar, Novo Pagamento, Inserir e Confirmar, nessa ordem, e a TES01501 relida no fim
     assert pagina.cliques() == [bp._SUBMIT_FORMULARIO, "#btn-novo-pagamento", "#btn-confirmar", bp._SUBMIT_FORMULARIO,
                                 "#btn_executar_programa"]
@@ -327,3 +327,28 @@ def test_etapa_so_com_debito_sem_codigo_lista_a_pendencia_sem_abrir_a_contas_a_p
 
     assert not fechado and [r.situacao for r in resultados] == [SEM_FATURA]
     assert reg.lidas == [] and reg.previas == []
+
+
+def test_baixa_recusada_fecha_o_aviso_antes_de_reler_o_status(monkeypatch):
+    bot, _ = _bot(monkeypatch)
+    pagina = PaginaBaixa(pagamentos=[], status_final=APROVADO)
+
+    bot._executar_baixas(pagina, [_decisao()], "10123", PERIODO)
+
+    # O "Formulário Incompleto" cobriria a barra de rotinas usada para reler a TES01501
+    assert pagina.scripts.index(bp._JS_FECHAR_MODAIS) < pagina.scripts.index(bp._JS_FILTRAR_VENCIMENTO)
+
+
+def test_falha_ao_reler_o_status_nao_derruba_o_lote(monkeypatch):
+    bot, _ = _bot(monkeypatch)
+    pagina = PaginaBaixa(pagamentos=[], status_final=APROVADO)
+
+    def travou(*args):
+        raise TimeoutError("barra de rotinas coberta")
+    monkeypatch.setattr(bot, "_conferir_status", travou)
+
+    resultados, fechado = bot._executar_baixas(pagina, [_decisao()], "10123", PERIODO)
+
+    assert not fechado
+    assert resultados[0].situacao == APROVADA_SEM_BAIXA
+    assert "status não relido no SIGA" in resultados[0].detalhe

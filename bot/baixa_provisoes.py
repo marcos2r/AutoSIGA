@@ -138,6 +138,13 @@ _JS_VALOR_HISTORICO = '''(codigo) => {
 }'''
 
 # Pagamentos que o "Inserir" pôs na grade (a linha #row-vazia é o aviso de grade vazia)
+_JS_FECHAR_MODAIS = '''() => {
+    if (window.jQuery) { jQuery('.bootbox.modal, .modal.in').modal('hide'); }
+    document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+    document.body.classList.remove('modal-open');
+    return true;
+}'''
+
 _JS_LER_PAGAMENTOS = '''() => ({
     linhas: Array.from(document.querySelectorAll('#t_pagamentos tbody tr'))
         .filter(tr => tr.id !== 'row-vazia')
@@ -269,10 +276,29 @@ class BaixaProvisoesMixin:
             except Exception as e:
                 logging.error(f"Baixa da fatura {decisao.provisao.numero} interrompida: {e}", exc_info=True)
                 self._capturar_tela_e_log(page, f"baixa_{decisao.provisao.numero}")
+                self._fechar_modais(page)
                 resultados.append(ResultadoBaixa(decisao, APROVADA_SEM_BAIXA if aprovou else FALHOU, str(e)))
         if resultados:
-            resultados = self._conferir_status(page, resultados, periodo)
+            try:
+                resultados = self._conferir_status(page, resultados, periodo)
+            except Exception as e:  # só leitura: sem ela o resultado fica como gravado, mas o lote segue
+                logging.error(f"Não consegui reler o status das baixas na TES01501: {e}", exc_info=True)
+                self._capturar_tela_e_log(page, "erro_conferir_baixas")
+                resultados = [ResultadoBaixa(r.decisao, r.situacao,
+                                             "; ".join(filter(None, [r.detalhe, "status não relido no SIGA"])))
+                              for r in resultados]
         return resultados, mes_fechado
+
+    def _fechar_modais(self, page):
+        """Fecha o aviso e o modal que uma baixa interrompida deixa abertos (não grava nada).
+
+        Sem isso, o "Formulário Incompleto" cobre a barra de rotinas e a releitura seguinte trava.
+        """
+        try:
+            page.evaluate(_JS_FECHAR_MODAIS)
+            time.sleep(0.5)
+        except Exception as e:
+            logging.warning(f"Não consegui fechar os modais da baixa: {e}")
 
     def _aprovar_provisao(self, page, provisao, motivo):
         """Aprova a provisão na TES01508, depois de conferir número e valor na tela.
@@ -312,7 +338,9 @@ class BaixaProvisoesMixin:
         if not historico:
             raise BaixaNaoConferidaError(f"histórico {HISTORICO_NF} não encontrado")
         self._escolher(page, "f_historicobaixa", historico, "histórico")
-        self._preencher_campos(page, {"f_valorpagamento": valor_siga(valor), "f_complementobaixa": COMPLEMENTO_BAIXA})
+        # Débito automático exige o Nº Documento: vai o número da fatura, como nas baixas manuais
+        self._preencher_campos(page, {"f_valorpagamento": valor_siga(valor), "f_documento_baixa": provisao.numero,
+                                      "f_complementobaixa": COMPLEMENTO_BAIXA})
         page.locator('#btn-confirmar').click()
         time.sleep(1)
 

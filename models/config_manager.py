@@ -10,6 +10,7 @@ e mapeamentos de contas bancárias.
 import json
 import logging
 import os
+import time
 from datetime import datetime
 
 from caminhos import diretorio_base
@@ -163,9 +164,24 @@ class ConfigManager(ConfigEnergiaMixin, ConfigCatalogoMixin):
                 json.dump(data, f, indent=4)
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(temp_path, self.config_path)
+            self._trocar_arquivo(temp_path)
         except Exception as e:
             logging.error(f"Erro ao salvar configurações: {e}", exc_info=True)
+
+    def _trocar_arquivo(self, temp_path, tentativas=10):
+        """Troca o config.json pelo temporário, insistindo se o Windows recusar.
+
+        Antivírus e indexador costumam abrir o arquivo recém-gravado por um instante,
+        e nesse intervalo a troca falha com "Acesso negado" (WinError 5).
+        """
+        for tentativa in range(tentativas):
+            try:
+                os.replace(temp_path, self.config_path)
+                return
+            except PermissionError:
+                if tentativa == tentativas - 1:
+                    raise
+                time.sleep(0.2)
 
     def get_geral(self):
         """

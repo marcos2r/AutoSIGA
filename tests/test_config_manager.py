@@ -78,3 +78,22 @@ def test_xls_de_conta_corrente_nao_herda_o_mapeamento_da_aplicacao(tmp_path):
     # Em outra localidade, a busca reversa também respeita o produto
     _, _, dados = cm.get_mapeamento_conta("12345-6", "DR", "OUTRA")
     assert "conta_id" not in dados
+
+
+def test_gravacao_insiste_quando_o_windows_segura_o_arquivo(tmp_path, monkeypatch):
+    import models.config_manager as modulo
+    cm = ConfigManager(config_path=str(tmp_path / "config.json"))
+    original, falhas = modulo.os.replace, []
+
+    def replace_ocupado(origem, destino):
+        if len(falhas) < 2:  # antivírus lendo o arquivo nas duas primeiras tentativas
+            falhas.append(1)
+            raise PermissionError(5, "Acesso negado")
+        original(origem, destino)
+    monkeypatch.setattr(modulo.os, "replace", replace_ocupado)
+    monkeypatch.setattr(modulo.time, "sleep", lambda s: None)
+
+    cm.save_config_data({"tipo_adm": "ADM"})
+
+    assert cm.get_config_data()["tipo_adm"] == "ADM"
+    assert len(falhas) == 2

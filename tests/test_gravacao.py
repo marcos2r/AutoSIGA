@@ -40,6 +40,11 @@ class PaginaGravacao:
     def evaluate(self, script):
         pass
 
+    def wait_for_function(self, script, timeout=None):
+        # esperar_loading: todas as camadas .blockUI escondidas
+        if ".blockUI" in script:
+            self.esperas.append((".blockUI", "hidden"))
+
 
 def _bot(monkeypatch):
     bot = SigaBot([], callbacks={}, tipo_lote="extrato")

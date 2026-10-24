@@ -163,7 +163,12 @@ class HelpersMixin:
         """
         try:
             time.sleep(0.5)
-            page.locator('.blockUI').wait_for(state="hidden", timeout=15000)
+            # O SIGA empilha várias camadas .blockUI (fundo e mensagem); espera todas sumirem.
+            # Um locator único falhava na hora com "strict mode violation" sem esperar nada.
+            page.wait_for_function(
+                "() => !Array.from(document.querySelectorAll('.blockUI')).some(e => e.getClientRects().length > 0"
+                " && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none')",
+                timeout=15000)
             self.fechar_notificacoes(page)
         except Exception as e:
             logging.warning(f"Loading do SIGA não terminou em 15 s: {e}")

@@ -54,8 +54,9 @@ class LoteExtratosMixin:
                 else:
                     dados = OfxReader.parse_file(caminho)
 
-                if any(mesmo_extrato(dados, anterior) for anterior in self.dados_processados_lote):
-                    arquivos_descartados.append(os.path.basename(caminho))
+                mantido = next((d for d in self.dados_processados_lote if mesmo_extrato(dados, d)), None)
+                if mantido is not None:
+                    arquivos_descartados.append(_aviso_duplicado(caminho, mantido))
                     continue
 
                 dados["caminho_arquivo"] = caminho
@@ -64,10 +65,6 @@ class LoteExtratosMixin:
                 nome_arq = os.path.basename(caminho)
                 erros.append(f"{nome_arq}: {e}")
                 logging.error(f"Erro ao processar arquivo {nome_arq}: {e}")
-
-        if arquivos_descartados:
-            msg_desc = f"Detectados {len(arquivos_descartados)} arquivo(s) duplicados no lote. Eles foram ignorados para evitar conciliação duplicada:\n\n" + "\n".join(arquivos_descartados)
-            messagebox.showinfo("Arquivos Duplicados Ignorados", msg_desc)
 
         if erros:
             msg_erro = "Alguns arquivos não puderam ser lidos:\n\n" + "\n".join(erros)
@@ -103,6 +100,14 @@ class LoteExtratosMixin:
             self.botao_importar_ofertas.configure(state="disabled")
             self.atualizar_faixa_catalogo()
             self.atualizar_status("Nenhum arquivo carregado com sucesso.", "#D9534F")
+
+        # Depois dos cards, para o aviso não aparecer sobre a tela vazia
+        if arquivos_descartados:
+            self.update_idletasks()
+            messagebox.showinfo(
+                "Extrato Repetido no Lote",
+                "Estes arquivos trazem o mesmo extrato (mesma conta e período) de outro arquivo do lote. "
+                "Para não conciliar duas vezes, entrou só um deles:\n\n" + "\n\n".join(arquivos_descartados))
 
     def resetar_lote(self, event=None):
         """Limpa toda a seleção de arquivos e reseta o estado da janela principal (atalho Esc)."""
@@ -206,3 +211,11 @@ class LoteExtratosMixin:
                     messagebox.showwarning("Aviso", "Não sobrou nenhuma linha de Oferta para gerar arquivo!")
             except Exception as e:
                 messagebox.showerror("Erro ao Salvar", str(e))
+
+
+def _aviso_duplicado(caminho, mantido):
+    """Linha do aviso: o arquivo deixado de fora, o que entrou no lugar e o extrato dos dois."""
+    entrou = os.path.basename(mantido.get("caminho_arquivo", ""))
+    motivo = " (o OFX traz a descrição completa)" if entrou.lower().endswith(".ofx") else ""
+    return (f"• {os.path.basename(caminho)}: ficou de fora; entrou {entrou}{motivo}.\n"
+            f"   Conta {mantido.get('conta_id', '')}, {mantido.get('data_inicial', '')} a {mantido.get('data_final', '')}")

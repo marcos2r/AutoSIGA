@@ -9,6 +9,9 @@ import time
 from bot.navegador import conectar_edge
 from caminhos import diretorio_base
 
+# Tela só de consulta usada para testar se a sessão do Edge reaproveitado ainda vale
+_TELA_CONSULTA = "https://siga.congregacao.org.br/TES/TES01701.aspx"
+
 
 class SessaoMixin:
     """Inicialização do Edge persistente e login no SIGA."""
@@ -56,15 +59,20 @@ class SessaoMixin:
     def _validar_sessao(self, page):
         """Garante o login no SIGA (Keyring, .env ou manual) e aguarda o dashboard."""
         self.update_status("Iniciando navegador e validando sessão...", "#428BCA")
-        page.goto("https://siga.congregacao.org.br/")
-        page.wait_for_load_state("domcontentloaded")
-
-        try:
-            senha_locator = page.locator('input[type="password"]')
-            senha_locator.wait_for(state="visible", timeout=3000)
-            precisa_fazer_login = True
-        except Exception:
+        senha_locator = page.locator('input[type="password"]')
+        if self._sessao_aberta(page):
+            # Edge reaproveitado e ainda logado: a página inicial do SIGA é a de login e pediria
+            # usuário, senha e reCAPTCHA de novo
+            logging.info("Sessão do SIGA reaproveitada na aba que já estava aberta.")
             precisa_fazer_login = False
+        else:
+            page.goto("https://siga.congregacao.org.br/")
+            page.wait_for_load_state("domcontentloaded")
+            try:
+                senha_locator.wait_for(state="visible", timeout=3000)
+                precisa_fazer_login = True
+            except Exception:
+                precisa_fazer_login = False
 
         if precisa_fazer_login:
             # Tenta ler as credenciais do Windows Credential Manager via Keyring
@@ -114,6 +122,24 @@ class SessaoMixin:
         # Agora sim, com o dashboard carregado, fechamos as notificações
         self.fechar_notificacoes(page)
         self.update_status("Sessão Validada. Iniciando processamento do lote...", "#428BCA")
+
+    @staticmethod
+    def _sessao_aberta(page):
+        """Diz se a aba já está no SIGA com a sessão viva (Edge reaproveitado).
+
+        Abre a Caixas e Bancos (TES01701), tela só de consulta, em vez de recarregar a aba:
+        recarregar poderia reenviar um formulário que acabou de gravar. Com a sessão expirada,
+        o SIGA manda para o login e a barra de rotinas (`#f_executar_programa`) não aparece.
+        """
+        if "siga.congregacao.org.br" not in (page.url or ""):
+            return False
+        try:
+            page.goto(_TELA_CONSULTA, wait_until="domcontentloaded")
+            page.locator('#f_executar_programa').first.wait_for(state="visible", timeout=8000)
+            return page.locator('input[type="password"]').count() == 0
+        except Exception as e:
+            logging.info(f"A aba do SIGA aberta não tem sessão válida; indo para o login: {e}")
+            return False
 
     # O modal "Outros Meses" tem dois form.modal-form; só o que contém a localidade troca o contexto
     _FORM_LOCALIDADE = 'form.modal-form:has(select[name="f_estabelecimento"])'

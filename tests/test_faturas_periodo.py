@@ -11,10 +11,13 @@ from models.faturas_pendentes import FaturasPendentes
 
 
 class _Chamada:
+    tentativas: list[int] = []  # num_retries de cada chamada, para conferir a espera da cota
+
     def __init__(self, resultado):
         self.resultado = resultado
 
-    def execute(self):
+    def execute(self, num_retries=0):
+        _Chamada.tentativas.append(num_retries)
         return self.resultado
 
 
@@ -181,3 +184,13 @@ def test_sem_autorizacao_a_busca_do_lote_nao_abre_o_navegador(tmp_path, monkeypa
         assert "aba Energia" in str(erro)
     else:
         raise AssertionError("deveria pedir nova conexão na aba Energia")
+
+
+def test_cota_por_minuto_do_gmail_espera_e_tenta_de_novo(tmp_path):
+    # 403 rateLimitExceeded no meio da busca: cada chamada pede à biblioteca que repita com espera
+    _Chamada.tentativas = []
+    gmail = GmailFalso({"m1": ["fatura.pdf"]})
+
+    EmailReader.buscar_faturas_periodo(date(2026, 10, 1), date(2026, 10, 31), str(tmp_path), service=gmail)
+
+    assert _Chamada.tentativas and min(_Chamada.tentativas) >= 5

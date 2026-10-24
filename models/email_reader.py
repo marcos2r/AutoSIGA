@@ -23,6 +23,10 @@ from caminhos import diretorio_base
 # Definimos o escopo necessário para ler e marcar mensagens como lidas
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
+# O Gmail limita as leituras por minuto de cada usuário (403 rateLimitExceeded, 429). A biblioteca
+# tenta de novo com espera crescente, que com 7 tentativas cobre a virada do minuto da cota.
+_TENTATIVAS_API = 7
+
 class EmailReader:
     """
     Controla a autenticação OAuth2 do Google e download de faturas em formato PDF via Gmail API.
@@ -99,7 +103,7 @@ class EmailReader:
             parametros: dict[str, Any] = {"userId": "me", "q": query}
             if pagina:
                 parametros["pageToken"] = pagina
-            resposta = service.users().messages().list(**parametros).execute()
+            resposta = service.users().messages().list(**parametros).execute(num_retries=_TENTATIVAS_API)
             mensagens.extend(resposta.get("messages", []))
             pagina = resposta.get("nextPageToken")
             if not pagina or (limite is not None and len(mensagens) >= limite):
@@ -108,7 +112,7 @@ class EmailReader:
     @staticmethod
     def _baixar_pdfs_da_mensagem(service: Any, msg_id: str, pasta_destino: str) -> list[str]:
         """Salva os anexos PDF de uma mensagem e devolve os caminhos."""
-        message = service.users().messages().get(userId='me', id=msg_id).execute()
+        message = service.users().messages().get(userId='me', id=msg_id).execute(num_retries=_TENTATIVAS_API)
         payload = message.get('payload', {})
         parts = [payload]
 
@@ -129,7 +133,7 @@ class EmailReader:
             # Faz o download do anexo binário bruto
             attachment = service.users().messages().attachments().get(
                 userId='me', messageId=msg_id, id=attachment_id
-            ).execute()
+            ).execute(num_retries=_TENTATIVAS_API)
             file_data = base64.urlsafe_b64decode(attachment.get('data', '').encode('UTF-8'))
             caminho_salvamento = os.path.join(pasta_destino, f"temp_energisa_{msg_id}_{os.path.basename(filename)}")
             with open(caminho_salvamento, "wb") as f:
@@ -226,7 +230,7 @@ class EmailReader:
                                 'ids': [msg_id],
                                 'removeLabelIds': ['UNREAD']
                             }
-                        ).execute()
+                        ).execute(num_retries=_TENTATIVAS_API)
                         logging.info(f"Gmail API: Mensagem ID {msg_id} marcada como lida.")
                     except Exception as e_label:
                         logging.warning(f"Não foi possível marcar mensagem como lida: {e_label}")

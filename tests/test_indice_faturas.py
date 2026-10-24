@@ -76,3 +76,28 @@ def test_pdf_ilegivel_nao_derruba_o_indice(tmp_path):
 
 def test_pasta_inexistente_da_indice_vazio(tmp_path):
     assert montar_indice(str(tmp_path / "nao_existe")) == {}
+
+
+# Modelo EnerCB, anexo do e-mail "Alerta de Vencimento": rótulos diferentes e o código sem traço
+TEXTO_ENERCB = (
+    "09/09/2026 09/07/2026 10/08/2026 32\n"
+    "6,24 TOTAL: 81,41\n"
+    "CADASTRE SUA FATURA EM DÉBITO AUTOMÁTICO UTILIZANDO O CÓDIGO: 00012345678\n"
+    "Esta NOTA FISCAL/CONTA DE ENERGIA fica disponível para pagamento a partir de 10/08/2026\n"
+    "DATA EMISSÃO/APRESENTAÇÃO:\n"
+    "NOTA FISCAL Nº 038.111.222\n"
+    "01/09/2026 AGO/2026 R$ 81,41\n"
+    "2.000.111.051-00\n"
+)
+
+
+def test_le_o_modelo_enercb_do_alerta_de_vencimento(monkeypatch):
+    _pdf_falso(monkeypatch, TEXTO_ENERCB)
+
+    dados = PdfExtractor.extrair_dados_fatura("EnerCB_200011105100_2026_8.PDF")
+
+    assert dados["uc"] == "2.000.111.051-00"
+    assert (dados["vencimento"], dados["valor"], dados["numero_fatura"]) == ("01/09/2026", 81.41, "038111222")
+    assert (dados["emissao"], dados["referencia"]) == ("10/08/2026", "08/2026")
+    # Sem o traço já é o "ID" do débito no extrato, que casa a baixa e a provisão feita à mão
+    assert dados["codigo_debito"] == "00012345678"

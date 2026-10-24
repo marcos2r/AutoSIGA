@@ -10,6 +10,11 @@ import re
 
 from pypdf import PdfReader
 
+# "dd/mm/aaaa R$ valor", com a referência opcional no meio ("01/09/2026 AGO/2026 R$ 81,41", modelo EnerCB)
+_RE_DATA_REF_VALOR = re.compile(r'(\d{2}/\d{2}/\d{4})\s+(?:([A-Za-zÇç]{3}/\d{4})\s+)?R\$\s*[\d\.,]+')
+_MESES_CURTOS = {"JAN": "01", "FEV": "02", "MAR": "03", "ABR": "04", "MAI": "05", "JUN": "06",
+                 "JUL": "07", "AGO": "08", "SET": "09", "OUT": "10", "NOV": "11", "DEZ": "12"}
+
 
 class PdfExtractor:
     """
@@ -85,13 +90,20 @@ class PdfExtractor:
                 ref_match_alt = re.search(r'Referência:\s*(\d{2}/\d{4})', texto, re.IGNORECASE)
                 if ref_match_alt:
                     dados["referencia"] = ref_match_alt.group(1).strip()
+                else:
+                    ref_curta = re.search(_RE_DATA_REF_VALOR, texto)
+                    if ref_curta and ref_curta.group(2) and ref_curta.group(2)[:3].upper() in _MESES_CURTOS:
+                        mes, ano = ref_curta.group(2).split("/")
+                        dados["referencia"] = f"{_MESES_CURTOS[mes.upper()]}/{ano}"
 
             # 3. Extração da Data de Vencimento
             # Padrão: "VENCIMENTO\n26/07/2026" ou "26/07/2026" perto de vencimento
             venc_match = re.search(r'VENCIMENTO\s*[\r\n]+(\d{2}/\d{2}/\d{4})', texto, re.IGNORECASE)
             if not venc_match:
-                # Procura por datas comuns antes da expressão R$ valor (padrão de tabela unida do pypdf)
-                venc_match = re.search(r'(\d{2}/\d{2}/\d{4})\s+R\$\s*[\d\.,]+', texto)
+                # Procura por datas comuns antes da expressão R$ valor (padrão de tabela unida do pypdf).
+                # No modelo EnerCB (e-mail "Alerta de Vencimento") a referência vem no meio:
+                # "01/09/2026 AGO/2026 R$ 81,41"
+                venc_match = re.search(_RE_DATA_REF_VALOR, texto)
             if not venc_match:
                 # Procura por datas comuns próximas à palavra "vencimento"
                 venc_match = re.search(r'vencimento\b.{1,20}(\d{2}/\d{2}/\d{4})', texto, re.IGNORECASE | re.DOTALL)
@@ -110,7 +122,9 @@ class PdfExtractor:
             if not valor_match:
                 # Layout antigo: "R$ 877,69" aparece na mesma linha da referência
                 # Captura o valor após "R$" que vem depois de uma data (dd/mm/aaaa R$ nnn,nn)
-                valor_match = re.search(r'\d{2}/\d{2}/\d{4}\s+R\$\s*([\d\.,]+)', texto)
+                valor_match = re.search(_RE_DATA_REF_VALOR, texto)
+                if valor_match:
+                    valor_match = re.search(r'R\$\s*([\d\.,]+)', valor_match.group(0))
             if not valor_match:
                 # Layout antigo: "TOTAL: 877,69" (sem "A PAGAR")
                 valor_match = re.search(r'TOTAL:\s*([\d\.,]+)', texto, re.IGNORECASE)
@@ -123,7 +137,7 @@ class PdfExtractor:
 
             # 5. Extração do Número da Fatura / Nota Fiscal
             # Padrão: "NOTA FISCAL Nº: 017.268.416" ou "Nº FATURA\n17268416"
-            nf_match = re.search(r'NOTA\s+FISCAL\s+Nº\s*:\s*([\d\.]+)', texto, re.IGNORECASE)
+            nf_match = re.search(r'NOTA\s+FISCAL\s+N[º°o]\.?\s*:?\s*(\d[\d\.]*)', texto, re.IGNORECASE)
             if nf_match:
                 dados["numero_fatura"] = nf_match.group(1).strip().replace('.', '')
             else:
@@ -136,6 +150,11 @@ class PdfExtractor:
             emissao_match = re.search(r'DATA\s+DE\s+EMISSÃO\s*:\s*(\d{2}/\d{2}/\d{4})', texto, re.IGNORECASE)
             if not emissao_match:
                 emissao_match = re.search(r'Apresentação\s*:\s*(\d{2}/\d{2}/\d{4})', texto, re.IGNORECASE)
+            if not emissao_match:
+                # EnerCB: "DATA EMISSÃO/APRESENTAÇÃO:" sai sem a data no texto extraído; a data é a
+                # mesma de "fica disponível para pagamento a partir de 10/08/2026"
+                emissao_match = re.search(r'dispon[íi]vel\s+para\s+pagamento\s+a\s+partir\s+de\s+(\d{2}/\d{2}/\d{4})',
+                                          texto, re.IGNORECASE)
             if emissao_match:
                 dados["emissao"] = emissao_match.group(1).strip()
 
@@ -150,10 +169,11 @@ class PdfExtractor:
             # 8. Código de débito automático da UC
             # Padrão: "DÉBITO AUTOMÁTICO UTILIZANDO O CÓDIGO: 0009876543-2". Sem o traço, é o
             # "ID" que o banco põe no débito ("DEBITO CONVENIOS-ENERGI 70 ID 00098765432 ...").
-            codigo_match = re.search(r'D[ÉE]BITO\s+AUTOM[ÁA]TICO\s+UTILIZANDO\s+O\s+C[ÓO]DIGO\s*:\s*(\d+)\s*-\s*(\d)',
+            # O modelo EnerCB já traz o número sem o traço: "...UTILIZANDO O CÓDIGO: 00012345678".
+            codigo_match = re.search(r'D[ÉE]BITO\s+AUTOM[ÁA]TICO\s+UTILIZANDO\s+O\s+C[ÓO]DIGO\s*:\s*(\d+)(?:\s*-\s*(\d))?',
                                      texto, re.IGNORECASE)
             if codigo_match:
-                dados["codigo_debito"] = codigo_match.group(1) + codigo_match.group(2)
+                dados["codigo_debito"] = codigo_match.group(1) + (codigo_match.group(2) or "")
 
         except Exception as e:
             logging.error(f"Erro ao ler PDF de fatura {caminho_pdf}: {e}", exc_info=True)

@@ -13,6 +13,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from models.config_manager import ConfigManager
+from ui import tema
 from ui.acoes_siga import AcoesSigaMixin
 from ui.catalogo_siga import CatalogoSigaMixin
 from ui.credenciais import CredenciaisMixin
@@ -285,8 +286,9 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 5))
 
-        texto_rodape = f"AutoSIGA v{VERSION} | Arquitetura MVC"
-        self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=("Open Sans", 11), text_color="#999999")
+        texto_rodape = f"AutoSIGA v{VERSION} · Desenvolvido por PAIRUS Soluções Tecnológicas"
+        self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=(tema.FONTE, 11),
+                                         text_color=tema.CINZA_TEXTO)
         self.label_rodape.pack()
 
     def atualizar_status(self, texto, cor="#666666"):

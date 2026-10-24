@@ -8,9 +8,12 @@ de negócio (Data de corte, UCs duplicadas, relacionamento de UC -> Localidade).
 import logging
 import os
 import shutil
+from collections.abc import Iterable
 from datetime import datetime
+from typing import Any
 
 from caminhos import diretorio_base
+from controllers.periodo_energia import competencia_da_fatura, janela_de_busca
 from models.config_manager import ConfigManager
 from models.email_reader import EmailReader
 from models.faturas_pendentes import FaturasPendentes
@@ -88,12 +91,79 @@ class FaturaEnergiaController:
                 continue
             candidatas[FaturasPendentes.chave(fat)] = fat
 
+        return FaturaEnergiaController._classificar_por_uc(candidatas.values(), pendentes, config_mgr, log_msg)
+
+    @staticmethod
+    def buscar_faturas_do_periodo(meses: list[str], callback_status=None, service: Any = None) -> tuple:
+        """Baixa do e-mail todas as faturas emitidas nos meses do lote de extratos, lidas ou não.
+
+        Os PDFs ficam em `faturas_energisa/` (também os de outros meses, que alimentam o
+        índice da baixa), mas só as faturas com competência nos meses pedidos voltam no lote.
+        Não consulta o SIGA: o que já foi provisionado é conferido lá antes de lançar.
+
+        Args:
+            meses: Competências "MM/AAAA" (saída de `periodo_energia.meses_do_lote`).
+            callback_status (callable): Função para atualizar status na interface.
+            service: Cliente da API do Gmail (None autentica pelo token.json).
+
+        Returns:
+            tuple: (lote_valido, lote_pendente_mapeamento, sem_emissao), em que sem_emissao
+            lista as faturas sem data de emissão legível (sem competência, não entram no lote).
+        """
+        def log_msg(msg, cor="#666666"):
+            if callback_status:
+                callback_status(msg, cor)
+            logging.info(msg)
+
+        if not meses:
+            return [], [], []
+        base_dir = diretorio_base()
+        pasta_temp = os.path.join(base_dir, "faturas_temporarias")
+        pasta_organizada = os.path.join(base_dir, "faturas_energisa")
+        os.makedirs(pasta_organizada, exist_ok=True)
+
+        inicio, fim = janela_de_busca(meses)
+        log_msg(f"Buscando no e-mail as faturas de energia de {meses[0]} a {meses[-1]}...", "#428BCA")
+        try:
+            pdfs = EmailReader.buscar_faturas_periodo(inicio, fim, pasta_temp, service=service)
+            lidas = [d for pdf in pdfs if (d := FaturaEnergiaController._extrair_e_organizar(
+                pdf, "", pasta_organizada, log_msg))]
+        finally:
+            shutil.rmtree(pasta_temp, ignore_errors=True)
+
+        # A mesma fatura pode chegar em dois e-mails (segunda via): fica uma por arquivo
+        config_mgr = ConfigManager()
+        pendentes = FaturasPendentes(config_mgr)
+        candidatas: dict[str, dict] = {}
+        sem_emissao = []
+        for fat in lidas:
+            competencia = competencia_da_fatura(fat)
+            if not competencia:
+                sem_emissao.append(fat)
+            elif competencia in meses and not pendentes.foi_descartada(fat):
+                candidatas[FaturasPendentes.chave(fat)] = fat
+        if sem_emissao:
+            log_msg(f"⚠️ {len(sem_emissao)} fatura(s) sem data de emissão legível: lance pela aba Energia.", "#F89406")
+        log_msg(f"{len(candidatas)} fatura(s) de energia emitida(s) no período.", "#428BCA")
+        valido, pendente = FaturaEnergiaController._classificar_por_uc(
+            candidatas.values(), pendentes, config_mgr, log_msg)
+        return valido, pendente, sem_emissao
+
+    @staticmethod
+    def _classificar_por_uc(candidatas: Iterable[dict], pendentes: FaturasPendentes, config_mgr: ConfigManager,
+                            log_msg) -> tuple[list[dict], list[dict]]:
+        """Separa as faturas com UC mapeada para uma localidade das que ainda precisam de mapeamento.
+
+        Returns:
+            tuple: (lote_valido, lote_pendente_mapeamento). As sem mapeamento ficam gravadas
+            como pendentes, para voltarem na próxima importação.
+        """
         lote_valido = []
         lote_pendente_mapeamento = []
         mapeamentos_uc = {m["uc"]: m["localidade_codigo"] for m in config_mgr.get_mapeamentos_uc()}
         localidades_dict = {l["codigo"]: l["nome"] for l in config_mgr.get_localidades_energia()}
 
-        for dados_fat in candidatas.values():
+        for dados_fat in candidatas:
             if not os.path.exists(dados_fat.get("caminho_arquivo", "")):
                 log_msg(f"PDF da fatura UC {dados_fat.get('uc', '')} não encontrado. Removida das pendentes.", "#D9534F")
                 pendentes.remover(dados_fat)

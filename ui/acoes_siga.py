@@ -66,6 +66,8 @@ class AcoesSigaMixin:
         if renomeadas:
             logging.info(f"Localidades com o nome do SIGA: {', '.join(renomeadas)}")
         if novas:
+            # A barra de status é sobrescrita logo pelo robô: o registro fica no log
+            logging.info(f"Localidades novas do SIGA: {', '.join(novas)}")
             self.atualizar_status(f"📍 {len(novas)} localidade(s) nova(s) do SIGA: {', '.join(novas)}", "#428BCA")
 
     def _perguntar_uc_do_lote(self, fatura, responder):

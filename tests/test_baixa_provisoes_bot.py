@@ -36,8 +36,9 @@ class PaginaBaixa(PaginaGravadora):
     """Responde aos scripts do mixin como as telas do SIGA; cada atributo muda uma resposta."""
 
     def __init__(self, documento="018000001", valor="224,25", apagar="224,25", pagamentos=None,
-                 restante="0,00", status_final=PAGO, mes_fechado=False):
+                 restante="0,00", status_final=PAGO, mes_fechado=False, data_fixa=None, data_lida=None):
         super().__init__()
+        self.data_fixa, self.data_lida = data_fixa, data_lida  # o calendário do SIGA pode trocar a data
         self.url = "https://siga.exemplo/TES/TES01501.aspx"
         self.cabecalho = {"documento": documento, "valor": valor, "apagar": apagar}
         self.pagamentos = pagamentos if pagamentos is not None else [["DÉBITO AUTOMÁTICO", "10123 - ...", "224,25", ""]]
@@ -54,7 +55,8 @@ class PaginaBaixa(PaginaGravadora):
         self.scripts.append(script)
         respostas = {
             bp._JS_LER_CABECALHO: lambda: self.cabecalho,
-            bp._JS_PREENCHER_DATA: lambda: True,
+            bp._JS_PREENCHER_DATA: lambda: arg if self.data_fixa is None else self.data_fixa,
+            bp._JS_LER_DATA: lambda: "26/08/2026" if self.data_lida is None else self.data_lida,
             bp._JS_MODAL_PAGAMENTO_ABERTO: lambda: True,
             bp._JS_QTD_CONTAS: lambda: len(CONTAS) + 1,
             bp._JS_LER_CONTAS_TES: lambda: CONTAS,
@@ -352,3 +354,16 @@ def test_falha_ao_reler_o_status_nao_derruba_o_lote(monkeypatch):
     assert not fechado
     assert resultados[0].situacao == APROVADA_SEM_BAIXA
     assert "status não relido no SIGA" in resultados[0].detalhe
+
+
+@pytest.mark.parametrize("pagina", [
+    PaginaBaixa(data_fixa="24/10/2026"),   # o calendário voltou para hoje ao preencher
+    PaginaBaixa(data_lida="24/10/2026"),   # ou trocou depois, antes do Confirmar
+])
+def test_data_de_pagamento_diferente_do_debito_nao_confirma(monkeypatch, pagina):
+    bot, reg = _bot(monkeypatch)
+
+    resultados = _executar(bot, pagina, [_decisao(APROVADO)], "10123", PERIODO)
+
+    assert reg.gravacoes == 0
+    assert "data de pagamento" in resultados[0].detalhe

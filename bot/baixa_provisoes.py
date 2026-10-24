@@ -108,13 +108,19 @@ _JS_LER_CABECALHO = '''() => ({
     apagar: (document.getElementById('f_valorapagar') || {}).value || ''
 })'''
 
+# Só `value` + eventos não basta: o calendário volta o campo para a data de hoje (visto em
+# 24/10/2026, baixa gravada com a data errada). `datepicker('update')` fixa a data escolhida.
 _JS_PREENCHER_DATA = '''(data) => {
     const campo = document.getElementById('f_datapagamento');
-    if (!campo) return false;
+    if (!campo) return '';
+    const $campo = window.jQuery ? window.jQuery(campo) : null;
     campo.value = data;
-    if (window.jQuery) window.jQuery(campo).trigger('input').trigger('change').trigger('blur');
-    return true;
+    if ($campo && $campo.datepicker) $campo.datepicker('update', data);
+    if ($campo) $campo.trigger('change');
+    return campo.value;
 }'''
+
+_JS_LER_DATA = "() => (document.getElementById('f_datapagamento') || {}).value || ''"
 
 _JS_MODAL_PAGAMENTO_ABERTO = '''() => {
     const m = document.getElementById('modal-formapagamento');
@@ -321,8 +327,8 @@ class BaixaProvisoesMixin:
         tela = self._abrir_parcela(page, "TES01506", provisao)
         if valor_br(tela.get("apagar")) != round(valor, 2):
             raise BaixaNaoConferidaError(f"valor a pagar na tela é {tela.get('apagar')}")
-        if not page.evaluate(_JS_PREENCHER_DATA, data):
-            raise BaixaNaoConferidaError("campo da data de pagamento não encontrado")
+        if page.evaluate(_JS_PREENCHER_DATA, data) != data:
+            raise BaixaNaoConferidaError(f"a data de pagamento não ficou {data}")
 
         page.locator('#btn-novo-pagamento').click()
         time.sleep(1)
@@ -350,6 +356,9 @@ class BaixaProvisoesMixin:
             raise BaixaNaoConferidaError(f"grade de pagamentos inesperada: {linhas}")
         if valor_br(pagamentos.get("restante")) != 0:
             raise BaixaNaoConferidaError(f"ainda restam {pagamentos.get('restante')} a pagar")
+        data_na_tela = page.evaluate(_JS_LER_DATA)
+        if data_na_tela != data:
+            raise BaixaNaoConferidaError(f"a data de pagamento na tela é {data_na_tela!r}, não {data}")
 
         page.locator(_SUBMIT_FORMULARIO).first.click()
         self._depois_de_gravar(page)

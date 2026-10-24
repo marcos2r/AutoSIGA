@@ -12,6 +12,10 @@ from controllers.exportador import Exportador
 from controllers.prova_real import resumo_resultado
 from ui import tema
 
+_CORES = {"ok": tema.VERDE_TEXTO, "alerta": tema.VERMELHO_TEXTO, "neutro": tema.CINZA_TEXTO}
+# Coluna das métricas quando o painel abre maximizado; o detalhe ocupa o resto da tela
+_LARGURA_RESUMO = 400
+
 
 class DashboardMixin:
     """Janelas exibidas pela janela principal durante e após a automação."""
@@ -88,40 +92,47 @@ class DashboardMixin:
             self.bot_instance.responder_autorizacao(False)
         janela.destroy()
 
-    def _secao_provisoes(self, container, linhas):
-        """Provisões de energia do período: o resumo e cada fatura que ficou pendente, com o motivo."""
-        cores = {"ok": tema.VERDE_TEXTO, "alerta": tema.VERMELHO_TEXTO, "neutro": tema.CINZA_TEXTO}
-        ctk.CTkLabel(container, text="PROVISÕES DE ENERGIA (E-MAIL × CONTAS A PAGAR)", font=(tema.FONTE, 10, "bold"),
-                     text_color=tema.AZUL_TITULO).pack(anchor="w", padx=27, pady=(4, 2))
-        lista = ctk.CTkScrollableFrame(container, height=min(24 * len(linhas), 120), fg_color=tema.BRANCO,
-                                       border_width=1, border_color=tema.CINZA_BORDA)
-        lista.pack(fill="x", padx=15, pady=(0, 6))
-        for nivel, texto in linhas:
-            ctk.CTkLabel(lista, text=texto, font=(tema.FONTE, 11), text_color=cores.get(nivel, tema.CINZA_TEXTO),
-                         anchor="w", justify="left", wraplength=540).pack(fill="x", padx=6, pady=1)
+    def _titulo_secao(self, container, texto, resumo=""):
+        """Título de seção no padrão do SIGA, com o resumo de relance ao lado."""
+        linha = ctk.CTkFrame(container, fg_color="transparent")
+        linha.pack(fill="x", padx=8, pady=(10, 4))
+        ctk.CTkLabel(linha, text=texto, font=(tema.FONTE, 11, "bold"), text_color=tema.AZUL_TITULO).pack(side="left")
+        if resumo:
+            ctk.CTkLabel(linha, text=resumo, font=(tema.FONTE, 11), text_color=tema.CINZA_TEXTO).pack(side="right")
 
-    def _secao_prova_real(self, container, resultados):
-        """Lista o resultado de cada extrato: saldo do SIGA × banco e lançamentos sem par."""
-        cores = {"ok": tema.VERDE_TEXTO, "alerta": tema.VERMELHO_TEXTO, "neutro": tema.CINZA_TEXTO}
-        ctk.CTkLabel(container, text="PROVA REAL (SALDO DO SIGA × BANCO)", font=(tema.FONTE, 10, "bold"),
-                     text_color=tema.AZUL_TITULO).pack(anchor="w", padx=27, pady=(4, 2))
-        detalhes = [linhas_do_extrato(r) for r in resultados]
-        qtd_linhas = sum(2 + len(d) for d in detalhes)
-        lista = ctk.CTkScrollableFrame(container, height=min(26 * qtd_linhas, 260), fg_color=tema.BRANCO,
-                                       border_width=1, border_color=tema.CINZA_BORDA)
-        lista.pack(fill="x", padx=15, pady=(0, 6))
-        for r, detalhe in zip(resultados, detalhes, strict=True):
-            nivel, texto = resumo_resultado(r)
-            linha = ctk.CTkFrame(lista, fg_color="transparent")
-            linha.pack(fill="x", padx=6, pady=3)
-            ctk.CTkLabel(linha, text=cabecalho_extrato(r), font=(tema.FONTE, 11, "bold"),
-                         text_color=tema.CINZA_TEXTO, anchor="w").pack(fill="x")
-            ctk.CTkLabel(linha, text=texto, font=(tema.FONTE, 11), text_color=cores[nivel], anchor="w",
-                         justify="left", wraplength=540).pack(fill="x")
-            # De onde vem a diferença e as baixas de energia, com cada pendência e o motivo
-            for nivel_detalhe, texto_detalhe in detalhe:
-                ctk.CTkLabel(linha, text=texto_detalhe, font=(tema.FONTE, 11), text_color=cores[nivel_detalhe],
-                             anchor="w", justify="left", wraplength=540).pack(fill="x")
+    def _cartao(self, container, alerta):
+        """Cartão de um item do painel; a borda vermelha marca o que pede ação."""
+        cartao = ctk.CTkFrame(container, fg_color=tema.BRANCO, corner_radius=6, border_width=2 if alerta else 1,
+                              border_color=tema.VERMELHO_TEXTO if alerta else tema.CINZA_BORDA)
+        cartao.pack(fill="x", padx=8, pady=4)
+        return cartao
+
+    def _linhas_no_cartao(self, cartao, linhas, largura, topo=1):
+        for i, (nivel, texto) in enumerate(linhas):
+            ultima = i == len(linhas) - 1
+            ctk.CTkLabel(cartao, text=texto, font=(tema.FONTE, 12), text_color=_CORES.get(nivel, tema.CINZA_TEXTO),
+                         anchor="w", justify="left", wraplength=largura).pack(
+                fill="x", padx=12, pady=(topo if i == 0 else 1, 8 if ultima else 1))
+
+    def _secao_provisoes(self, container, linhas, largura):
+        """Provisões de energia do período: o resumo e cada fatura que ficou pendente, com o motivo."""
+        self._titulo_secao(container, "PROVISÕES DE ENERGIA (E-MAIL × CONTAS A PAGAR)")
+        cartao = self._cartao(container, alerta=linhas[0][0] == "alerta")
+        self._linhas_no_cartao(cartao, linhas, largura, topo=8)
+
+    def _secao_prova_real(self, container, resultados, largura):
+        """Um cartão por extrato: conta, tipo e período, o saldo e, se não fechar, de onde vem a diferença."""
+        niveis = [resumo_resultado(r)[0] for r in resultados]
+        conferem = sum(1 for r in resultados if r.saldo.status == "confere")
+        atencao = niveis.count("alerta")
+        resumo = f"{len(resultados)} extrato(s) · {conferem} conferem" + (f" · {atencao} pedem atenção" if atencao else "")
+        self._titulo_secao(container, "PROVA REAL (SALDO DO SIGA × BANCO)", resumo)
+        for r, nivel in zip(resultados, niveis, strict=True):
+            cartao = self._cartao(container, alerta=nivel == "alerta")
+            ctk.CTkLabel(cartao, text=cabecalho_extrato(r), font=(tema.FONTE, 12, "bold"), text_color="#333333",
+                         anchor="w").pack(fill="x", padx=12, pady=(8, 2))
+            # O resumo do saldo e, abaixo, de onde vem a diferença e as baixas de energia com o motivo
+            self._linhas_no_cartao(cartao, [resumo_resultado(r)] + linhas_do_extrato(r), largura)
 
     def mostrar_dashboard_produtividade(self, telemetria, tempo_inicio):
         """Exibe o popup parabenizando a finalização dos trabalhos com métricas e ROI financeiro."""
@@ -182,13 +193,30 @@ class DashboardMixin:
         volume_fmt = f"R$ {volume_fin:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         roi_fmt = f"R$ {roi_financeiro:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+        # Com prova real ou provisões, a tela abre maximizada: métricas à esquerda e o detalhe, que é o que
+        # pede ação, à direita, com uma rolagem só. Sem detalhe, fica a janela pequena de sempre.
+        tem_detalhe = bool(telemetria.get("extratos") or telemetria.get("provisoes_energia"))
         frame = ctk.CTkFrame(janela, fg_color="#FFFFFF", corner_radius=8, border_width=1, border_color="#DDDDDD")
         frame.pack(fill="both", expand=True, padx=20, pady=20)
+        painel = None
+        largura_texto = 0
+        if tem_detalhe:
+            janela.after(0, lambda: janela.state("zoomed"))
+            frame.grid_columnconfigure(1, weight=1)
+            frame.grid_rowconfigure(0, weight=1)
+            coluna = ctk.CTkFrame(frame, fg_color="transparent", width=_LARGURA_RESUMO)
+            coluna.grid(row=0, column=0, sticky="ns", padx=(15, 8), pady=10)
+            coluna.pack_propagate(False)
+            painel = ctk.CTkScrollableFrame(frame, fg_color="#F8F9FA", corner_radius=6)
+            painel.grid(row=0, column=1, sticky="nsew", padx=(8, 15), pady=15)
+            largura_texto = max(480, janela.winfo_screenwidth() - _LARGURA_RESUMO - 200)
+        else:
+            coluna = frame
 
-        ctk.CTkLabel(frame, text="✅ Missão Cumprida!", font=("Open Sans", 20, "bold"), text_color="#3C763D").pack(pady=(12, 4))
+        ctk.CTkLabel(coluna, text="✅ Missão Cumprida!", font=("Open Sans", 20, "bold"), text_color="#3C763D").pack(pady=(12, 4))
 
         # Painel central de dados
-        frame_tabela = ctk.CTkFrame(frame, fg_color="#F8F9FA", corner_radius=6)
+        frame_tabela = ctk.CTkFrame(coluna, fg_color="#F8F9FA", corner_radius=6)
         frame_tabela.pack(padx=15, pady=8, fill="both", expand=True)
 
         # Auxiliar de linha
@@ -229,13 +257,13 @@ class DashboardMixin:
         add_linha(frame_tabela, "Tempo economizado:", f"🔥 {e_minutos}m {e_segundos}s", cor_valor="#5CB85C", negrito=True)
         add_linha(frame_tabela, "Retorno financeiro estimado (ROI):", roi_fmt, cor_valor="#5CB85C", negrito=True)
 
-        if telemetria.get("extratos") or telemetria.get("provisoes_energia"):
-            # As métricas deixam de ocupar a sobra de altura, senão empurram os botões para fora da janela
+        if painel is not None:
+            # As métricas não ocupam a sobra de altura, para os botões ficarem logo abaixo delas
             frame_tabela.pack_configure(expand=False, fill="x")
-        if telemetria.get("provisoes_energia"):
-            self._secao_provisoes(frame, telemetria["provisoes_energia"])
-        if telemetria.get("extratos"):
-            self._secao_prova_real(frame, telemetria["extratos"])
+            if telemetria.get("provisoes_energia"):
+                self._secao_provisoes(painel, telemetria["provisoes_energia"], largura_texto)
+            if telemetria.get("extratos"):
+                self._secao_prova_real(painel, telemetria["extratos"], largura_texto)
 
         # Função para salvar a planilha Excel
         def exportar_planilha():
@@ -256,7 +284,7 @@ class DashboardMixin:
         ctk.CTkLabel(frame_tabela, text="", font=("Open Sans", 2)).pack()
 
         # Frame horizontal para botões de rodapé da modal
-        frame_acoes = ctk.CTkFrame(frame, fg_color="transparent")
+        frame_acoes = ctk.CTkFrame(coluna, fg_color="transparent")
         frame_acoes.pack(pady=(8, 12))
 
         btn_excel = ctk.CTkButton(
@@ -273,8 +301,6 @@ class DashboardMixin:
         )
         btn_fechar.grid(row=0, column=1, padx=5)
 
-        if telemetria.get("extratos"):
-            # Altura pelo conteúdo, sem passar da tela, para os botões nunca ficarem de fora
-            janela.update_idletasks()
-            altura = min(frame.winfo_reqheight() + 48, janela.winfo_screenheight() - 80)
-            janela.geometry(f"640x{altura}")
+        if painel is not None:
+            # Ao sair do maximizado, a janela volta num tamanho em que as duas colunas ainda cabem
+            janela.geometry(f"{_LARGURA_RESUMO + 760}x720")

@@ -62,3 +62,19 @@ def test_baixa_de_energia_e_a_previa_das_baixas_ligadas_por_padrao(tmp_path):
 
     recarregado = ConfigManager(config_path=str(caminho))
     assert recarregado.get_baixar_energia_pelo_extrato() is False and recarregado.get_revisar_baixas() is False
+
+
+def test_xls_de_conta_corrente_nao_herda_o_mapeamento_da_aplicacao(tmp_path):
+    cm = ConfigManager(config_path=str(tmp_path / "config.json"))
+    cm.salvar_mapeamento_conta("12345-6", "ADM", "CENTRAL - SP", "", "10313", produto="SICREDINVEST AUTOMATICO")
+
+    # Conta corrente (sem produto): sem mapeamento próprio, fica para a sugestão do catálogo
+    _, _, dados = cm.get_mapeamento_conta("12345-6", "ADM", "CENTRAL - SP")
+    assert "conta_id" not in dados
+
+    _, _, dados = cm.get_mapeamento_conta("12345-6", "ADM", "CENTRAL - SP", produto="SICREDINVEST AUTOMATICO")
+    assert dados["aplicacao"] == "10313"
+
+    # Em outra localidade, a busca reversa também respeita o produto
+    _, _, dados = cm.get_mapeamento_conta("12345-6", "DR", "OUTRA")
+    assert "conta_id" not in dados

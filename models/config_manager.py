@@ -233,7 +233,9 @@ class ConfigManager(ConfigEnergiaMixin, ConfigCatalogoMixin):
             m_nome = m.get("nome_adm", "").strip().upper()
 
             if norm(m_conta) == conta_id_norm:
-                if prod_alvo and m_prod != prod_alvo:
+                # O produto separa a conta corrente (sem produto) da aplicação da mesma conta: sem isso,
+                # o XLS de conta corrente herdava o mapeamento da aplicação, que não tem C. Corrente
+                if m_prod != prod_alvo:
                     continue
 
                 if m_tipo == tipo_alvo and m_nome == nome_alvo:
@@ -249,7 +251,7 @@ class ConfigManager(ConfigEnergiaMixin, ConfigCatalogoMixin):
         for m in mapeamentos:
             m_conta = m.get("conta_id", "").strip()
             m_prod = m.get("produto")
-            if norm(m_conta) == conta_id_norm and (not prod_alvo or m_prod == prod_alvo):
+            if norm(m_conta) == conta_id_norm and m_prod == prod_alvo:
                 return tipo_alvo, nome_alvo, m
 
         return tipo_alvo, nome_alvo, {"corrente": "", "aplicacao": ""}

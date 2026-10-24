@@ -11,6 +11,7 @@ import logging
 from datetime import datetime
 
 from controllers.baixa_energia import resumo_baixa
+from controllers.diferenca_extrato import itens_da_diferenca, tipo_legivel
 from controllers.prova_real import DIVERGE, resumo_resultado
 
 
@@ -262,12 +263,12 @@ class Exportador:
 
     @staticmethod
     def _aba_prova_real(wb, resultados, cor_header, fonte_header, fonte_normal):
-        """Aba "Prova Real": saldo do banco × SIGA por extrato e, abaixo, os lançamentos sem par."""
+        """Aba "Prova Real": saldo do banco × SIGA por extrato e, abaixo, cada item que compõe a diferença."""
         from openpyxl.styles import Alignment
 
         ws = wb.create_sheet(title="Prova Real")
         cabecalho = ["Localidade", "Conta SIGA", "Conta Bancária", "Saldo Banco", "Saldo SIGA", "Diferença",
-                     "Lançados", "Pendentes", "Resultado"]
+                     "Lançados", "Pendentes", "Resultado", "Tipo", "Período"]
         for col, texto in enumerate(cabecalho, start=1):
             cell = ws.cell(row=1, column=col, value=texto)
             cell.fill, cell.font = cor_header, fonte_header
@@ -277,7 +278,7 @@ class Exportador:
         for r in resultados:
             valores = [r.localidade, r.conta_siga, r.conta_id, r.saldo.saldo_banco, r.saldo.saldo_siga,
                        r.saldo.diferenca if r.saldo.status == DIVERGE else None, r.lancados, r.pendentes,
-                       resumo_resultado(r)[1]]
+                       resumo_resultado(r)[1], tipo_legivel(r.tipo), r.periodo]
             for col, valor in enumerate(valores, start=1):
                 cell = ws.cell(row=linha, column=col, value=valor)
                 cell.font = fonte_normal
@@ -285,18 +286,20 @@ class Exportador:
                     cell.number_format = 'R$ #,##0.00'
             linha += 1
 
-        sobras = [(r, s) for r in resultados for s in (r.sobras or [])]
-        if sobras:
+        itens = [(r, item) for r in resultados for item in itens_da_diferenca(r)]
+        if itens:
             linha += 1
-            for col, texto in enumerate(["Lançamentos no SIGA sem par no banco", "Conta SIGA", "Data",
-                                         "Histórico", "Valor"], start=1):
+            for col, texto in enumerate(["Itens sem par (de onde vem a diferença)", "Conta SIGA", "Data",
+                                         "Histórico / Descrição", "Valor", "Origem", "Efeito na Diferença"], start=1):
                 cell = ws.cell(row=linha, column=col, value=texto)
                 cell.fill, cell.font = cor_header, fonte_header
-            for r, s in sobras:
+            for r, (data, descricao, valor, origem, efeito) in itens:
                 linha += 1
-                for col, valor in enumerate([r.localidade, r.conta_siga, s.data, s.historico, s.valor], start=1):
-                    ws.cell(row=linha, column=col, value=valor).font = fonte_normal
+                for col, celula in enumerate([r.localidade, r.conta_siga, data, descricao, valor, origem, efeito],
+                                             start=1):
+                    ws.cell(row=linha, column=col, value=celula).font = fonte_normal
                 ws.cell(row=linha, column=5).number_format = 'R$ #,##0.00'
+                ws.cell(row=linha, column=7).number_format = 'R$ #,##0.00'
         return ws
 
     @staticmethod

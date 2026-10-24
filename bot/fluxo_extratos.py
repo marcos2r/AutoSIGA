@@ -23,7 +23,7 @@ from controllers.prova_real import (
     conferir_saldo,
     movimentos_do_banco,
     nao_conferido,
-    sobras_no_siga,
+    parear,
     valor_br,
 )
 
@@ -217,12 +217,14 @@ class FluxoExtratosMixin:
             self.update_status(f"✅ [{self.localidade_selecionada}] Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
 
         if chave_competencia in self.competencias_fechadas:
-            situacao, saldo, sobras = MES_FECHADO, nao_conferido("mês fechado no SIGA", dados.get("saldo_atual")), None
+            situacao, saldo = MES_FECHADO, nao_conferido("mês fechado no SIGA", dados.get("saldo_atual"))
+            sobras = faltas = None
         else:
             situacao = RECUSADO if recusado else (PENDENTE if pendentes else CONCILIADO)
-            saldo, sobras = self._prova_real(page, dados, grade_atual)
+            saldo, sobras, faltas = self._prova_real(page, dados, grade_atual)
         self._registrar_resultado(telemetria_lote, dados, conta_alvo, situacao,
-                                  telemetria_lote["injecoes"] - injecoes_antes, len(pendentes), saldo, sobras, baixas)
+                                  telemetria_lote["injecoes"] - injecoes_antes, len(pendentes), saldo, sobras, baixas,
+                                  faltas)
         return True
 
     def _pedir_autorizacao(self, pendentes, conta_siga, tipo="lancamentos"):
@@ -264,14 +266,15 @@ class FluxoExtratosMixin:
         Só lê a grade que já está na tela; nunca lança nem corrige nada.
 
         Returns:
-            tuple: (ResultadoSaldo, sobras ou None quando não dá para apontá-las).
+            tuple: (ResultadoSaldo, sobras do SIGA, faltas no SIGA); as listas são None quando não
+            dá para apontá-las.
         """
         saldo_banco = dados.get("saldo_atual")
         if not grade_atual:
-            return nao_conferido("a grade do SIGA não foi relida depois dos lançamentos", saldo_banco), None
+            return nao_conferido("a grade do SIGA não foi relida depois dos lançamentos", saldo_banco), None, None
         data_saldo = dados.get("data_saldo")
         if saldo_banco is not None and data_saldo and data_saldo != dados.get("data_final"):
-            return nao_conferido(f"o saldo do extrato é de {data_saldo}", saldo_banco), None
+            return nao_conferido(f"o saldo do extrato é de {data_saldo}", saldo_banco), None, None
 
         try:
             texto = page.evaluate(_JS_LER_SALDO)
@@ -281,7 +284,7 @@ class FluxoExtratosMixin:
         saldo = conferir_saldo(saldo_banco, valor_br(texto) if texto is not None else None)
 
         movimentos = movimentos_do_banco(dados)
-        sobras = sobras_no_siga(movimentos, dados.get("extrato_siga")) if movimentos is not None else None
+        sobras, faltas = parear(movimentos, dados.get("extrato_siga")) if movimentos is not None else (None, None)
 
         if saldo.status == CONFERE:
             self.update_status(f"🧾 Prova real: saldo confere ({Exportador.formatar_moeda(saldo.saldo_siga)}).", "#3C763D")
@@ -290,15 +293,16 @@ class FluxoExtratosMixin:
             self.update_status(f"⚠️ Prova real: SIGA {Exportador.formatar_moeda(saldo.saldo_siga)} × banco "
                                f"{Exportador.formatar_moeda(saldo.saldo_banco)} (diferença "
                                f"{Exportador.formatar_moeda(saldo.diferenca)}){extra}.", "#F89406")
-        return saldo, sobras
+        return saldo, sobras, faltas
 
     def _registrar_resultado(self, telemetria_lote, dados, conta_siga, situacao, lancados=0, pendentes=0,
-                             saldo=None, sobras=None, baixas=None):
+                             saldo=None, sobras=None, baixas=None, faltas=None):
         """Guarda o resultado do extrato em `telemetria_lote["extratos"]` para o painel e o Excel."""
         resultado = ResultadoExtrato(
             conta_id=str(dados.get("conta_id", "")), conta_siga=conta_siga or "",
             localidade=dados.get("localidade_selecionada", ""), tipo=dados.get("tipo_extrato", ""),
-            situacao=situacao, lancados=lancados, pendentes=pendentes, sobras=sobras, baixas=baixas)
+            situacao=situacao, lancados=lancados, pendentes=pendentes, sobras=sobras, baixas=baixas, faltas=faltas,
+            periodo=_periodo(dados))
         if saldo is not None:
             resultado.saldo = saldo
         telemetria_lote.setdefault("extratos", []).append(resultado)
@@ -431,3 +435,9 @@ class FluxoExtratosMixin:
                 self.update_status(f"✅ [{self.localidade_selecionada}] Finalizado sem prova real.", "#3C763D")
                 return pendentes, False
         return pendentes, True
+
+
+def _periodo(dados):
+    """Período do extrato ("01/10/2026 a 23/10/2026"), ou vazio se faltar alguma data."""
+    inicio, fim = dados.get("data_inicial"), dados.get("data_final")
+    return f"{inicio} a {fim}" if inicio and fim else ""

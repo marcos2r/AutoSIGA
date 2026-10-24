@@ -84,9 +84,9 @@ def test_data_muito_diferente_nao_pareia():
 
 
 def test_movimentos_do_ofx_sao_todas_as_transacoes():
-    dados = {"tipo_extrato": "CORRENTE", "transacoes": [{"data": "04/05/2026", "valor": -27.5},
+    dados = {"tipo_extrato": "CORRENTE", "transacoes": [{"data": "04/05/2026", "valor": -27.5, "descricao": "TARIFA"},
                                                         {"data": "05/05/2026", "valor": 10.0}]}
-    assert movimentos_do_banco(dados) == [("04/05/2026", -27.5), ("05/05/2026", 10.0)]
+    assert movimentos_do_banco(dados) == [("04/05/2026", -27.5, "TARIFA"), ("05/05/2026", 10.0, "")]
 
 
 def test_movimentos_do_xls_usam_o_sinal_da_conta_de_aplicacao():
@@ -95,7 +95,7 @@ def test_movimentos_do_xls_usam_o_sinal_da_conta_de_aplicacao():
         {"data": "04/05/2026", "tipo": "RENDIMENTO", "valor": 6.44},
         {"data": "06/05/2026", "tipo": "APLICACAO", "valor": 9999.0}]}
     assert movimentos_do_banco(dados) == [
-        ("04/05/2026", -20582.25), ("04/05/2026", 6.44), ("06/05/2026", 9999.0)]
+        ("04/05/2026", -20582.25, "RESGATE"), ("04/05/2026", 6.44, "RENDIMENTO"), ("06/05/2026", 9999.0, "APLICACAO")]
 
 
 def test_xls_sem_movimentos_completos_nao_aponta_sobras():

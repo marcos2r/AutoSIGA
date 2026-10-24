@@ -44,6 +44,15 @@ class MovimentoSiga:
 
 
 @dataclass
+class MovimentoBanco:
+    """Um movimento do extrato do banco, com o valor com sinal (saída negativa)."""
+
+    data: str
+    valor: float
+    descricao: str = ""
+
+
+@dataclass
 class ResultadoSaldo:
     """Comparação do saldo final do banco com o do SIGA.
 
@@ -76,6 +85,9 @@ class ResultadoExtrato:
     saldo: ResultadoSaldo = field(default_factory=lambda: ResultadoSaldo(NAO_CONFERIDO))
     sobras: list[MovimentoSiga] | None = None
     baixas: list["ResultadoBaixa"] | None = None
+    # Movimentos do banco sem lançamento no SIGA (None quando não dá para apontá-los)
+    faltas: list[MovimentoBanco] | None = None
+    periodo: str = ""
 
 
 def valor_br(texto: Any) -> float | None:
@@ -132,8 +144,8 @@ def nao_conferido(motivo: str, saldo_banco: float | None = None) -> ResultadoSal
     return ResultadoSaldo(NAO_CONFERIDO, saldo_banco, motivo=motivo)
 
 
-def movimentos_do_banco(dados: dict[str, Any]) -> list[tuple[str, float]] | None:
-    """Movimentos do extrato como (data, valor com sinal), na visão da conta do SIGA.
+def movimentos_do_banco(dados: dict[str, Any]) -> list[tuple[str, float, str]] | None:
+    """Movimentos do extrato como (data, valor com sinal, descrição), na visão da conta do SIGA.
 
     OFX: todas as transações. XLS de aplicação: aplicações, resgates e rendimentos
     (`movimentos`), porque `transacoes` só tem os rendimentos.
@@ -145,24 +157,34 @@ def movimentos_do_banco(dados: dict[str, Any]) -> list[tuple[str, float]] | None
         movimentos = dados.get("movimentos")
         if movimentos is None:
             return None
-        return [(m["data"], _SINAL_MOVIMENTO.get(m.get("tipo", ""), 1) * abs(m["valor"])) for m in movimentos]
-    return [(t.get("data", ""), t.get("valor", 0.0)) for t in dados.get("transacoes", [])]
+        return [(m["data"], _SINAL_MOVIMENTO.get(m.get("tipo", ""), 1) * abs(m["valor"]), m.get("tipo", ""))
+                for m in movimentos]
+    return [(t.get("data", ""), t.get("valor", 0.0), t.get("descricao", "")) for t in dados.get("transacoes", [])]
 
 
-def sobras_no_siga(movimentos_banco: list[tuple[str, float]],
+def sobras_no_siga(movimentos_banco: list[tuple[Any, ...]],
                    linhas_siga: list[dict[str, Any]] | None) -> list[MovimentoSiga]:
-    """Lançamentos do SIGA sem par no extrato (duplicado, valor errado, estorno esquecido).
+    """Lançamentos do SIGA sem par no extrato (duplicado, valor errado, estorno esquecido)."""
+    return parear(movimentos_banco, linhas_siga)[0]
+
+
+def parear(movimentos_banco: list[tuple[Any, ...]],
+           linhas_siga: list[dict[str, Any]] | None) -> tuple[list[MovimentoSiga], list[MovimentoBanco]]:
+    """Pareia o SIGA com o banco e devolve o que sobrou de cada lado.
 
     O pareamento é um para um, por valor: primeiro na mesma data e, numa segunda
     passada, com até `DIAS_TOLERANCIA` dias de diferença (lançamento manual com a data do
     dia útil seguinte ou anterior). Dois lançamentos iguais no SIGA para um só no banco
     deixam uma sobra.
+
+    Returns:
+        tuple: (lançamentos do SIGA sem par no banco, movimentos do banco sem lançamento no SIGA).
     """
-    livres = list(movimentos_banco)
+    livres = [MovimentoBanco(*mov) for mov in movimentos_banco]
     pendentes = []
     for mov in normalizar_linhas_siga(linhas_siga):
-        par = next((i for i, (data, valor) in enumerate(livres)
-                    if data == mov.data and abs(valor - mov.valor) <= TOLERANCIA), None)
+        par = next((i for i, b in enumerate(livres)
+                    if b.data == mov.data and abs(b.valor - mov.valor) <= TOLERANCIA), None)
         if par is None:
             pendentes.append(mov)
         else:
@@ -171,14 +193,14 @@ def sobras_no_siga(movimentos_banco: list[tuple[str, float]],
     sobras = []
     for mov in pendentes:
         dia = _data(mov.data)
-        perto = [(abs((d - dia).days), i) for i, (data, valor) in enumerate(livres)
-                 if dia and (d := _data(data)) and abs((d - dia).days) <= DIAS_TOLERANCIA
-                 and abs(valor - mov.valor) <= TOLERANCIA]
+        perto = [(abs((d - dia).days), i) for i, b in enumerate(livres)
+                 if dia and (d := _data(b.data)) and abs((d - dia).days) <= DIAS_TOLERANCIA
+                 and abs(b.valor - mov.valor) <= TOLERANCIA]
         if perto:
             livres.pop(min(perto)[1])
         else:
             sobras.append(mov)
-    return sobras
+    return sobras, livres
 
 
 def _data(texto: str) -> datetime | None:

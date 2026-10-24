@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
-from controllers.baixa_energia import linhas_do_painel
+from controllers.diferenca_extrato import cabecalho_extrato, linhas_do_extrato
 from controllers.exportador import Exportador
 from controllers.prova_real import resumo_resultado
 from ui import tema
@@ -105,21 +105,22 @@ class DashboardMixin:
         cores = {"ok": tema.VERDE_TEXTO, "alerta": tema.VERMELHO_TEXTO, "neutro": tema.CINZA_TEXTO}
         ctk.CTkLabel(container, text="PROVA REAL (SALDO DO SIGA × BANCO)", font=(tema.FONTE, 10, "bold"),
                      text_color=tema.AZUL_TITULO).pack(anchor="w", padx=27, pady=(4, 2))
-        qtd_linhas = sum(2 + len(linhas_do_painel(r.baixas)) for r in resultados)
-        lista = ctk.CTkScrollableFrame(container, height=min(26 * qtd_linhas, 200), fg_color=tema.BRANCO,
+        detalhes = [linhas_do_extrato(r) for r in resultados]
+        qtd_linhas = sum(2 + len(d) for d in detalhes)
+        lista = ctk.CTkScrollableFrame(container, height=min(26 * qtd_linhas, 260), fg_color=tema.BRANCO,
                                        border_width=1, border_color=tema.CINZA_BORDA)
         lista.pack(fill="x", padx=15, pady=(0, 6))
-        for r in resultados:
+        for r, detalhe in zip(resultados, detalhes, strict=True):
             nivel, texto = resumo_resultado(r)
             linha = ctk.CTkFrame(lista, fg_color="transparent")
             linha.pack(fill="x", padx=6, pady=3)
-            ctk.CTkLabel(linha, text=f"{r.conta_siga or r.conta_id} · {r.localidade}", font=(tema.FONTE, 11, "bold"),
+            ctk.CTkLabel(linha, text=cabecalho_extrato(r), font=(tema.FONTE, 11, "bold"),
                          text_color=tema.CINZA_TEXTO, anchor="w").pack(fill="x")
             ctk.CTkLabel(linha, text=texto, font=(tema.FONTE, 11), text_color=cores[nivel], anchor="w",
                          justify="left", wraplength=540).pack(fill="x")
-            # Baixas de energia feitas antes da conciliação, com cada pendência e o motivo
-            for nivel_baixa, texto_baixa in linhas_do_painel(r.baixas):
-                ctk.CTkLabel(linha, text=texto_baixa, font=(tema.FONTE, 11), text_color=cores[nivel_baixa],
+            # De onde vem a diferença e as baixas de energia, com cada pendência e o motivo
+            for nivel_detalhe, texto_detalhe in detalhe:
+                ctk.CTkLabel(linha, text=texto_detalhe, font=(tema.FONTE, 11), text_color=cores[nivel_detalhe],
                              anchor="w", justify="left", wraplength=540).pack(fill="x")
 
     def mostrar_dashboard_produtividade(self, telemetria, tempo_inicio):

@@ -293,6 +293,8 @@ def test_prova_real_aponta_diferenca_e_lancamento_sem_par(monkeypatch):
     assert r.saldo.status == "diverge"
     assert r.saldo.diferenca == -200.0
     assert [(s.data, s.valor) for s in r.sobras] == [("05/05/2026", -200.0)]
+    assert r.faltas == []  # a aplicação do extrato tem par no SIGA
+    assert r.periodo == "01/05/2026 a 31/05/2026"
     assert reg.lancamentos == []
 
 

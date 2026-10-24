@@ -6,12 +6,25 @@ Responsável por abrir o arquivo PDF da fatura e extrair os campos necessários
 """
 
 import logging
+import os
 import re
 
 from pypdf import PdfReader
 
 # "dd/mm/aaaa R$ valor", com a referência opcional no meio ("01/09/2026 AGO/2026 R$ 81,41", modelo EnerCB)
 _RE_DATA_REF_VALOR = re.compile(r'(\d{2}/\d{2}/\d{4})\s+(?:([A-Za-zÇç]{3}/\d{4})\s+)?R\$\s*[\d\.,]+')
+# Origem da fatura que pede atenção: o anexo "EnerCB_..." do e-mail "Alerta de Vencimento" da
+# Energisa; guardado em faturas_energisa, o PDF leva o sufixo "_alerta" no nome
+ORIGEM_ALERTA = "alerta de vencimento"
+SUFIXO_ALERTA = "_alerta"
+
+
+def origem_pelo_nome(caminho_pdf: str) -> str:
+    """Origem da fatura pelo nome do arquivo: ORIGEM_ALERTA para o modelo EnerCB, senão vazio."""
+    nome = os.path.basename(caminho_pdf).lower()
+    return ORIGEM_ALERTA if "enercb" in nome or os.path.splitext(nome)[0].endswith(SUFIXO_ALERTA) else ""
+
+
 _MESES_CURTOS = {"JAN": "01", "FEV": "02", "MAR": "03", "ABR": "04", "MAI": "05", "JUN": "06",
                  "JUL": "07", "AGO": "08", "SET": "09", "OUT": "10", "NOV": "11", "DEZ": "12"}
 
@@ -31,7 +44,7 @@ class PdfExtractor:
 
         Returns:
             dict: Dados extraídos {"uc", "valor", "vencimento", "numero_fatura", "referencia",
-            "codigo_debito", "texto"}
+            "codigo_debito", "origem", "texto"}; "origem" vem do nome do arquivo (`origem_pelo_nome`)
         """
         dados = {
             "uc": "",
@@ -42,6 +55,7 @@ class PdfExtractor:
             "referencia": "",
             "consumo": "",
             "codigo_debito": "",
+            "origem": origem_pelo_nome(caminho_pdf),
             "texto": ""
         }
 

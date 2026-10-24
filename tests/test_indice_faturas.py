@@ -101,3 +101,35 @@ def test_le_o_modelo_enercb_do_alerta_de_vencimento(monkeypatch):
     assert (dados["emissao"], dados["referencia"]) == ("10/08/2026", "08/2026")
     # Sem o traço já é o "ID" do débito no extrato, que casa a baixa e a provisão feita à mão
     assert dados["codigo_debito"] == "00012345678"
+
+
+def test_origem_alerta_pelo_nome_do_anexo_e_do_pdf_guardado(monkeypatch):
+    from models.pdf_extractor import ORIGEM_ALERTA, origem_pelo_nome
+
+    assert origem_pelo_nome("temp_energisa_1a2b_EnerCB_200011105100_2026_8.PDF") == ORIGEM_ALERTA
+    assert origem_pelo_nome("faturas_energisa/200011105100_08_2026_alerta.pdf") == ORIGEM_ALERTA
+    assert origem_pelo_nome("ENERGISAMS-Fat-Matricula-0000457397-08-2026.pdf") == ""
+    _pdf_falso(monkeypatch, TEXTO_ENERCB)
+    assert PdfExtractor.extrair_dados_fatura("EnerCB_200011105100_2026_8.PDF")["origem"] == ORIGEM_ALERTA
+
+
+def test_pdf_do_alerta_e_guardado_com_sufixo_e_o_normal_nao(tmp_path, monkeypatch):
+    from controllers.fatura_energia_controller import FaturaEnergiaController
+
+    for nome, esperado in [("temp_x_EnerCB_200011105100_2026_8.PDF", "200011105100_08_2026_alerta.pdf"),
+                           ("temp_y_ENERGISAMS-Fat.pdf", "200011105100_08_2026.pdf")]:
+        origem = tmp_path / nome
+        origem.write_text("x")
+        _pdf_falso(monkeypatch, TEXTO_ENERCB)
+        dados = FaturaEnergiaController._extrair_e_organizar(str(origem), "", str(tmp_path), lambda *a: None)
+        assert dados is not None and dados["caminho_arquivo"].endswith(esperado)
+
+
+def test_origem_aparece_na_previa_das_provisoes_e_na_baixa():
+    from controllers.provisao_energia import _descricao
+
+    assert _descricao({"numero_fatura": "038111222", "uc": "2.000.111.051-00", "origem": "alerta de vencimento"}) \
+        == "fatura 038111222 · UC 2.000.111.051-00 · alerta de vencimento"
+    assert FaturaEnergia("038111222", "u", 1.0, "", "c", origem="alerta de vencimento").rotulo \
+        == "fatura 038111222 (alerta de vencimento)"
+    assert FaturaEnergia("017111222", "u", 1.0, "", "c").rotulo == "fatura 017111222"

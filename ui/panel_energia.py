@@ -101,6 +101,8 @@ class PanelEnergia(ctk.CTkFrame):
 
             valor = f"R$ {float(fat.get('valor') or 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             texto = f"UC {fat.get('uc', '')}  ·  Ref. {fat.get('referencia', '')}  ·  {valor}  ·  Venc. {fat.get('vencimento', '')}"
+            if fat.get("origem"):
+                texto += f"  ·  {fat['origem']}"
             ctk.CTkLabel(linha, text=texto, font=("Open Sans", 11), text_color="#333333", anchor="w").pack(side="left", padx=8, pady=4, fill="x", expand=True)
 
             ctk.CTkButton(

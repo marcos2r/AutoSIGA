@@ -73,7 +73,8 @@ def provisao_existente(fatura: dict[str, Any], provisoes: list[ProvisaoSiga]) ->
 
 def _descricao(fatura: dict[str, Any]) -> str:
     numero = fatura.get("numero_fatura") or "sem número"
-    return f"fatura {numero} · UC {fatura.get('uc', '')}"
+    origem = f" · {fatura['origem']}" if fatura.get("origem") else ""
+    return f"fatura {numero} · UC {fatura.get('uc', '')}{origem}"
 
 
 def decidir_provisoes(validas: list[dict[str, Any]], sem_localidade: list[dict[str, Any]],

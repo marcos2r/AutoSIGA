@@ -27,6 +27,12 @@ class FaturaEnergia:
     vencimento: str
     codigo_debito: str
     caminho: str = ""
+    origem: str = ""
+
+    @property
+    def rotulo(self) -> str:
+        """"fatura N", com a origem quando ela pede atenção (ex: alerta de vencimento)."""
+        return f"fatura {self.numero}" + (f" ({self.origem})" if self.origem else "")
 
 
 def pasta_faturas() -> str:
@@ -73,5 +79,6 @@ def montar_indice(pasta: str | None = None,
             vistos.add(numero)
             indice.setdefault(codigo, []).append(FaturaEnergia(
                 numero=numero, uc=str(dados.get("uc", "")).strip(), valor=valor,
-                vencimento=str(dados.get("vencimento", "")).strip(), codigo_debito=codigo, caminho=caminho))
+                vencimento=str(dados.get("vencimento", "")).strip(), codigo_debito=codigo, caminho=caminho,
+                origem=str(dados.get("origem", ""))))
     return indice

@@ -17,7 +17,7 @@ from controllers.periodo_energia import competencia_da_fatura, janela_de_busca, 
 from models.config_manager import ConfigManager
 from models.email_reader import EmailReader
 from models.faturas_pendentes import FaturasPendentes
-from models.pdf_extractor import PdfExtractor
+from models.pdf_extractor import SUFIXO_ALERTA, PdfExtractor
 
 
 class FaturaEnergiaController:
@@ -230,7 +230,9 @@ class FaturaEnergiaController:
             # Nome do arquivo: UC_REFERENCIA.pdf (Ex: 89000505136_07_2026.pdf)
             uc_limpa = "".join(c for c in dados_fat["uc"] if c.isdigit())
             ref_limpa = dados_fat["referencia"].replace("/", "_")
-            nome_final = f"{uc_limpa}_{ref_limpa}.pdf"
+            # O sufixo marca a fatura do "Alerta de Vencimento" (modelo EnerCB) na pasta
+            sufixo = SUFIXO_ALERTA if dados_fat.get("origem") else ""
+            nome_final = f"{uc_limpa}_{ref_limpa}{sufixo}.pdf"
             caminho_final = os.path.join(pasta_organizada, nome_final)
 
             # Trata colisão

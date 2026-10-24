@@ -215,7 +215,7 @@ def _decidir(debito: DebitoEnergia, indice: dict[str, list[FaturaEnergia]], prov
     if not mesmo_valor:
         if na_janela:
             f = na_janela[0]
-            return Decisao(debito, VALOR_DIFERENTE, f"fatura {f.numero} é de {moeda(f.valor)} e o débito de "
+            return Decisao(debito, VALOR_DIFERENTE, f"{f.rotulo} é de {moeda(f.valor)} e o débito de "
                                                     f"{moeda(debito.valor)}: possível multa ou juros", fatura=f)
         return Decisao(debito, SEM_FATURA, f"nenhuma fatura da UC {faturas[0].uc} vence perto de {debito.data}")
     if len(mesmo_valor) > 1:
@@ -224,19 +224,19 @@ def _decidir(debito: DebitoEnergia, indice: dict[str, list[FaturaEnergia]], prov
     fatura = mesmo_valor[0]
     da_fatura = [p for p in provisoes if _mesmo_numero(p.numero, fatura.numero)]
     if not da_fatura:
-        return Decisao(debito, SEM_PROVISAO, f"fatura {fatura.numero} não está lançada na Contas a Pagar", fatura=fatura)
+        return Decisao(debito, SEM_PROVISAO, f"{fatura.rotulo} não está lançada na Contas a Pagar", fatura=fatura)
 
     abertas = [p for p in da_fatura if p.status in (LANCADO, APROVADO) and abs(p.valor - debito.valor) <= TOLERANCIA
                and p.guid not in usadas]
     if len(abertas) == 1:
         usadas.add(abertas[0].guid)
-        return Decisao(debito, BAIXAR, f"fatura {fatura.numero} da UC {fatura.uc}", fatura, abertas[0])
+        return Decisao(debito, BAIXAR, f"{fatura.rotulo} da UC {fatura.uc}", fatura, abertas[0])
     if len(abertas) > 1:
         return Decisao(debito, EMPATE, f"fatura {fatura.numero} aparece {len(abertas)} vezes em aberto no SIGA",
                        fatura=fatura)
     paga = next((p for p in da_fatura if p.status == PAGO), None)
     if paga:
-        return Decisao(debito, JA_BAIXADA, f"fatura {fatura.numero} já está paga no SIGA", fatura, paga)
+        return Decisao(debito, JA_BAIXADA, f"{fatura.rotulo} já está paga no SIGA", fatura, paga)
     return Decisao(debito, VALOR_DIFERENTE, f"a provisão da fatura {fatura.numero} no SIGA tem outro valor",
                    fatura=fatura)
 

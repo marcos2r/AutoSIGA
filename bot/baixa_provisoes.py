@@ -110,21 +110,24 @@ _JS_LER_CABECALHO = '''() => ({
 
 # Só `value` + eventos não basta: o calendário volta o campo para a data de hoje (visto em
 # 24/10/2026, baixa gravada com a data errada). `datepicker('update')` fixa a data escolhida.
-# A página abre com o foco na data (calendário aberto); a máscara e o calendário reprocessam o
-# valor quando o campo perde o foco. Por isso o foco sai antes e depois de preencher.
-_JS_PREENCHER_DATA = '''(data) => {
+# A data é digitada, como uma pessoa faria: posto por código, o valor aparece no campo, mas a
+# máscara não o registra e o SIGA grava outra data (24/10 e 01/10 em 24/10/2026, com 22/10 na tela).
+_JS_FOCAR_DATA = '''() => {
     const campo = document.getElementById('f_datapagamento');
-    if (!campo) return '';
-    const $campo = window.jQuery ? window.jQuery(campo) : null;
-    if ($campo && $campo.datepicker) $campo.datepicker('hide');
-    campo.blur();
-    campo.value = data;
-    if ($campo && $campo.datepicker) $campo.datepicker('update', data);
-    if ($campo) $campo.trigger('change');
-    campo.blur();
-    if ($campo && $campo.datepicker) $campo.datepicker('hide');
-    return campo.value;
+    if (!campo) return false;
+    campo.focus();
+    campo.select();
+    return true;
 }'''
+
+_JS_AVISOS_ABERTOS = """() => Array.from(document.querySelectorAll('.bootbox.modal.in .bootbox-body'))
+    .map(e => e.innerText.trim())"""
+
+# Linhas de "Pagamentos Parciais" da parcela: [data, valor pago, ...]
+_JS_PAGAMENTOS_GRAVADOS = r'''() => Array.from(document.querySelectorAll('table'))
+    .filter(t => /Valor Pago/.test((t.tHead || t.rows[0] || {}).innerText || ''))
+    .flatMap(t => Array.from(t.querySelectorAll('tbody tr')).map(r => Array.from(r.cells).map(c => c.innerText.trim())))
+    .filter(c => /^\d{2}\/\d{2}\/\d{4}$/.test(c[0] || ''))'''
 
 _JS_LER_DATA = "() => (document.getElementById('f_datapagamento') || {}).value || ''"
 
@@ -334,12 +337,7 @@ class BaixaProvisoesMixin:
         tela = self._abrir_parcela(page, "TES01506", provisao)
         if valor_br(tela.get("apagar")) != round(valor, 2):
             raise BaixaNaoConferidaError(f"valor a pagar na tela é {tela.get('apagar')}")
-        if page.evaluate(_JS_PREENCHER_DATA, data) != data:
-            raise BaixaNaoConferidaError(f"a data de pagamento não ficou {data}")
-        time.sleep(1)  # validações da página (mês de trabalho, data de lançamento) rodam no change
-        data_na_tela = page.evaluate(_JS_LER_DATA)
-        if data_na_tela != data:
-            raise BaixaNaoConferidaError(f"a data de pagamento virou {data_na_tela!r} ao preencher")
+        self._digitar_data(page, data)
 
         page.locator('#btn-novo-pagamento').click()
         if not self._esperar_condicao(page, _JS_MODAL_PAGAMENTO_ABERTO, _ESPERA_MODAL_S):
@@ -373,6 +371,34 @@ class BaixaProvisoesMixin:
 
         page.locator(_SUBMIT_FORMULARIO).first.click()
         self._depois_de_gravar(page)
+        self._conferir_data_gravada(page, provisao, data, valor)
+
+    def _digitar_data(self, page, data):
+        """Digita a data de pagamento e confere que ela ficou, sem aviso do SIGA."""
+        if not page.evaluate(_JS_FOCAR_DATA):
+            raise BaixaNaoConferidaError("campo da data de pagamento não encontrado")
+        page.keyboard.press("Backspace")
+        page.keyboard.type(data.replace("/", ""), delay=50)
+        page.keyboard.press("Tab")
+        time.sleep(1)  # validações da página (mês de trabalho, data de lançamento) rodam no change
+        avisos = page.evaluate(_JS_AVISOS_ABERTOS) or []
+        if avisos:
+            raise BaixaNaoConferidaError(f"o SIGA avisou: {avisos[0]}")
+        data_na_tela = page.evaluate(_JS_LER_DATA)
+        if data_na_tela != data:
+            raise BaixaNaoConferidaError(f"a data de pagamento ficou {data_na_tela!r}, não {data}")
+
+    def _conferir_data_gravada(self, page, provisao, data, valor):
+        """Reabre a parcela e confere a data registrada em Pagamentos Parciais.
+
+        A tela pode mostrar uma data e o SIGA gravar outra; só a parcela gravada prova.
+        """
+        self._abrir_parcela(page, "TES01506", provisao)
+        gravados = page.evaluate(_JS_PAGAMENTOS_GRAVADOS) or []
+        if not any(linha[0] == data and len(linha) > 1 and valor_br(linha[1]) == round(valor, 2)
+                   for linha in gravados):
+            datas = ", ".join(linha[0] for linha in gravados) or "nenhuma"
+            raise BaixaNaoConferidaError(f"baixa gravada em {datas}, não em {data}: estorne no SIGA")
 
     def _conferir_status(self, page, resultados, periodo):
         """Relê a TES01501 e rebaixa para FALHOU o que não ficou Pago (ou Aprovado)."""

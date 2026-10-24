@@ -1,5 +1,7 @@
 """Aprovação e baixa das provisões de energia pelo bot, com página falsa (dados fictícios)."""
 
+from types import SimpleNamespace
+
 import pytest
 from bot_falso import PaginaGravadora, criar_bot
 
@@ -36,9 +38,14 @@ class PaginaBaixa(PaginaGravadora):
     """Responde aos scripts do mixin como as telas do SIGA; cada atributo muda uma resposta."""
 
     def __init__(self, documento="018000001", valor="224,25", apagar="224,25", pagamentos=None,
-                 restante="0,00", status_final=PAGO, mes_fechado=False, data_fixa=None, data_lida=None):
+                 restante="0,00", status_final=PAGO, mes_fechado=False, data_lida=None, avisos=(),
+                 gravados=None):
         super().__init__()
-        self.data_fixa, self.data_lida = data_fixa, data_lida  # o calendário do SIGA pode trocar a data
+        self.data_lida, self.avisos = data_lida, list(avisos)  # a máscara e o calendário podem trocar a data
+        self.gravados = gravados if gravados is not None else [["26/08/2026", "224,25", "0,00"]]
+        self.teclas = []
+        self.keyboard = SimpleNamespace(press=lambda tecla: self.teclas.append(tecla),
+                                        type=lambda texto, delay=0: self.teclas.append(texto))
         self.url = "https://siga.exemplo/TES/TES01501.aspx"
         self.cabecalho = {"documento": documento, "valor": valor, "apagar": apagar}
         self.pagamentos = pagamentos if pagamentos is not None else [["DÉBITO AUTOMÁTICO", "10123 - ...", "224,25", ""]]
@@ -55,8 +62,10 @@ class PaginaBaixa(PaginaGravadora):
         self.scripts.append(script)
         respostas = {
             bp._JS_LER_CABECALHO: lambda: self.cabecalho,
-            bp._JS_PREENCHER_DATA: lambda: arg if self.data_fixa is None else self.data_fixa,
+            bp._JS_FOCAR_DATA: lambda: True,
+            bp._JS_AVISOS_ABERTOS: lambda: self.avisos,
             bp._JS_LER_DATA: lambda: "26/08/2026" if self.data_lida is None else self.data_lida,
+            bp._JS_PAGAMENTOS_GRAVADOS: lambda: self.gravados,
             bp._JS_MODAL_PAGAMENTO_ABERTO: lambda: True,
             bp._JS_QTD_CONTAS: lambda: len(CONTAS) + 1,
             bp._JS_LER_CONTAS_TES: lambda: CONTAS,
@@ -103,7 +112,9 @@ def test_aprova_e_baixa_com_debito_automatico_na_conta_do_extrato(monkeypatch):
     resultados = _executar(bot, pagina, [_decisao()], "10123", PERIODO)
 
     assert [r.situacao for r in resultados] == [BAIXADA]
+    # Aprova, baixa e reabre a parcela para conferir a data gravada
     assert pagina.visitas == [f"https://siga.exemplo/TES/TES01508.aspx?codigo={GUID}",
+                              f"https://siga.exemplo/TES/TES01506.aspx?codigo={GUID}",
                               f"https://siga.exemplo/TES/TES01506.aspx?codigo={GUID}"]
     assert pagina.escolhas == [("f_codigoFormaPgto", "9"), ("f_conta", "901"), ("f_historicobaixa", "21")]
     assert reg.campos == [
@@ -122,7 +133,7 @@ def test_provisao_ja_aprovada_so_e_baixada(monkeypatch):
 
     _executar(bot, pagina, [_decisao(APROVADO)], "10123", PERIODO)
 
-    assert [u.split("/")[-1].split("?")[0] for u in pagina.visitas] == ["TES01506.aspx"]
+    assert [u.split("/")[-1].split("?")[0] for u in pagina.visitas] == ["TES01506.aspx", "TES01506.aspx"]
     assert reg.gravacoes == 1
 
 
@@ -357,8 +368,8 @@ def test_falha_ao_reler_o_status_nao_derruba_o_lote(monkeypatch):
 
 
 @pytest.mark.parametrize("pagina", [
-    PaginaBaixa(data_fixa="24/10/2026"),   # o calendário voltou para hoje ao preencher
-    PaginaBaixa(data_lida="24/10/2026"),   # ou trocou depois, antes do Confirmar
+    PaginaBaixa(data_lida="24/10/2026"),   # a máscara ou o calendário trocou a data
+    PaginaBaixa(avisos=["Data 26/08/2026 está fora da Competência 07/2026!Deseja continuar?"]),
 ])
 def test_data_de_pagamento_diferente_do_debito_nao_confirma(monkeypatch, pagina):
     bot, reg = _bot(monkeypatch)
@@ -366,7 +377,7 @@ def test_data_de_pagamento_diferente_do_debito_nao_confirma(monkeypatch, pagina)
     resultados = _executar(bot, pagina, [_decisao(APROVADO)], "10123", PERIODO)
 
     assert reg.gravacoes == 0
-    assert "data de pagamento" in resultados[0].detalhe
+    assert "data de pagamento" in resultados[0].detalhe or "SIGA avisou" in resultados[0].detalhe
 
 
 def test_modal_que_nao_abre_nao_baixa_e_conta_a_data_na_tela(monkeypatch):
@@ -382,3 +393,26 @@ def test_modal_que_nao_abre_nao_baixa_e_conta_a_data_na_tela(monkeypatch):
 
     assert reg.gravacoes == 0
     assert "Novo Pagamento não abriu" in resultados[0].detalhe and "26/08/2026" in resultados[0].detalhe
+
+
+def test_data_e_digitada_como_uma_pessoa(monkeypatch):
+    bot, _ = _bot(monkeypatch)
+    pagina = PaginaBaixa()
+
+    _executar(bot, pagina, [_decisao(APROVADO)], "10123", PERIODO)
+
+    assert pagina.teclas[:3] == ["Backspace", "26082026", "Tab"]
+
+
+@pytest.mark.parametrize("gravados", [
+    [["01/10/2026", "224,25", "0,00"]],    # o SIGA gravou o vencimento (visto em 24/10/2026)
+    [],                                    # nada em Pagamentos Parciais
+])
+def test_data_gravada_diferente_vira_pendencia_para_estornar(monkeypatch, gravados):
+    bot, reg = _bot(monkeypatch)
+    pagina = PaginaBaixa(gravados=gravados)
+
+    resultados = _executar(bot, pagina, [_decisao(APROVADO)], "10123", PERIODO)
+
+    assert reg.gravacoes == 1  # gravou, mas não é dada como baixada
+    assert resultados[0].situacao == FALHOU and "estorne no SIGA" in resultados[0].detalhe

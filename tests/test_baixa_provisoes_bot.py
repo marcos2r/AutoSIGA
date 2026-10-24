@@ -367,3 +367,18 @@ def test_data_de_pagamento_diferente_do_debito_nao_confirma(monkeypatch, pagina)
 
     assert reg.gravacoes == 0
     assert "data de pagamento" in resultados[0].detalhe
+
+
+def test_modal_que_nao_abre_nao_baixa_e_conta_a_data_na_tela(monkeypatch):
+    bot, reg = _bot(monkeypatch)
+    pagina = PaginaBaixa(status_final=APROVADO)
+    respostas = pagina.evaluate
+
+    def modal_fechado(script, arg=None):
+        return False if script == bp._JS_MODAL_PAGAMENTO_ABERTO else respostas(script, arg)
+    pagina.evaluate = modal_fechado
+
+    resultados = _executar(bot, pagina, [_decisao(APROVADO)], "10123", PERIODO)
+
+    assert reg.gravacoes == 0
+    assert "Novo Pagamento não abriu" in resultados[0].detalhe and "26/08/2026" in resultados[0].detalhe

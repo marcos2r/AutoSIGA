@@ -110,13 +110,19 @@ _JS_LER_CABECALHO = '''() => ({
 
 # Só `value` + eventos não basta: o calendário volta o campo para a data de hoje (visto em
 # 24/10/2026, baixa gravada com a data errada). `datepicker('update')` fixa a data escolhida.
+# A página abre com o foco na data (calendário aberto); a máscara e o calendário reprocessam o
+# valor quando o campo perde o foco. Por isso o foco sai antes e depois de preencher.
 _JS_PREENCHER_DATA = '''(data) => {
     const campo = document.getElementById('f_datapagamento');
     if (!campo) return '';
     const $campo = window.jQuery ? window.jQuery(campo) : null;
+    if ($campo && $campo.datepicker) $campo.datepicker('hide');
+    campo.blur();
     campo.value = data;
     if ($campo && $campo.datepicker) $campo.datepicker('update', data);
     if ($campo) $campo.trigger('change');
+    campo.blur();
+    if ($campo && $campo.datepicker) $campo.datepicker('hide');
     return campo.value;
 }'''
 
@@ -160,6 +166,7 @@ _JS_LER_PAGAMENTOS = '''() => ({
 
 _SUBMIT_FORMULARIO = 'form#f_main button[type="submit"].btn-success'
 _ESPERA_CONTAS_S = 10
+_ESPERA_MODAL_S = 5
 
 
 class GradeIncompletaError(Exception):
@@ -329,11 +336,15 @@ class BaixaProvisoesMixin:
             raise BaixaNaoConferidaError(f"valor a pagar na tela é {tela.get('apagar')}")
         if page.evaluate(_JS_PREENCHER_DATA, data) != data:
             raise BaixaNaoConferidaError(f"a data de pagamento não ficou {data}")
+        time.sleep(1)  # validações da página (mês de trabalho, data de lançamento) rodam no change
+        data_na_tela = page.evaluate(_JS_LER_DATA)
+        if data_na_tela != data:
+            raise BaixaNaoConferidaError(f"a data de pagamento virou {data_na_tela!r} ao preencher")
 
         page.locator('#btn-novo-pagamento').click()
-        time.sleep(1)
-        if not page.evaluate(_JS_MODAL_PAGAMENTO_ABERTO):
-            raise BaixaNaoConferidaError("o modal Novo Pagamento não abriu")
+        if not self._esperar_condicao(page, _JS_MODAL_PAGAMENTO_ABERTO, _ESPERA_MODAL_S):
+            raise BaixaNaoConferidaError("o modal Novo Pagamento não abriu "
+                                         f"(data na tela: {page.evaluate(_JS_LER_DATA)!r})")
         self._escolher(page, "f_codigoFormaPgto", FORMA_DEBITO_AUTOMATICO, "forma de pagamento")
         self._esperar_contas(page)
         conta = escolher_opcao_conta(page.evaluate(_JS_LER_CONTAS_TES) or [], conta_codigo)
@@ -406,6 +417,15 @@ class BaixaProvisoesMixin:
         if not page.evaluate(_JS_ESCOLHER, [campo, valor]):
             raise BaixaNaoConferidaError(f"{nome} {valor} não disponível")
         time.sleep(0.5)
+
+    @staticmethod
+    def _esperar_condicao(page, script, segundos):
+        """Repete o script até ele devolver verdadeiro ou o tempo acabar (espera por condição)."""
+        for _ in range(int(segundos * 2)):
+            if page.evaluate(script):
+                return True
+            time.sleep(0.5)
+        return False
 
     def _esperar_contas(self, page):
         """As contas da baixa só carregam depois de escolher a forma de pagamento."""

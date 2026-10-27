@@ -118,6 +118,7 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
     monkeypatch.setattr(bot, "_iniciar_navegador", lambda p: (SimpleNamespace(pages=[]), pagina))
     monkeypatch.setattr(bot, "_validar_sessao", lambda page: None)
     monkeypatch.setattr(bot, "_verificar_sessao_ativa", lambda page: None)
+    monkeypatch.setattr(bot, "esperar_loading", lambda page: None)
     monkeypatch.setattr(bot, "update_status", lambda msg, color=None: reg.status.append(msg))
     # Provisões de energia (e-mail) têm testes próprios; aqui nunca tocam o e-mail real
     monkeypatch.setattr(bot, "_etapa_provisoes_energia", lambda page: None)
@@ -392,3 +393,19 @@ def test_mes_fechado_nas_baixas_pula_a_conciliacao(monkeypatch):
 
     assert reg.lancamentos == []
     assert [r.situacao for r in reg.telemetria["extratos"]] == ["mes_fechado"]
+
+
+def test_tes01701_espera_o_carregamento_antes_de_clicar(monkeypatch):
+    # Logo após a troca de localidade o blockUI cobre a tela e o clique forçado caía nele
+    monkeypatch.setattr(importlib.import_module("bot.fluxo_extratos"), "time", SimpleNamespace(sleep=lambda s: None))
+    pagina = PaginaTesouraria({})
+    bot = SigaBot([], callbacks={})
+    monkeypatch.setattr(bot, "update_status", lambda msg, color=None: None)
+    monkeypatch.setattr(bot, "esperar_loading", lambda page: page.acoes.append(("loading",)))
+    monkeypatch.setattr(bot, "_selecionar_conta", lambda page, conta: False)
+
+    assert bot._abrir_consulta_tes01701(pagina, "10130", "01/05/2026", "31/05/2026") is None
+
+    ordem = [a for a in pagina.acoes if a == ("loading",) or a[:2] == ("click", "#btn_executar_programa")
+             or a == ("click", "#btn-filtro")]
+    assert ordem == [("loading",), ("click", "#btn_executar_programa"), ("loading",), ("click", "#btn-filtro")]

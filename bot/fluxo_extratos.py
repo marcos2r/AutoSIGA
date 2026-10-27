@@ -318,6 +318,9 @@ class FluxoExtratosMixin:
                 traz linhas de fora dele.
         """
         self.update_status("Acessando rotina TES01701...", "#428BCA")
+        # Logo depois da troca de localidade o blockUI ainda cobre a tela; o clique forçado
+        # caía no overlay, a rotina não abria e o lote parava sem achar o #btn-filtro.
+        self.esperar_loading(page)
         input_programa = page.locator('#f_executar_programa')
         input_programa.wait_for(state="visible", timeout=10000)
         input_programa.fill("TES01701")
@@ -327,6 +330,7 @@ class FluxoExtratosMixin:
         page.locator('#btn_executar_programa').click(force=True)
         page.wait_for_load_state("domcontentloaded")
         time.sleep(2)
+        self.esperar_loading(page)
 
         self.update_status("Abrindo menu do Extrato...", "#428BCA")
         btn_extrato = page.locator('#btn-filtro')

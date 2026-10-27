@@ -9,10 +9,12 @@ que as marca como lidas) ou todas as de um período (provisões do lote de extra
 import base64
 import logging
 import os
+import time
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -26,6 +28,10 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 # O Gmail limita as leituras por minuto de cada usuário (403 rateLimitExceeded, 429). A biblioteca
 # tenta de novo com espera crescente, que com 7 tentativas cobre a virada do minuto da cota.
 _TENTATIVAS_API = 7
+
+# Renovação do token: uma queda de conexão passageira não deve pedir nova autorização.
+_TENTATIVAS_RENOVAR = 3
+_ESPERA_RENOVAR = 2.0
 
 def mensagem_de_erro(erro: Exception) -> str:
     """Frase curta para o usuário sobre uma falha do Gmail, sem URL nem detalhe técnico (que vão para o log)."""
@@ -74,8 +80,8 @@ class EmailReader:
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 try:
-                    creds.refresh(Request())
-                except Exception as e:
+                    EmailReader._renovar(creds)
+                except RefreshError as e:
                     logging.warning(f"Não foi possível fazer refresh no token: {e}. Solicitando novo login...")
                     creds = None
 
@@ -95,6 +101,29 @@ class EmailReader:
                 token.write(creds.to_json())
 
         return creds
+
+    @staticmethod
+    def _renovar(creds: Credentials) -> None:
+        """Renova o token, repetindo quando a falha é de rede.
+
+        Só a recusa do Google (`RefreshError`, ex.: acesso revogado) pede uma nova conexão.
+        Uma queda de conexão no meio da renovação não invalida o token; tratá-la como
+        "autorização expirada" mandava o usuário reconectar o e-mail sem necessidade.
+
+        Raises:
+            RefreshError: O Google recusou o token.
+            ConnectionError: A rede falhou em todas as tentativas.
+        """
+        for tentativa in range(1, _TENTATIVAS_RENOVAR + 1):
+            try:
+                creds.refresh(Request())
+                return
+            except TransportError as e:
+                logging.warning(f"Falha de rede ao renovar o token ({tentativa}/{_TENTATIVAS_RENOVAR}): {e}")
+                if tentativa < _TENTATIVAS_RENOVAR:
+                    time.sleep(_ESPERA_RENOVAR)
+        raise ConnectionError("não consegui falar com o Google para renovar a autorização do e-mail; "
+                              "confira a internet e rode de novo")
 
     @staticmethod
     def _servico(service: Any = None, interativo: bool = True) -> Any:

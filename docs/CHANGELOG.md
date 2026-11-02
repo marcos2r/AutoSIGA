@@ -2,6 +2,12 @@
 
 Histórico das versões, da mais recente para a mais antiga. A versão atual é definida em `version.py`.
 
+## Próxima versão
+
+- **Contas Correntes Antes das Aplicações**: O lote processa primeiro todas as contas correntes e só depois as aplicações. A aplicação e o resgate entram no SIGA pela transferência lançada na conta corrente (às vezes de outra localidade); antes, a prova real da aplicação rodava antes dessa transferência e apontava como faltando movimentos que o robô lançava minutos depois.
+- **E-mail em Paralelo**: As faturas de energia são baixadas do Gmail numa thread desde o início do lote, enquanto o navegador abre, o login é feito e os primeiros extratos são conciliados. As provisões esperam o download só no primeiro extrato com débito de energia, ou no fim do lote se nenhum tiver.
+- **Saldo de Enfeite no OFX**: Quando o OFX traz saldo 0,00 ou 1,00 (há banco que preenche assim em vez do saldo real), a prova real fica "Não conferido: o extrato não traz o saldo", em vez de acusar uma diferença que não existe.
+
 ## v1.11.0
 
 - **Lote Autônomo**: O robô roda o lote de extratos do começo ao fim sem parar para perguntar. Ele grava sozinho os lançamentos, rendimentos, provisões e baixas de energia que passaram nas conferências do SIGA, e tudo o que for duvidoso vira pendência no painel final, como antes. Ninguém precisa acompanhar a tela.

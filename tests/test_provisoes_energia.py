@@ -190,3 +190,41 @@ def test_falha_no_email_antes_do_navegador_vai_para_o_painel(monkeypatch):
 
     assert bot._etapa_provisoes_energia(None) == [("alerta", "⚡ falha ao ler o e-mail")]
     assert reg.lancadas == []
+
+
+def test_busca_do_email_em_thread_e_usada_pela_etapa(monkeypatch):
+    bot, reg = _bot_etapa(monkeypatch)
+
+    bot._iniciar_busca_energia()
+    linhas = bot._etapa_provisoes_energia(None)
+
+    assert reg.buscas == [["09/2026", "10/2026"]]  # uma busca só, a da thread
+    assert reg.lancadas == [["F1"]]
+    assert linhas[0][0] == "ok" and bot._thread_energia is None
+
+
+def test_falha_inesperada_na_thread_do_email_vai_para_o_painel(monkeypatch):
+    bot, reg = _bot_etapa(monkeypatch)
+
+    def quebra():
+        raise RuntimeError("sem rede")
+
+    monkeypatch.setattr(bot, "_buscar_faturas_do_periodo", quebra)
+    bot._iniciar_busca_energia()
+
+    assert bot._etapa_provisoes_energia(None) == [("alerta", "⚡ Provisões de energia não verificadas: sem rede")]
+    assert reg.lancadas == []
+
+
+@pytest.mark.parametrize("tipo, baixar, esperado", [
+    ("CORRENTE", True, True), ("APLICACAO", True, False), ("CORRENTE", False, False)])
+def test_so_extrato_de_conta_corrente_com_debito_de_energia_precisa_das_provisoes(monkeypatch, tipo, baixar,
+                                                                                   esperado):
+    bot, _ = _bot_etapa(monkeypatch)
+    bot.baixar_energia = baixar
+    debito = {"data": "26/08/2026", "valor": -224.25,
+              "descricao": "DEBITO CONVENIOS-ENERGI 70 ID 00012345678 ENERGISA MS"}
+
+    assert bot._precisa_das_provisoes({"tipo_extrato": tipo, "transacoes": [debito]}) is esperado
+    assert bot._precisa_das_provisoes({"tipo_extrato": "CORRENTE", "transacoes": []}) is False
+

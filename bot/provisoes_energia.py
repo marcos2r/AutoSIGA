@@ -5,12 +5,16 @@ Pelo regime de competência, toda fatura emitida no mês é provisionada, debita
 Com o e-mail conectado, o robô baixa as faturas do período do lote, confere na Contas a
 Pagar (TES01501) o que já existe, mostra a prévia e lança o resto pela TES01502. Assim a
 baixa de cada extrato já encontra a provisão. Sem e-mail, a etapa é pulada com aviso.
+
+O download do e-mail roda numa thread à parte desde o início do lote; a provisão espera por
+ele só no primeiro extrato com débito de energia (ou no fim do lote, se nenhum tiver).
 """
 
 import logging
 import threading
 from datetime import timedelta
 
+from controllers.baixa_energia import ler_debitos
 from controllers.fatura_energia_controller import FaturaEnergiaController, relacionar_localidades
 from controllers.periodo_energia import janela_de_busca, meses_do_lote
 from controllers.provisao_energia import (
@@ -32,9 +36,34 @@ _DIAS_DE_VENCIMENTO = 60
 class ProvisoesEnergiaMixin:
     """Etapa de provisões de energia no início do lote de extratos."""
 
+    def _iniciar_busca_energia(self):
+        """Dispara o download das faturas do e-mail numa thread, sem segurar o navegador."""
+        def buscar():
+            try:
+                self._busca_energia = self._buscar_faturas_do_periodo()
+            except Exception as erro:  # a thread não pode morrer calada: a falha vai para o painel
+                logging.exception("Falha inesperada na busca das faturas de energia.")
+                self._busca_energia = {"linhas": [("alerta", f"⚡ Provisões de energia não verificadas: {erro}")]}
+
+        self._thread_energia = threading.Thread(target=buscar, name="busca-energia", daemon=True)
+        self._thread_energia.start()
+
+    def _precisa_das_provisoes(self, dados):
+        """True se o extrato tem débito de energia a baixar, que precisa da provisão já lançada."""
+        if not self.baixar_energia or dados.get("tipo_extrato") == "APLICACAO":
+            return False
+        return bool(ler_debitos(dados.get("transacoes", []))[0])
+
+    def _provisionar_energia(self, page, telemetria_lote):
+        """Roda a etapa de provisões uma vez no lote; a falha vai para o painel, sem parar o lote."""
+        try:
+            telemetria_lote["provisoes_energia"] = self._etapa_provisoes_energia(page)
+        except Exception as erro:
+            logging.exception("Falha na etapa de provisões de energia.")
+            telemetria_lote["provisoes_energia"] = [("alerta", f"⚡ Provisões de energia interrompidas: {erro}")]
+
     def _buscar_faturas_do_periodo(self):
-        """Baixa do e-mail as faturas dos meses do lote. Roda antes de abrir o navegador, para o
-        usuário ver o progresso em vez de uma tela do SIGA parada.
+        """Baixa do e-mail as faturas dos meses do lote (na thread de `_iniciar_busca_energia`).
 
         Returns:
             dict | None: {"meses", "faturas": (validas, sem_localidade, sem_emissao)}; {"linhas"}
@@ -90,14 +119,21 @@ class ProvisoesEnergiaMixin:
     def _etapa_provisoes_energia(self, page):
         """Provisiona as faturas de energia emitidas nos meses do lote.
 
-        Usa as faturas já baixadas em `self._busca_energia` (antes de abrir o navegador) ou
-        busca agora, se ninguém buscou.
+        Espera a thread do e-mail, se ainda estiver baixando, e usa o que ela deixou em
+        `self._busca_energia`; sem thread, busca agora.
 
         Returns:
             list[tuple[str, str]] | None: Linhas (nível, texto) para o painel; None se a
             etapa não rodou (e-mail não conectado ou lote sem período).
         """
-        busca = self._busca_energia if self._busca_energia is not None else self._buscar_faturas_do_periodo()
+        if self._thread_energia is not None:
+            if self._thread_energia.is_alive():
+                self.update_status("Aguardando o download das faturas de energia do e-mail...", "#428BCA")
+            self._thread_energia.join()
+            self._thread_energia = None
+            busca = self._busca_energia
+        else:
+            busca = self._busca_energia if self._busca_energia is not None else self._buscar_faturas_do_periodo()
         self._busca_energia = None
         if busca is None or "linhas" in busca:
             return busca and busca["linhas"]

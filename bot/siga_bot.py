@@ -56,11 +56,13 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
                 grava sozinho o que passou nas conferências do SIGA, e o resto vira pendência no painel.
             baixar_energia (bool): Aprova e baixa as faturas de energia debitadas nos extratos.
         """
-        # Ordena o lote por localidade_selecionada para agrupar os lançamentos da mesma filial,
-        # minimizando as trocas de localidade no portal SIGA.
+        # Contas correntes antes das aplicações: a aplicação e o resgate entram no SIGA pela
+        # transferência da conta corrente (às vezes de outra localidade), e só depois disso a
+        # prova real da aplicação bate. Dentro de cada grupo, por localidade, para trocar menos.
         self.lote_processados = sorted(
             lote_processados,
-            key=lambda x: f"{x.get('tipo_adm', '').strip().upper()} - {x.get('nome_adm', '').strip().upper()}"
+            key=lambda x: (x.get("tipo_extrato") == "APLICACAO",
+                           f"{x.get('tipo_adm', '').strip().upper()} - {x.get('nome_adm', '').strip().upper()}")
         )
         self.callbacks = callbacks
         self.tipo_lote = tipo_lote
@@ -75,8 +77,9 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
         self._autorizado = False
         self.faturas_energia_sucesso = []
         self.motivos_energia = {}
-        # Faturas de energia baixadas do e-mail antes de abrir o navegador (lote de extratos)
+        # Faturas de energia baixadas do e-mail numa thread à parte, enquanto o navegador abre
         self._busca_energia = None
+        self._thread_energia = None
         # (localidade, mm/aaaa) que o SIGA recusou nesta execução. Fica só em memória:
         # numa nova execução o mês pode ter sido reaberto, então tenta de novo.
         self.competencias_fechadas = set()
@@ -192,8 +195,8 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
 
         try:
             if self.tipo_lote == "extrato":
-                # O e-mail vem antes do navegador: o usuário acompanha o download no status
-                self._busca_energia = self._buscar_faturas_do_periodo()
+                # O e-mail baixa em paralelo ao login e aos primeiros extratos (só API, sem navegador)
+                self._iniciar_busca_energia()
             with sync_playwright() as p:
                 # O Edge é à parte: ao sair deste bloco o robô só se desconecta e o Edge fica aberto
                 _, page = self._iniciar_navegador(p)

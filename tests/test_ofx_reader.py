@@ -111,3 +111,15 @@ def test_parse_ofx_sem_ledgerbal_deixa_saldo_none(tmp_path):
     assert dados["saldo_atual"] is None
     assert dados["data_saldo"] is None
     assert len(dados["transacoes"]) == 3
+
+
+@pytest.mark.parametrize("enfeite", ["1.00", "1", "0.00"])
+def test_parse_ofx_saldo_de_enfeite_fica_none(tmp_path, enfeite):
+    # 0,00 e 1,00 no BALAMT são enfeite do banco, não saldo: a prova real fica "não conferido"
+    arquivo = tmp_path / "enfeite.ofx"
+    arquivo.write_bytes(OFX_SICOOB.replace("<BALAMT>530.00", f"<BALAMT>{enfeite}").encode("cp1252"))
+
+    dados = OfxReader.parse_file(str(arquivo))
+
+    assert dados["saldo_atual"] is None
+    assert dados["data_saldo"] is None

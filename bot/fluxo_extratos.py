@@ -80,20 +80,22 @@ class FluxoExtratosMixin:
         """Processa todos os extratos do lote e mostra o status final."""
         contexto = {"localidade": None, "competencia": None}
 
-        # Com o e-mail conectado, provisiona as faturas de energia do período antes dos extratos
-        try:
-            telemetria_lote["provisoes_energia"] = self._etapa_provisoes_energia(page)
-        except Exception as erro:
-            logging.exception("Falha na etapa de provisões de energia.")
-            telemetria_lote["provisoes_energia"] = [("alerta", f"⚡ Provisões de energia interrompidas: {erro}")]
-
+        # As provisões de energia esperam o e-mail só quando o primeiro débito de energia precisa delas
+        provisionado = False
         for idx, dados in enumerate(self.lote_processados):
             if not self.browser_aberto:
                 break
             self._verificar_sessao_ativa(page)
+            if not provisionado and self._precisa_das_provisoes(dados):
+                self._provisionar_energia(page, telemetria_lote)
+                provisionado = True
             if self._processar_extrato(page, dados, idx, telemetria_lote, contexto):
                 self._atualizar_progresso(idx)
                 time.sleep(2)
+
+        # Regime de competência: provisiona o período mesmo sem nenhum débito de energia no lote
+        if not provisionado and self.browser_aberto:
+            self._provisionar_energia(page, telemetria_lote)
 
         if self.competencias_fechadas:
             fechadas = ", ".join(f"{loc} {mes}" for loc, mes in sorted(self.competencias_fechadas))

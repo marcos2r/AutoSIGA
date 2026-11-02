@@ -94,7 +94,7 @@ def _extrato(tipo_adm, conta, transacoes, aplicacao=False):
 
 
 def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False, opcoes=None, saldos=None,
-          revisar=False, responder=None, etapa_baixas=None, grava=True, periodo_ignorado=None):
+          revisar=False, responder=None, etapa_baixas=None, grava=True, periodo_ignorado=None, precisa=None):
     """Roda `fluxo_automacao` inteiro sem navegador e devolve o que aconteceu."""
     sem_espera = SimpleNamespace(sleep=lambda s: None, time=lambda: 0.0)
     monkeypatch.setattr(siga_bot, "time", sem_espera)
@@ -105,7 +105,7 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
     pagina = PaginaTesouraria(grades, opcoes, saldos)
     pagina.periodo_ignorado = periodo_ignorado
     reg = SimpleNamespace(trocas=[], lancamentos=[], rendimentos=[], status=[], telemetria=None)
-    reg.previas = []
+    reg.previas, reg.provisoes = [], []
     callbacks = {"show_dashboard": lambda tel, t: setattr(reg, "telemetria", tel)}
     bot = SigaBot(lote, callbacks=callbacks, revisar_antes_de_gravar=revisar)
     if responder:
@@ -121,8 +121,12 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
     monkeypatch.setattr(bot, "esperar_loading", lambda page: None)
     monkeypatch.setattr(bot, "update_status", lambda msg, color=None: reg.status.append(msg))
     # Provisões de energia (e-mail) têm testes próprios; aqui nunca tocam o e-mail real
-    monkeypatch.setattr(bot, "_etapa_provisoes_energia", lambda page: None)
+    # reg.provisoes guarda quantas contas já tinham sido consultadas quando a etapa rodou
+    monkeypatch.setattr(bot, "_etapa_provisoes_energia",
+                        lambda page: reg.provisoes.append(sum(a[0] == "conta" for a in pagina.acoes)))
     monkeypatch.setattr(bot, "_buscar_faturas_do_periodo", lambda: None)
+    if precisa:
+        monkeypatch.setattr(bot, "_precisa_das_provisoes", precisa)
     if etapa_baixas:
         monkeypatch.setattr(bot, "_etapa_baixas_energia", lambda page, dados, conta: etapa_baixas)
 
@@ -168,11 +172,11 @@ def _grades_padrao():
 def test_lanca_so_o_que_falta_e_troca_localidade_so_quando_muda(monkeypatch):
     reg = _rodar(monkeypatch, _lote_padrao(), _grades_padrao())
 
-    # Lote ordenado por localidade: DR (dois extratos, uma troca) e depois PIA
-    assert reg.trocas == [("DR", "CENTRAL", "05/2026"), ("PIA", "CENTRAL", "05/2026")]
+    # Contas correntes primeiro (DR e PIA, por localidade) e a aplicação de DR por último
+    assert reg.trocas == [("DR", "CENTRAL", "05/2026"), ("PIA", "CENTRAL", "05/2026"), ("DR", "CENTRAL", "05/2026")]
     # Cada extrato com lançamento é consultado de novo (conta e período refeitos) na conferência
     assert reg.pagina.programas() == ["TES01701"] * 5
-    assert [a[1] for a in reg.pagina.acoes if a[0] == "conta"] == ["10130", "10130", "10396", "10396", "10127"]
+    assert [a[1] for a in reg.pagina.acoes if a[0] == "conta"] == ["10130", "10130", "10127", "10396", "10396"]
     # PIX não é investimento; a aplicação já estava no SIGA
     assert reg.lancamentos == [[RESG]]
     assert reg.rendimentos == [[REND]]
@@ -409,3 +413,19 @@ def test_tes01701_espera_o_carregamento_antes_de_clicar(monkeypatch):
     ordem = [a for a in pagina.acoes if a == ("loading",) or a[:2] == ("click", "#btn_executar_programa")
              or a == ("click", "#btn-filtro")]
     assert ordem == [("loading",), ("click", "#btn_executar_programa"), ("loading",), ("click", "#btn-filtro")]
+
+
+def test_sem_debito_de_energia_as_provisoes_rodam_no_fim_do_lote(monkeypatch):
+    reg = _rodar(monkeypatch, _lote_padrao(), _grades_padrao())
+
+    # Regime de competência: provisiona mesmo sem débito, depois das 5 consultas de conta
+    assert reg.provisoes == [5]
+
+
+def test_provisoes_esperam_so_o_primeiro_extrato_com_debito_de_energia(monkeypatch):
+    reg = _rodar(monkeypatch, _lote_padrao(), _grades_padrao(),
+                 precisa=lambda dados: dados["conta_siga_corrente"] == "10127")
+
+    # 10130 (consulta e conferência) vem antes; a etapa roda uma vez, antes de consultar a 10127
+    assert reg.provisoes == [2]
+

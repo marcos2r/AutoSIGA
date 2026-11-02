@@ -10,6 +10,9 @@ from typing import Any
 
 from ofxparse import OfxParser
 
+# Saldos que o banco põe no OFX quando não informa o saldo real: tratados como ausentes
+_SALDOS_DE_ENFEITE = (0.0, 1.0)
+
 
 class OfxReader:
     """
@@ -35,7 +38,7 @@ class OfxReader:
                       "banco": str,
                       "conta_id": str,
                       "moeda": str,
-                      "saldo_atual": float ou None (LEDGERBAL/BALAMT),
+                      "saldo_atual": float ou None (LEDGERBAL/BALAMT; None também com 0,00 ou 1,00),
                       "data_saldo": str (DD/MM/YYYY) ou None (LEDGERBAL/DTASOF),
                       "data_inicial": str (DD/MM/YYYY),
                       "data_final": str (DD/MM/YYYY),
@@ -75,6 +78,10 @@ class OfxReader:
         # por saldo é dispensada, em vez de comparar com um zero que o banco não informou.
         saldo = getattr(extrato, 'balance', None)
         data_saldo = getattr(extrato, 'balance_date', None)
+        # Há banco que preenche o BALAMT com um valor de enfeite (0,00 ou 1,00) em vez do saldo
+        # real; comparar com ele acusaria na prova real uma diferença que não existe.
+        if saldo is not None and float(saldo) in _SALDOS_DE_ENFEITE:
+            saldo = None
 
         # Consolida os cabeçalhos (metadados gerais da conta) em um dicionário simples
         dados_ofx: dict[str, Any] = {

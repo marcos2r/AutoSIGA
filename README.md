@@ -1,11 +1,18 @@
-# AutoSIGA v1.11.0 🚀
+# AutoSIGA v1.12.0 🚀
 
 **AutoSIGA** é um motor avançado de RPA (Robotic Process Automation) construído em Python, voltado para a automatização e conciliação de tesourarias baseadas nas regras IT.TES.05. Ele cruza digitalmente extratos bancários brutos (`.OFX`) com o painel contábil administrativo SIGA (Sistema de Informação e Gestão), injetando dados, poupando centenas de horas humanas e reduzindo a taxa de erros a zero.
 
 ## 🎯 Por que o AutoSIGA existe?
 A conciliação bancária entre múltiplas jurisdições (como a de Administração/Conta Corrente e de Ponto de Pregação/Fundo de Aplicação) no SIGA era uma tarefa manual, exaustiva e suscetível à desorganização humana. O AutoSIGA atua como um robô que enxerga o sistema exatamente como você.
 
-## ✨ Destaques da Versão v1.11.0
+## ✨ Destaques da Versão v1.12.0
+
+- **Contas Correntes Antes das Aplicações**: O lote processa primeiro todas as contas correntes e só depois as aplicações. A aplicação e o resgate entram no SIGA pela transferência lançada na conta corrente (às vezes de outra localidade); antes, a prova real da aplicação rodava antes dessa transferência e apontava como faltando movimentos que o robô lançava minutos depois.
+- **E-mail em Paralelo**: As faturas de energia são baixadas do Gmail numa thread desde o início do lote, enquanto o navegador abre, o login é feito e os primeiros extratos são conciliados. As provisões esperam o download só no primeiro extrato com débito de energia, ou no fim do lote se nenhum tiver.
+- **Boletos e PIX Baixados pelo Extrato**: Além da energia, o robô baixa na Contas a Pagar as provisões pagas por boleto ou PIX, antes de conciliar o extrato. Ele casa o valor, o nome do fornecedor e o vencimento mais próximo, olhando também as provisões já pagas para não baixar a parcela do mês seguinte de mesmo valor. Aprova o que estiver Lançado e baixa pela Baixa em Lote Agrupada (TES01519), com a data do pagamento, Pgto. Eletrônico para boleto ou PIX, a conta do extrato e o histórico 021 - NF. Um pagamento que quita várias provisões do mesmo fornecedor e vencimento vai numa baixa só. Empate, beneficiário intermediário (cartão de compra, fundo de recebíveis), juros e pagamento sem provisão viram pendência no painel, e a nova aba "Baixas de Boletos e PIX" do Excel mostra cada um. A opção passou a se chamar **Baixar as provisões pagas no extrato (energia, boletos e PIX)**.
+- **Saldo de Enfeite no OFX**: Quando o OFX traz saldo 0,00 ou 1,00 (há banco que preenche assim em vez do saldo real), a prova real fica "Não conferido: o extrato não traz o saldo", em vez de acusar uma diferença que não existe.
+
+### Novidades da v1.11.0
 
 - **Lote Autônomo**: O robô roda o lote de extratos do começo ao fim sem parar para perguntar. Ele grava sozinho os lançamentos, rendimentos, provisões e baixas de energia que passaram nas conferências do SIGA, e tudo o que for duvidoso vira pendência no painel final, como antes. Ninguém precisa acompanhar a tela.
 - **Uma Caixa para Revisar**: A caixa **Revisar antes de gravar no SIGA** (desligada por padrão) substitui a prévia fixa dos lançamentos e a caixa **Revisar as provisões e baixas de energia antes de gravar**. Ligada, o robô volta a mostrar a prévia de cada extrato, das provisões e das baixas e só grava com autorização. Útil na primeira execução numa máquina nova.

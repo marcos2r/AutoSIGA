@@ -2,7 +2,7 @@
 
 Histórico das versões, da mais recente para a mais antiga. A versão atual é definida em `version.py`.
 
-## Próxima versão
+## v1.12.0
 
 - **Contas Correntes Antes das Aplicações**: O lote processa primeiro todas as contas correntes e só depois as aplicações. A aplicação e o resgate entram no SIGA pela transferência lançada na conta corrente (às vezes de outra localidade); antes, a prova real da aplicação rodava antes dessa transferência e apontava como faltando movimentos que o robô lançava minutos depois.
 - **E-mail em Paralelo**: As faturas de energia são baixadas do Gmail numa thread desde o início do lote, enquanto o navegador abre, o login é feito e os primeiros extratos são conciliados. As provisões esperam o download só no primeiro extrato com débito de energia, ou no fim do lote se nenhum tiver.

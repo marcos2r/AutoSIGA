@@ -11,6 +11,7 @@ data gravada em cada parcela e o status relido na TES01501.
 
 import logging
 import re
+import time
 
 from bot.baixa_provisoes import _JS_AVISOS_ABERTOS, _JS_LER_DATA, BaixaNaoConferidaError
 from bot.descoberta_contas import _JS_LER_CONTAS_TES
@@ -74,6 +75,17 @@ _JS_FECHAR_SELECT2 = '''() => {
     }
     const mask = document.getElementById('select2-drop-mask');
     return !(mask && getComputedStyle(mask).display !== 'none');
+}'''
+
+# Na TES01519 o campo da data deixa em branco algumas datas digitadas em campo vazio (05/10 e
+# 20/10 somem; 26/10 fica), sem aviso. Pôr o valor e disparar o change roda a mesma validação
+# do SIGA (Siga.UTIL.ValidaData), e a data gravada é conferida depois em cada parcela.
+_JS_DEFINIR_DATA = '''(data) => {
+    const campo = document.querySelector('.modal.in #f_datapagamento');
+    if (!campo || !window.jQuery) return false;
+    jQuery(campo).val(data).trigger('change');
+    try { jQuery(campo).datepicker('hide'); } catch (e) {}
+    return true;
 }'''
 
 _SUBMIT_LOTE = '.modal.in form button[type="submit"].btn-success'
@@ -191,7 +203,7 @@ class BaixaContasPagarMixin:
             raise BaixaNaoConferidaError(f"a baixa em lote não abriu{': ' + avisos[0] if avisos else ''}")
         self._conferir_lote(page, guids, pg.valor)
 
-        self._digitar_data(page, pg.data)
+        self._preencher_data_lote(page, pg.data)
         self._escolher(page, "f_formapagamento", FORMAS[pg.tipo], "forma de pagamento")
         self._esperar_contas(page)
         conta = escolher_opcao_conta(page.evaluate(_JS_LER_CONTAS_TES) or [], conta_codigo)
@@ -216,6 +228,23 @@ class BaixaContasPagarMixin:
         self._depois_de_gravar(page)
         for parcela in decisao.parcelas:
             self._conferir_data_gravada(page, parcela, pg.data, parcela.valor)
+
+    def _preencher_data_lote(self, page, data):
+        """Digita a data de pagamento; se a TES01519 deixar o campo vazio, põe o valor pelo jQuery."""
+        try:
+            self._digitar_data(page, data)
+            return
+        except BaixaNaoConferidaError:
+            if page.evaluate(_JS_AVISOS_ABERTOS) or page.evaluate(_JS_LER_DATA):
+                raise  # aviso do SIGA ou outra data na tela: não é o campo que ficou vazio
+        if not page.evaluate(_JS_DEFINIR_DATA, data):
+            raise BaixaNaoConferidaError("campo da data de pagamento não encontrado")
+        time.sleep(1)  # a validação do SIGA roda no change
+        avisos = page.evaluate(_JS_AVISOS_ABERTOS) or []
+        if avisos:
+            raise BaixaNaoConferidaError(f"o SIGA avisou: {avisos[0]}")
+        if page.evaluate(_JS_LER_DATA) != data:
+            raise BaixaNaoConferidaError(f"a data de pagamento ficou {page.evaluate(_JS_LER_DATA)!r}, não {data}")
 
     @staticmethod
     def _conferir_lote(page, guids, valor):

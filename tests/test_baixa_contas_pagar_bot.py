@@ -1,5 +1,6 @@
 """Aprovação e baixa em lote dos boletos e PIX pelo bot, com página falsa (dados fictícios)."""
 
+import pytest
 from bot_falso import criar_bot
 from test_baixa_provisoes_bot import PaginaBaixa
 
@@ -46,6 +47,7 @@ class PaginaLote(PaginaBaixa):
                                                                  "diferente de Aprovado"],
             bcp._JS_VALOR_HISTORICO: lambda: "21",
             bcp._JS_FECHAR_SELECT2: lambda: True,
+            bcp._JS_DEFINIR_DATA: lambda: setattr(self, "data_lida", arg) or True,
             bp._JS_LER_PROVISOES: lambda: [_linha("501", GUID_A, self.status_lote), _linha("502", GUID_B, self.status_lote)],
         }
         if script in respostas:
@@ -102,6 +104,26 @@ def test_lote_com_outras_parcelas_ou_outro_total_nao_e_confirmado(monkeypatch):
 
         assert resultados[0].situacao == FALHOU
         assert bcp._SUBMIT_LOTE not in pagina.cliques() and reg.gravacoes == 0
+
+
+def test_data_que_a_tela_deixa_vazia_e_posta_pelo_jquery(monkeypatch):
+    bot, reg = _bot(monkeypatch)
+    pagina = PaginaLote()
+    pagina.data_lida = ""  # a TES01519 apaga algumas datas digitadas em campo vazio
+
+    bot._preencher_data_lote(pagina, "05/10/2026")
+
+    assert pagina.data_lida == "05/10/2026" and bcp._JS_DEFINIR_DATA in pagina.scripts
+
+
+def test_data_trocada_pela_tela_nao_e_corrigida_por_baixo(monkeypatch):
+    bot, _ = _bot(monkeypatch)
+    pagina = PaginaLote()
+    pagina.data_lida = "01/10/2026"
+
+    with pytest.raises(bp.BaixaNaoConferidaError):
+        bot._preencher_data_lote(pagina, "05/10/2026")
+    assert bcp._JS_DEFINIR_DATA not in pagina.scripts
 
 
 def test_lote_que_nao_abre_mostra_o_aviso_do_siga(monkeypatch):

@@ -120,9 +120,15 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
 
     def _fluxo_ofertas(self, page):
         """Importa o TXT de ofertas de cada conta corrente do lote na TES05602."""
-        contas = [d for d in self.lote_processados if d.get("tipo_extrato") != "APLICACAO"]
-        resultados = {"importado": 0, "duplicado": 0, "vazio": 0, "falha": 0}
+        correntes = [d for d in self.lote_processados if d.get("tipo_extrato") != "APLICACAO"]
+        # A importação de ofertas só é feita na ADM; as contas da DR e das demais localidades ficam de fora
+        contas = [d for d in correntes if str(d.get("tipo_adm", "")).strip().upper() == "ADM"]
+        fora_adm = len(correntes) - len(contas)
+        if fora_adm:
+            self.update_status(f"{fora_adm} conta(s) fora da ADM puladas: a importação de ofertas é só na ADM.", "#F89406")
+        resultados = {"importado": 0, "duplicado": 0, "vazio": 0, "sem_conta": 0, "falha": 0}
         localidade_anterior = competencia_anterior = None
+        permitidas: dict = {}
 
         for idx, dados in enumerate(contas):
             if not self.browser_aberto:
@@ -138,6 +144,18 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
                     continue
                 localidade_anterior, competencia_anterior = localidade, competencia
 
+            # Contas que o Banco da TES05602 aceita, lidas uma vez por localidade: as demais
+            # são puladas sem abrir a tela (com ofertas; sem ofertas segue e conta como "vazio")
+            if ofertas and localidade not in permitidas:
+                permitidas[localidade] = self.contas_permitidas_ofertas(page)
+            conta_siga = str(dados.get("conta_siga_corrente", "")).strip()
+            if ofertas and permitidas.get(localidade) is not None and conta_siga not in permitidas[localidade]:
+                self.update_status(f"⏭️ Conta {conta_siga} não recebe importação de ofertas no SIGA. Pulando.", "#F89406")
+                resultados["sem_conta"] += 1
+                if "update_progress" in self.callbacks:
+                    self.callbacks["update_progress"]((idx + 1) / len(contas))
+                continue
+
             # Uma conta com erro (ex: timeout ao abrir a tela) não interrompe as demais
             try:
                 resultados[self.importar_ofertas_siga(page, dados)] += 1
@@ -150,7 +168,8 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
                 self.callbacks["update_progress"]((idx + 1) / len(contas))
 
         resumo = (f"Importadas: {resultados['importado']} | Já existentes: {resultados['duplicado']} | "
-                  f"Sem ofertas: {resultados['vazio']} | Falhas: {resultados['falha']}")
+                  f"Sem ofertas: {resultados['vazio']} | Fora da ADM: {fora_adm} | "
+                  f"Conta sem importação: {resultados['sem_conta']} | Falhas: {resultados['falha']}")
         cor = "#D9534F" if resultados["falha"] else "#3C763D"
         self.update_status(f"Importação de ofertas concluída. {resumo}", cor)
         self.show_message("warning" if resultados["falha"] else "info", "Importação de Ofertas", resumo)

@@ -126,11 +126,13 @@ class AcoesSigaMixin:
         lote_valido = self._montar_lote_extratos()
         if not lote_valido:
             return
-        if not any(d.get("tipo_extrato") != "APLICACAO" for d in lote_valido):
-            messagebox.showwarning("Atenção", "Nenhuma conta corrente no lote para importar ofertas.")
+        if not any(d.get("tipo_extrato") != "APLICACAO" and str(d.get("tipo_adm", "")).strip().upper() == "ADM"
+                   for d in lote_valido):
+            messagebox.showwarning("Atenção", "Nenhuma conta corrente da ADM no lote para importar ofertas.")
             return
         if not messagebox.askyesno("Importar Ofertas no SIGA",
-                                   "O robô vai importar no SIGA o TXT de ofertas de cada conta corrente do lote, "
+                                   "O robô vai importar no SIGA o TXT de ofertas de cada conta corrente da ADM no lote "
+                                   "(as da DR e das demais localidades ficam de fora), "
                                    "com a data do último dia do mês do extrato. Continuar?", parent=self):
             return
 

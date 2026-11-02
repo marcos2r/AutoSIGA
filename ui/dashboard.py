@@ -28,12 +28,14 @@ class DashboardMixin:
         """
         contexto = contexto or {}
         tipo = contexto.get("tipo")
-        baixas = tipo in ("baixas", "provisoes")  # descrição inteira, sem cortar
+        baixas = tipo in ("baixas", "provisoes", "baixas_cp")  # descrição inteira, sem cortar
         qtd = len(lancamentos)
         titulo, rotulo_ok, rotulo_pular = {
             "baixas": (f"Faturas de Energia a Baixar ({qtd})", f"Aprovar e baixar {qtd} fatura(s)", "Pular as baixas"),
             "provisoes": (f"Faturas de Energia a Provisionar ({qtd})", f"Provisionar {qtd} fatura(s)",
                           "Pular as provisões"),
+            "baixas_cp": (f"Boletos e PIX a Baixar ({qtd})", f"Aprovar e baixar {qtd} pagamento(s)",
+                          "Pular as baixas"),
         }.get(tipo, (f"Lançamentos a Importar ({qtd})", f"Lançar {qtd} itens", "Pular este extrato"))
         janela = ctk.CTkToplevel(self)
         janela.title("Ação Necessária: Lançamentos Pendentes")

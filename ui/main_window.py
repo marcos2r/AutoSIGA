@@ -256,12 +256,13 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         )
         self.botao_importar_ofertas.grid(row=0, column=2, padx=5)
 
-        # Baixa das faturas de energia debitadas no extrato: ligada por padrão
+        # Baixa das provisões pagas no extrato (energia, boletos e PIX): ligada por padrão
         self.var_baixar_energia = ctk.BooleanVar(value=self.config_manager.get_baixar_energia_pelo_extrato())
         # Revisão desligada por padrão: o robô grava sozinho o que passou nas conferências do SIGA
         self.var_revisar = ctk.BooleanVar(value=self.config_manager.get_revisar_antes_de_gravar())
         ctk.CTkCheckBox(
-            self.frame_botoes, text="Baixar as faturas de energia debitadas no extrato", font=("Open Sans", 12),
+            self.frame_botoes, text="Baixar as provisões pagas no extrato (energia, boletos e PIX)",
+            font=("Open Sans", 12),
             variable=self.var_baixar_energia, command=self._alternar_baixa_energia
         ).grid(row=2, column=0, columnspan=3, pady=(8, 0), sticky="w")
         ctk.CTkCheckBox(

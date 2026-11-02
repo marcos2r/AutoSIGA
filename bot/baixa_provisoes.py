@@ -60,7 +60,7 @@ _JS_LER_PROVISOES = '''() => {
         if (!guid && link) guid = (link.getAttribute('href').split('codigo=')[1] || '').split('&')[0];
         return {vencimento: tds[2].innerText.trim(), numero: tds[4].innerText.trim(),
                 fornecedor: tds[5].innerText.trim(), valor: tds[8].innerText.trim(),
-                status: tds[11].innerText.trim(), guid: guid};
+                pago: tds[9].innerText.trim(), status: tds[11].innerText.trim(), guid: guid};
     }).filter(Boolean);
 }'''
 
@@ -154,7 +154,10 @@ _JS_VALOR_HISTORICO = '''(codigo) => {
 
 # Pagamentos que o "Inserir" pôs na grade (a linha #row-vazia é o aviso de grade vazia)
 _JS_FECHAR_MODAIS = '''() => {
-    if (window.jQuery) { jQuery('.bootbox.modal, .modal.in').modal('hide'); }
+    if (window.jQuery) {
+        jQuery('select').each(function () { try { jQuery(this).select2('close'); } catch (e) {} });
+        jQuery('.bootbox.modal, .modal.in').modal('hide');
+    }
     document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
     document.body.classList.remove('modal-open');
     return true;
@@ -194,6 +197,14 @@ class BaixaProvisoesMixin:
             list[ProvisaoSiga]: Todas as situações (Lançado, Aprovado, Pago).
         """
         self.update_status("Lendo as faturas de energia na Contas a Pagar...", "#428BCA")
+        return provisoes_da_grade(self._ler_contas_a_pagar(page, periodo))
+
+    def _ler_contas_a_pagar(self, page, periodo):
+        """Todas as linhas (texto) da grade da TES01501 com vencimento no período.
+
+        Raises:
+            GradeIncompletaError: A grade não trouxe todas as linhas.
+        """
         self._executar_programa(page, "TES01501")
         if page.evaluate(_JS_FILTRAR_VENCIMENTO, list(periodo)):
             page.wait_for_load_state("domcontentloaded")
@@ -202,7 +213,7 @@ class BaixaProvisoesMixin:
         contagem = page.evaluate(_JS_MOSTRAR_TODAS)
         if contagem and contagem.get("lidas", 0) < contagem.get("total", 0):
             raise GradeIncompletaError(f"a Contas a Pagar mostrou {contagem['lidas']} de {contagem['total']} linhas")
-        return provisoes_da_grade(page.evaluate(_JS_LER_PROVISOES))
+        return page.evaluate(_JS_LER_PROVISOES)
 
     def _etapa_baixas_energia(self, page, dados, conta_codigo):
         """Baixa as faturas de energia debitadas num extrato de conta corrente, antes da conciliação.

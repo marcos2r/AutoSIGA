@@ -121,6 +121,7 @@ class FluxoExtratosMixin:
             bool: True se o extrato foi consultado no SIGA; False se foi pulado.
         """
         self.dados_processados = dados
+        dados["baixas_cp"] = None  # de uma execução anterior do mesmo lote, não vale mais
         self.localidade_selecionada = dados["localidade_selecionada"]
         self.tipo_alvo = dados["tipo_adm"]
         self.nome_alvo = dados["nome_adm"]
@@ -162,6 +163,9 @@ class FluxoExtratosMixin:
 
         # Faturas de energia debitadas: baixadas antes, para a conciliação já encontrar a saída no SIGA
         baixas, fechado = self._etapa_baixas_energia(page, dados, conta_alvo)
+        # Boletos e PIX com provisão na Contas a Pagar, pelo mesmo motivo
+        if not fechado:
+            dados["baixas_cp"], fechado = self._etapa_baixas_contas_pagar(page, dados, conta_alvo)
         if fechado:
             self.competencias_fechadas.add(chave_competencia)
             telemetria_lote["pendentes"] += qtd
@@ -237,7 +241,8 @@ class FluxoExtratosMixin:
         Args:
             pendentes: Itens da prévia ({"data", "valor", "historico"/"descricao"}).
             conta_siga: Conta do extrato, mostrada no topo da prévia.
-            tipo: "lancamentos", "baixas" ou "provisoes" de energia (todas pela `revisar_antes_de_gravar`).
+            tipo: "lancamentos", "baixas" ou "provisoes" de energia, ou "baixas_cp" de boletos e PIX
+                (todas pela `revisar_antes_de_gravar`).
 
         Returns:
             bool: True para gravar; False se o usuário recusou ou o navegador foi fechado.
@@ -246,7 +251,8 @@ class FluxoExtratosMixin:
             return True
         self._autorizado = False
         self._evento_autorizacao.clear()
-        rotulo = {"baixas": "baixa(s) de energia", "provisoes": "provisão(ões) de energia"}.get(tipo, "lançamento(s)")
+        rotulo = {"baixas": "baixa(s) de energia", "provisoes": "provisão(ões) de energia",
+                  "baixas_cp": "baixa(s) de boletos e PIX"}.get(tipo, "lançamento(s)")
         self.update_status(f"⏸️ Aguardando sua revisão de {len(pendentes)} {rotulo}...", "#F89406")
         self.callbacks["request_authorization"](list(pendentes), {"conta": conta_siga, "tipo": tipo,
                                                                   "localidade": self.localidade_selecionada})
@@ -302,7 +308,7 @@ class FluxoExtratosMixin:
             conta_id=str(dados.get("conta_id", "")), conta_siga=conta_siga or "",
             localidade=dados.get("localidade_selecionada", ""), tipo=dados.get("tipo_extrato", ""),
             situacao=situacao, lancados=lancados, pendentes=pendentes, sobras=sobras, baixas=baixas, faltas=faltas,
-            periodo=_periodo(dados))
+            periodo=_periodo(dados), baixas_cp=dados.get("baixas_cp"))
         if saldo is not None:
             resultado.saldo = saldo
         telemetria_lote.setdefault("extratos", []).append(resultado)

@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from controllers.baixa_contas_pagar import ResultadoPagamento
     from controllers.baixa_energia import ResultadoBaixa
 
 CONFERE = "confere"
@@ -88,6 +89,8 @@ class ResultadoExtrato:
     # Movimentos do banco sem lançamento no SIGA (None quando não dá para apontá-los)
     faltas: list[MovimentoBanco] | None = None
     periodo: str = ""
+    # Boletos e PIX do extrato com provisão na Contas a Pagar (None quando não houve a etapa)
+    baixas_cp: list["ResultadoPagamento"] | None = None
 
 
 def valor_br(texto: Any) -> float | None:

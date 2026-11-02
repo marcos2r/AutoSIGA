@@ -11,6 +11,7 @@ explicação". Só lê e explica; nada aqui decide lançar.
 import re
 from dataclasses import dataclass
 
+from controllers.baixa_contas_pagar import linhas_do_painel as linhas_dos_pagamentos
 from controllers.baixa_energia import linhas_do_painel
 from controllers.prova_real import DIVERGE, TOLERANCIA, MovimentoBanco, MovimentoSiga, ResultadoExtrato, moeda
 
@@ -79,12 +80,13 @@ def itens_da_diferenca(r: ResultadoExtrato) -> list[tuple[str, str, float | None
 
 
 def linhas_do_extrato(r: ResultadoExtrato) -> list[tuple[str, str]]:
-    """Linhas de detalhe de um extrato no painel: a composição da diferença e as baixas de energia.
+    """Linhas de detalhe de um extrato no painel: a composição da diferença e as baixas de energia,
+    de boletos e de PIX.
 
     Returns:
         list[tuple[str, str]]: (nível, texto); o nível só escolhe a cor.
     """
-    baixas = linhas_do_painel(r.baixas)
+    baixas = linhas_do_painel(r.baixas) + linhas_dos_pagamentos(r.baixas_cp)
     if r.saldo.status != DIVERGE or r.sobras is None or r.faltas is None:
         return baixas
     c = compor_diferenca(r.saldo.diferenca, r.sobras, r.faltas)

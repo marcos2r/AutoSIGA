@@ -10,6 +10,7 @@ import calendar
 import logging
 from datetime import datetime
 
+from controllers.baixa_contas_pagar import resumo_resultado as resumo_resultado_cp
 from controllers.baixa_energia import resumo_baixa
 from controllers.diferenca_extrato import itens_da_diferenca, tipo_legivel
 from controllers.prova_real import DIVERGE, resumo_resultado
@@ -248,6 +249,9 @@ class Exportador:
             if any(r.baixas for r in telemetria["extratos"]):
                 abas.append(Exportador._aba_baixas_energia(wb, telemetria["extratos"], cor_header, fonte_header,
                                                            fonte_normal))
+            if any(r.baixas_cp for r in telemetria["extratos"]):
+                abas.append(Exportador._aba_baixas_contas_pagar(wb, telemetria["extratos"], cor_header,
+                                                                fonte_header, fonte_normal))
 
         # Redimensionamento dinâmico das colunas
         for sheet in abas:
@@ -319,6 +323,28 @@ class Exportador:
                 fatura = d.provisao.numero if d.provisao else (d.fatura.numero if d.fatura else "")
                 valores = [r.localidade, r.conta_siga, d.debito.data, d.debito.valor, d.debito.codigo,
                            d.fatura.uc if d.fatura else "", fatura, resumo_baixa(b)[1]]
+                for col, valor in enumerate(valores, start=1):
+                    ws.cell(row=linha, column=col, value=valor).font = fonte_normal
+                ws.cell(row=linha, column=4).number_format = 'R$ #,##0.00'
+                linha += 1
+        return ws
+
+    @staticmethod
+    def _aba_baixas_contas_pagar(wb, resultados, cor_header, fonte_header, fonte_normal):
+        """Aba "Baixas de Boletos e PIX": cada pagamento com provisão possível e o que foi feito com ele."""
+        ws = wb.create_sheet(title="Baixas de Boletos e PIX")
+        cabecalho = ["Localidade", "Conta SIGA", "Data do Pagamento", "Valor", "Beneficiário", "CNPJ/CPF",
+                     "Provisões", "Resultado"]
+        for col, texto in enumerate(cabecalho, start=1):
+            cell = ws.cell(row=1, column=col, value=texto)
+            cell.fill, cell.font = cor_header, fonte_header
+
+        linha = 2
+        for r in resultados:
+            for b in r.baixas_cp or []:
+                pg = b.decisao.pagamento
+                valores = [r.localidade, r.conta_siga, pg.data, pg.valor, pg.nome, pg.documento,
+                           ", ".join(p.numero for p in b.decisao.parcelas), resumo_resultado_cp(b)[1]]
                 for col, valor in enumerate(valores, start=1):
                     ws.cell(row=linha, column=col, value=valor).font = fonte_normal
                 ws.cell(row=linha, column=4).number_format = 'R$ #,##0.00'

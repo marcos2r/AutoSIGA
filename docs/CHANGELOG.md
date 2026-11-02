@@ -2,6 +2,14 @@
 
 Histórico das versões, da mais recente para a mais antiga. A versão atual é definida em `version.py`.
 
+## v1.11.0
+
+- **Lote Autônomo**: O robô roda o lote de extratos do começo ao fim sem parar para perguntar. Ele grava sozinho os lançamentos, rendimentos, provisões e baixas de energia que passaram nas conferências do SIGA, e tudo o que for duvidoso vira pendência no painel final, como antes. Ninguém precisa acompanhar a tela.
+- **Uma Caixa para Revisar**: A caixa **Revisar antes de gravar no SIGA** (desligada por padrão) substitui a prévia fixa dos lançamentos e a caixa **Revisar as provisões e baixas de energia antes de gravar**. Ligada, o robô volta a mostrar a prévia de cada extrato, das provisões e das baixas e só grava com autorização. Útil na primeira execução numa máquina nova.
+- **Conferência no SIGA Continua Obrigatória**: Sem a prévia, o que evita lançamento em duplicidade continua sendo a conferência no próprio SIGA antes de cada gravação, que não tem opção na tela.
+- **UC sem Localidade vira Pendência**: Com a revisão desligada, a fatura de uma UC sem localidade não interrompe o lote: fica pendente para relacionar depois na aba Energia. Com a revisão ligada, a janela de relacionar a UC aparece no começo do lote, como na v1.10.
+- **Sem Aviso com OK no Meio do Lote**: O aviso "Todos os rendimentos foram importados com sucesso!" deixa de abrir uma janela que esperava o clique em OK; o fim dos rendimentos aparece só na barra de status.
+
 ## v1.10.1
 
 - **Importação de Ofertas no Front Novo**: A importação do TXT de ofertas (Importação Extrato, TES05601/05602) voltou a funcionar no front novo do SIGA. A data vai com as barras, o Banco é escolhido na lista do modal e o **Salvar e Fechar** é acionado mesmo com a prévia mais alta que a tela.

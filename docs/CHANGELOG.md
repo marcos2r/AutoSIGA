@@ -2,6 +2,14 @@
 
 Histórico das versões, da mais recente para a mais antiga. A versão atual é definida em `version.py`.
 
+## v1.10.1
+
+- **Importação de Ofertas no Front Novo**: A importação do TXT de ofertas (Importação Extrato, TES05601/05602) voltou a funcionar no front novo do SIGA. A data vai com as barras, o Banco é escolhido na lista do modal e o **Salvar e Fechar** é acionado mesmo com a prévia mais alta que a tela.
+- **Ofertas só na ADM e nas Contas Aceitas**: Só as contas da ADM entram na importação; a DR fica de fora. O robô lê uma vez por localidade as contas que o Banco aceita e pula as demais sem abrir a tela, contadas como "Conta sem importação", e não como falha.
+- **Sem Ofertas Importadas Duas Vezes**: A conferência de duplicidade passa a ler todas as páginas da grade de importações, onde as mais novas ficam no fim. Se a leitura falhar, a conta não é importada.
+- **Caixas e Bancos sem Travar o Lote**: Logo depois da troca de localidade, o robô espera o SIGA terminar de carregar antes de abrir a TES01701. Antes, o clique caía na tela de carregamento e o lote parava no primeiro extrato.
+- **Queda de Internet não Desconecta o E-mail**: Uma falha de rede ao renovar o acesso ao Gmail é repetida até 3 vezes e avisa para conferir a internet. Só a recusa do Google pede para conectar o e-mail de novo na aba Energia; antes, qualquer falha pulava as provisões de energia.
+
 ## v1.10.0
 
 - **Faturas de Energia Baixadas pelo Extrato**: Em cada extrato de conta corrente, o robô reconhece os débitos automáticos da Energisa e, antes de conciliar, aprova e baixa a fatura certa na Contas a Pagar: data do débito, forma Débito Automático, conta do extrato e histórico 021. Com isso, a conciliação e a prova real passam a encontrar a saída no SIGA. A opção **Baixar as faturas de energia debitadas no extrato** vem ligada.

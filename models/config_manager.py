@@ -380,16 +380,19 @@ class ConfigManager(ConfigEnergiaMixin, ConfigCatalogoMixin):
         config["baixar_energia_pelo_extrato"] = bool(ativo)
         self.save_config_data(config)
 
-    def get_revisar_baixas(self):
+    def get_revisar_antes_de_gravar(self):
         """
-        Retorna se o robô mostra a prévia das baixas de energia antes de gravar (ligado por padrão).
-        """
-        return bool(self.get_config_data().get("revisar_baixas", True))
+        Retorna se o robô mostra a prévia dos lançamentos, provisões e baixas antes de gravar.
 
-    def salvar_revisar_baixas(self, ativo):
+        Desligado por padrão: o robô roda sozinho. A chave antiga `revisar_baixas` é ignorada
+        de propósito, para quem a deixou ligada também passar ao modo autônomo.
         """
-        Persiste a preferência da prévia das baixas de energia.
+        return bool(self.get_config_data().get("revisar_antes_de_gravar", False))
+
+    def salvar_revisar_antes_de_gravar(self, ativo):
+        """
+        Persiste a preferência da revisão antes de gravar.
         """
         config = self.get_config_data()
-        config["revisar_baixas"] = bool(ativo)
+        config["revisar_antes_de_gravar"] = bool(ativo)
         self.save_config_data(config)

@@ -107,7 +107,7 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
     reg = SimpleNamespace(trocas=[], lancamentos=[], rendimentos=[], status=[], telemetria=None)
     reg.previas = []
     callbacks = {"show_dashboard": lambda tel, t: setattr(reg, "telemetria", tel)}
-    bot = SigaBot(lote, callbacks=callbacks, revisar_antes_de_lancar=revisar)
+    bot = SigaBot(lote, callbacks=callbacks, revisar_antes_de_gravar=revisar)
     if responder:
         def previa(pendentes, contexto):
             reg.previas.append((pendentes, contexto))

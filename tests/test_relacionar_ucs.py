@@ -66,7 +66,7 @@ def test_bot_pergunta_pela_ui_e_espera_a_resposta(tmp_path, monkeypatch):
         # A UI responde em outra thread, como o clique na janela
         threading.Timer(0.05, lambda: responder(None)).start()
 
-    bot = SigaBot([], {"request_uc_mapping": janela})
+    bot = SigaBot([], {"request_uc_mapping": janela}, revisar_antes_de_gravar=True)
     bot.browser_aberto = True
     validas, puladas, sem_emissao = bot._relacionar_ucs_novas([], [_fatura("2.000.111.051-00", "a.pdf")], [])
 
@@ -74,8 +74,17 @@ def test_bot_pergunta_pela_ui_e_espera_a_resposta(tmp_path, monkeypatch):
     assert (validas, len(puladas), sem_emissao) == ([], 1, [])
 
 
+def test_modo_autonomo_nao_pergunta_e_deixa_a_uc_pendente():
+    perguntas = []
+    bot = SigaBot([], {"request_uc_mapping": lambda fatura, responder: perguntas.append(fatura)})
+    sem_localidade = [_fatura("2.000.111.051-00", "a.pdf")]
+
+    assert bot._relacionar_ucs_novas([], sem_localidade, []) == ([], sem_localidade, [])
+    assert perguntas == []
+
+
 def test_sem_janela_na_ui_segue_como_antes():
-    bot = SigaBot([], {})
+    bot = SigaBot([], {}, revisar_antes_de_gravar=True)
     sem_localidade = [_fatura("2.000.111.051-00", "a.pdf")]
 
     assert bot._relacionar_ucs_novas([], sem_localidade, []) == ([], sem_localidade, [])

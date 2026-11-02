@@ -256,19 +256,19 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         )
         self.botao_importar_ofertas.grid(row=0, column=2, padx=5)
 
-        # A prévia dos lançamentos não é opção: sempre aparece, para ninguém gravar em duplicidade sem ver
-        # Baixa das faturas de energia debitadas no extrato: ligada por padrão, com prévia
+        # Baixa das faturas de energia debitadas no extrato: ligada por padrão
         self.var_baixar_energia = ctk.BooleanVar(value=self.config_manager.get_baixar_energia_pelo_extrato())
-        self.var_revisar_baixas = ctk.BooleanVar(value=self.config_manager.get_revisar_baixas())
-        self.check_revisar_baixas = ctk.CTkCheckBox(
-            self.frame_botoes, text="Revisar as provisões e baixas de energia antes de gravar", font=("Open Sans", 12),
-            variable=self.var_revisar_baixas,
-            command=lambda: self.config_manager.salvar_revisar_baixas(self.var_revisar_baixas.get()))
+        # Revisão desligada por padrão: o robô grava sozinho o que passou nas conferências do SIGA
+        self.var_revisar = ctk.BooleanVar(value=self.config_manager.get_revisar_antes_de_gravar())
         ctk.CTkCheckBox(
             self.frame_botoes, text="Baixar as faturas de energia debitadas no extrato", font=("Open Sans", 12),
             variable=self.var_baixar_energia, command=self._alternar_baixa_energia
         ).grid(row=2, column=0, columnspan=3, pady=(8, 0), sticky="w")
-        self.check_revisar_baixas.grid(row=3, column=0, columnspan=3, pady=(6, 0), padx=(24, 0), sticky="w")
+        ctk.CTkCheckBox(
+            self.frame_botoes, text="Revisar antes de gravar no SIGA", font=("Open Sans", 12),
+            variable=self.var_revisar,
+            command=lambda: self.config_manager.salvar_revisar_antes_de_gravar(self.var_revisar.get())
+        ).grid(row=3, column=0, columnspan=3, pady=(6, 0), sticky="w")
         self._alternar_baixa_energia(salvar=False)
 
         # Barra de Progresso Geral do Lote
@@ -312,6 +312,6 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.attributes('-topmost', False)
 
     def _alternar_baixa_energia(self, salvar=True):
-        """Salva a opção da baixa de energia (a prévia vale também para as provisões, então fica sempre ativa)."""
+        """Salva a opção da baixa das faturas de energia debitadas no extrato."""
         if salvar:
             self.config_manager.salvar_baixar_energia_pelo_extrato(self.var_baixar_energia.get())

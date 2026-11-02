@@ -60,9 +60,10 @@ class ProvisoesEnergiaMixin:
 
         O usuário acabou de iniciar o lote e está diante da tela; perguntar aqui evita uma
         pausa no meio dos lançamentos com a sessão do SIGA aberta. Quem for pulado continua
-        pendente na aba Energia, como antes.
+        pendente na aba Energia, como antes. Sem a revisão ligada o robô não para: as UCs
+        novas ficam direto como pendência, para relacionar depois na aba Energia.
         """
-        if not sem_localidade or "request_uc_mapping" not in self.callbacks:
+        if not sem_localidade or not self.revisar_antes_de_gravar or "request_uc_mapping" not in self.callbacks:
             return validas, sem_localidade, sem_emissao
         ucs = len({f.get("uc", "") for f in sem_localidade})
         self.update_status(f"⏸️ {ucs} unidade(s) consumidora(s) sem localidade: escolha na janela aberta.", "#F89406")

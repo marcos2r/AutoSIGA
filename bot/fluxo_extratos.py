@@ -235,14 +235,12 @@ class FluxoExtratosMixin:
         Args:
             pendentes: Itens da prévia ({"data", "valor", "historico"/"descricao"}).
             conta_siga: Conta do extrato, mostrada no topo da prévia.
-            tipo: "lancamentos" (prévia `revisar_antes_de_lancar`), "baixas" ou "provisoes" de
-                energia (as duas pela `revisar_baixas`).
+            tipo: "lancamentos", "baixas" ou "provisoes" de energia (todas pela `revisar_antes_de_gravar`).
 
         Returns:
             bool: True para gravar; False se o usuário recusou ou o navegador foi fechado.
         """
-        revisar = self.revisar_baixas if tipo in ("baixas", "provisoes") else self.revisar_antes_de_lancar
-        if not revisar or "request_authorization" not in self.callbacks:
+        if not self.revisar_antes_de_gravar or "request_authorization" not in self.callbacks:
             return True
         self._autorizado = False
         self._evento_autorizacao.clear()

@@ -52,16 +52,18 @@ def test_falha_na_gravacao_preserva_config_anterior(tmp_path, monkeypatch):
     assert cm.get_config_data() == {"nome_adm": "ORIGINAL"}
 
 
-def test_baixa_de_energia_e_a_previa_das_baixas_ligadas_por_padrao(tmp_path):
+def test_baixa_de_energia_ligada_e_revisao_desligada_por_padrao(tmp_path):
     caminho = tmp_path / "config.json"
     cm = ConfigManager(config_path=str(caminho))
-    assert cm.get_baixar_energia_pelo_extrato() is True and cm.get_revisar_baixas() is True
+    # A chave antiga da prévia de energia não religa a revisão
+    cm.save_config_data({"revisar_baixas": True})
+    assert cm.get_baixar_energia_pelo_extrato() is True and cm.get_revisar_antes_de_gravar() is False
 
     cm.salvar_baixar_energia_pelo_extrato(False)
-    cm.salvar_revisar_baixas(False)
+    cm.salvar_revisar_antes_de_gravar(True)
 
     recarregado = ConfigManager(config_path=str(caminho))
-    assert recarregado.get_baixar_energia_pelo_extrato() is False and recarregado.get_revisar_baixas() is False
+    assert recarregado.get_baixar_energia_pelo_extrato() is False and recarregado.get_revisar_antes_de_gravar() is True
 
 
 def test_xls_de_conta_corrente_nao_herda_o_mapeamento_da_aplicacao(tmp_path):

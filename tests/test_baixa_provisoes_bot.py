@@ -256,6 +256,7 @@ def _extrato(transacoes, tipo="CORRENTE"):
 def _bot_lote(monkeypatch, autorizar=None, provisoes=None):
     bot, reg = _bot(monkeypatch)
     bot.baixar_energia = True
+    bot.revisar_antes_de_gravar = autorizar is not None
     bot._indice_energia = INDICE
     lidas = []
 

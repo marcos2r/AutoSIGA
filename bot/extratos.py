@@ -339,9 +339,8 @@ class ExtratosMixin:
                 self._confirmar_gravacao(page, timeout_ms=25000)
 
             self._qtd_injecoes_efetuadas = len(lanc_ordenados)
+            # Só na barra de status: um aviso com OK no meio do lote prenderia o robô até alguém clicar
             self.update_status(f"✅ Finalizado! {len(lanc_ordenados)} rendimentos injetados no SIGA.", "#3C763D")
-            if "show_message" in self.callbacks:
-                self.callbacks["show_message"]("info", "AutoSIGA", "Todos os rendimentos foram importados com sucesso! O robô agora fará a validação.")
 
         except MesFechadoError:
             raise  # tratado no laço do lote, que pula os extratos da mesma localidade e mês

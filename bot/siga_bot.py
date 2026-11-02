@@ -36,8 +36,8 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
     perguntas/alertas para a View (via callbacks), sem nunca importar nada de GUI.
     """
 
-    def __init__(self, lote_processados, callbacks, tipo_lote="extrato", revisar_antes_de_lancar=True,
-                 baixar_energia=False, revisar_baixas=True):
+    def __init__(self, lote_processados, callbacks, tipo_lote="extrato", revisar_antes_de_gravar=False,
+                 baixar_energia=False):
         """
         Inicializa a configuração do bot de automação em lote.
 
@@ -46,15 +46,15 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
             callbacks (dict): Dicionário de funções para acionar a UI. Possui:
                 - update_status(msg, color)
                 - show_message(tipo, titulo, msg)
-                - request_authorization(lancamentos_pendentes, contexto) (só com a prévia ligada)
+                - request_authorization(lancamentos_pendentes, contexto) (só com a revisão ligada)
                 - show_dashboard(telemetria, tempo_inicio)
                 - on_finish()
                 - on_catalogo(catalogo) (só na descoberta de contas)
             tipo_lote (str): Tipo de lote ("extrato", "energia", "ofertas" ou "descoberta").
-            revisar_antes_de_lancar (bool): Mostra a prévia de cada extrato e só grava com autorização.
-                A tela sempre liga; False só serve aos testes, que rodam sem prévia.
+            revisar_antes_de_gravar (bool): Mostra a prévia dos lançamentos, provisões e baixas e só
+                grava com autorização; também pergunta a localidade das UCs novas. Desligado, o robô
+                grava sozinho o que passou nas conferências do SIGA, e o resto vira pendência no painel.
             baixar_energia (bool): Aprova e baixa as faturas de energia debitadas nos extratos.
-            revisar_baixas (bool): Mostra a prévia das baixas de energia e só grava com autorização.
         """
         # Ordena o lote por localidade_selecionada para agrupar os lançamentos da mesma filial,
         # minimizando as trocas de localidade no portal SIGA.
@@ -66,9 +66,8 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
         self.tipo_lote = tipo_lote
         self.browser_aberto = False
         self._qtd_injecoes_efetuadas = 0
-        self.revisar_antes_de_lancar = revisar_antes_de_lancar
+        self.revisar_antes_de_gravar = revisar_antes_de_gravar
         self.baixar_energia = baixar_energia
-        self.revisar_baixas = revisar_baixas
         # Índice das faturas de energia (PDFs), montado na primeira baixa e reaproveitado no lote
         self._indice_energia = None
         # Prévia: a UI responde por responder_autorizacao(), que libera a thread do bot

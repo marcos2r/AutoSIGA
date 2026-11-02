@@ -142,7 +142,8 @@ def test_rendimentos_em_ordem_de_data_na_conta_de_aplicacao(monkeypatch):
     assert ("f_conta", "10230") in reg.select2
     assert ("f_historico_debito", "029") in reg.select2
     assert reg.gravacoes == 2
-    assert len(reg.mensagens) == 1
+    # Sem aviso com OK no meio do lote: o fim dos rendimentos só vai para a barra de status
+    assert reg.mensagens == []
 
 
 def test_mes_fechado_interrompe_lancamentos_sem_gravar(monkeypatch):

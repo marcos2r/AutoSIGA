@@ -207,3 +207,18 @@ def test_erro_do_gmail_vira_frase_curta():
     assert mensagem_de_erro(cota) == "o Gmail limitou as leituras por minuto; rode de novo daqui a alguns minutos"
     assert "googleapis" not in mensagem_de_erro(HttpError(Response({"status": 500}), b"", uri="https://googleapis/x"))
     assert mensagem_de_erro(PermissionError("A autorização do e-mail expirou.")) == "A autorização do e-mail expirou."
+
+
+def test_reaviso_de_vencimento_e_ignorado_sem_alerta_vermelho_na_barra_de_status(tmp_path):
+    reaviso = tmp_path / "temp_energisa_1a1a293675bb7a74_reaviso341130020269.pdf"
+    reaviso.write_bytes(b"%PDF-1.4")
+    mensagens_ui = []
+
+    resultado = FaturaEnergiaController._extrair_e_organizar(
+        str(reaviso), "", str(tmp_path / "faturas_energisa"),
+        lambda msg, cor="#666666": mensagens_ui.append((msg, cor))
+    )
+
+    assert resultado is None
+    assert not reaviso.exists()
+    assert mensagens_ui == []

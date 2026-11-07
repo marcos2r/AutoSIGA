@@ -80,8 +80,8 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.after(500, self.verificar_credenciais_iniciais)
 
     # Menor janela em que o card de extrato mostra todos os campos e botões sem cortar
-    LARGURA_MINIMA = 1000
-    ALTURA_MINIMA = 680
+    LARGURA_MINIMA = 880
+    ALTURA_MINIMA = 520
 
     def aplicar_geometria(self):
         """
@@ -90,12 +90,16 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         A geometria fica em memória enquanto a janela é movida e só é gravada ao fechar
         (on_closing), para não reescrever o config.json a cada pixel arrastado.
         """
-        self.minsize(self.LARGURA_MINIMA, self.ALTURA_MINIMA)
         largura_tela = self.winfo_screenwidth()
         altura_tela = self.winfo_screenheight()
+        largura_util = max(640, largura_tela - 40)
+        altura_util = max(440, altura_tela - 80)
+        min_w = min(self.LARGURA_MINIMA, largura_util)
+        min_h = min(self.ALTURA_MINIMA, altura_util)
+        self.minsize(min_w, min_h)
 
-        w = max(self.LARGURA_MINIMA, min(1200, int(largura_tela * 0.8)))
-        h = max(self.ALTURA_MINIMA, min(900, int(altura_tela * 0.85)))
+        w = min(largura_util, max(min_w, min(1200, int(largura_tela * 0.8))))
+        h = min(altura_util, max(min_h, min(900, int(altura_tela * 0.85))))
         x, y = max(0, (largura_tela - w) // 2), max(0, (altura_tela - h) // 2)
         maximizada = True
 
@@ -104,8 +108,8 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
             # Geometria antiga (sem "maximizada") também abre maximizada: era pequena demais
             maximizada = geo_salva.get("maximizada", True)
             if not maximizada:
-                w = max(self.LARGURA_MINIMA, geo_salva.get("width", w))
-                h = max(self.ALTURA_MINIMA, geo_salva.get("height", h))
+                w = min(largura_util, max(min_w, geo_salva.get("width", w)))
+                h = min(altura_util, max(min_h, geo_salva.get("height", h)))
                 pos_x, pos_y = geo_salva.get("x", x), geo_salva.get("y", y)
                 if 0 <= pos_x <= largura_tela - 100:
                     x = pos_x
@@ -160,27 +164,45 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         # ==========================================
         # HEADER (Cabeçalho Superior)
         # ==========================================
-        self.frame_header = ctk.CTkFrame(self, fg_color=self.cor_azul_header, corner_radius=0, height=70)
+        self.frame_header = ctk.CTkFrame(self, fg_color=self.cor_azul_header, corner_radius=0, height=56)
         self.frame_header.pack(fill="x", side="top")
 
         self.label_chevron = ctk.CTkLabel(self.frame_header, text="> ", font=self.fonte_titulo, text_color=self.cor_laranja_logo)
-        self.label_chevron.pack(side="left", padx=(20, 0), pady=15)
+        self.label_chevron.pack(side="left", padx=(20, 0), pady=10)
 
         self.label_titulo = ctk.CTkLabel(self.frame_header, text="AutoSIGA", font=self.fonte_titulo, text_color="#FFFFFF")
-        self.label_titulo.pack(side="left", pady=15)
+        self.label_titulo.pack(side="left", pady=10)
 
         self.btn_credenciais = ctk.CTkButton(
             self.frame_header, text="Credenciais 🔑", font=("Open Sans", 11, "bold"),
             fg_color="#F89406", hover_color="#DF8505", text_color="#FFFFFF",
             width=100, height=28, corner_radius=4, command=self.abrir_modal_credenciais
         )
-        self.btn_credenciais.pack(side="right", padx=20, pady=21)
+        self.btn_credenciais.pack(side="right", padx=20, pady=14)
+
+        # ==========================================
+        # FOOTER E BARRA DE STATUS (Ancorados embaixo antes da área central)
+        # ==========================================
+        self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 4))
+
+        texto_rodape = f"AutoSIGA v{VERSION} · Desenvolvido por PAIRUS Soluções Tecnológicas"
+        self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=(tema.FONTE, 11),
+                                         text_color=tema.CINZA_TEXTO)
+        self.label_rodape.pack()
+
+        self.label_status_siga = ctk.CTkLabel(self, text="Aguardando extratos ou faturas...", font=("Open Sans", 12), text_color="#666666")
+        self.label_status_siga.pack(side="bottom", pady=(0, 4))
+
+        self.progress_bar = ctk.CTkProgressBar(self, width=400, height=8, corner_radius=4, progress_color="#5CB85C", fg_color="#E0E0E0")
+        self.progress_bar.pack(side="bottom", pady=(2, 4))
+        self.progress_bar.set(0.0)
 
         # ==========================================
         # MAIN TABVIEW (Alternar entre Extratos e Energia)
         # ==========================================
         self.tabview = ctk.CTkTabview(self, corner_radius=6, border_width=1, border_color="#DDDDDD", fg_color="#FFFFFF")
-        self.tabview.pack(pady=20, padx=20, fill="both", expand=True)
+        self.tabview.pack(pady=(8, 4), padx=14, fill="both", expand=True)
 
         self.tab_extratos = self.tabview.add("Conciliação de Extratos")
         self.tab_energia = self.tabview.add("Contas de Energia")
@@ -199,60 +221,59 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.frame_card = self.tab_extratos # Redireciona a hierarquia dos widgets de extrato para a tab
 
         self.label_instrucao = ctk.CTkLabel(self.frame_card, text="1. Importe seus Extratos (OFX ou XLS)", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
-        self.label_instrucao.pack(pady=(15, 5))
+        self.label_instrucao.pack(pady=(6, 2))
 
         self.botao_carregar = ctk.CTkButton(
             self.frame_card, text="Selecionar Extratos (OFX / XLS)", font=("Open Sans", 13, "bold"),
             fg_color=self.cor_azul_botao, hover_color=self.cor_azul_hover, text_color="#FFFFFF",
-            corner_radius=4, height=35, command=self.selecionar_arquivo
+            corner_radius=4, height=34, command=self.selecionar_arquivo
         )
         self.botao_carregar.pack(pady=2)
 
         self.label_arquivo = ctk.CTkLabel(self.frame_card, text="Nenhum arquivo selecionado.", font=("Open Sans", 11), text_color="#666666", wraplength=500)
-        self.label_arquivo.pack(pady=(2, 5))
+        self.label_arquivo.pack(pady=(2, 4))
 
         # Linha Divisória Horizontal
         self.frame_divisor = ctk.CTkFrame(self.frame_card, height=1, fg_color="#EEEEEE")
-        self.frame_divisor.pack(fill="x", padx=15, pady=5)
+        self.frame_divisor.pack(fill="x", padx=15, pady=4)
 
         # Sessão 2: Configurações do SIGA
         self.label_instrucao2 = ctk.CTkLabel(self.frame_card, text="2. Mapeamento de Contas no SIGA", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
-        self.label_instrucao2.pack(pady=(2, 5))
+        self.label_instrucao2.pack(pady=(2, 4))
         self.construir_faixa_catalogo(self.frame_card, depois_de=self.label_instrucao2)
 
-        # Scrollable Frame para os Cards
-        self.scroll_lote = ctk.CTkScrollableFrame(self.frame_card, fg_color="#F8F9FA", corner_radius=6, height=260)
-        self.scroll_lote.pack(fill="both", expand=True, padx=15, pady=5)
+        # Sessão 3: Botões de Ação Final (ancorados no rodapé da aba antes da lista rolável)
+        self.frame_botoes = ctk.CTkFrame(self.frame_card, fg_color="transparent")
+        self.frame_botoes.pack(side="bottom", pady=(4, 6))
+
+        self.frame_divisor2 = ctk.CTkFrame(self.frame_card, height=1, fg_color="#EEEEEE")
+        self.frame_divisor2.pack(side="bottom", fill="x", padx=15, pady=4)
+
+        # Scrollable Frame para os Cards (expande no espaço restante entre o topo e os botões)
+        self.scroll_lote = ctk.CTkScrollableFrame(self.frame_card, fg_color="#F8F9FA", corner_radius=6, height=100)
+        self.scroll_lote.pack(fill="both", expand=True, padx=15, pady=4)
 
         self.lbl_no_data = ctk.CTkLabel(self.scroll_lote, text="Carregue extratos para configurar os mapeamentos.", font=("Open Sans", 12), text_color="#999999")
-        self.lbl_no_data.pack(pady=40)
-
-        # Linha Divisória Horizontal
-        self.frame_divisor2 = ctk.CTkFrame(self.frame_card, height=1, fg_color="#EEEEEE")
-        self.frame_divisor2.pack(fill="x", padx=15, pady=5)
-
-        # Sessão 3: Botões de Ação Final
-        self.frame_botoes = ctk.CTkFrame(self.frame_card, fg_color="transparent")
-        self.frame_botoes.pack(pady=(5, 10))
+        self.lbl_no_data.pack(pady=30)
 
         self.botao_conectar = ctk.CTkButton(
             self.frame_botoes, text="Conectar ao SIGA", font=("Open Sans", 13, "bold"),
             fg_color="#5CB85C", hover_color="#4CAE4C", text_color="#FFFFFF",
-            corner_radius=4, height=35, state="disabled", command=self.iniciar_conexao_siga
+            corner_radius=4, height=34, state="disabled", command=self.iniciar_conexao_siga
         )
         self.botao_conectar.grid(row=0, column=0, padx=5)
 
         self.botao_gerar_txt = ctk.CTkButton(
             self.frame_botoes, text="Gerar .TXT Ofertas", font=("Open Sans", 13, "bold"),
             fg_color="#D9534F", hover_color="#C9302C", text_color="#FFFFFF",
-            corner_radius=4, height=35, state="disabled", command=self.gerar_txt_ofertas
+            corner_radius=4, height=34, state="disabled", command=self.gerar_txt_ofertas
         )
         self.botao_gerar_txt.grid(row=0, column=1, padx=5)
 
         self.botao_importar_ofertas = ctk.CTkButton(
             self.frame_botoes, text="Importar Ofertas no SIGA", font=("Open Sans", 13, "bold"),
             fg_color="#428BCA", hover_color="#3071A9", text_color="#FFFFFF",
-            corner_radius=4, height=35, state="disabled", command=self.iniciar_importacao_ofertas
+            corner_radius=4, height=34, state="disabled", command=self.iniciar_importacao_ofertas
         )
         self.botao_importar_ofertas.grid(row=0, column=2, padx=5)
 
@@ -264,33 +285,13 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
             self.frame_botoes, text="Baixar as provisões pagas no extrato (energia, boletos e PIX)",
             font=("Open Sans", 12),
             variable=self.var_baixar_energia, command=self._alternar_baixa_energia
-        ).grid(row=2, column=0, columnspan=3, pady=(8, 0), sticky="w")
+        ).grid(row=2, column=0, columnspan=3, pady=(6, 0), sticky="w")
         ctk.CTkCheckBox(
             self.frame_botoes, text="Revisar antes de gravar no SIGA", font=("Open Sans", 12),
             variable=self.var_revisar,
             command=lambda: self.config_manager.salvar_revisar_antes_de_gravar(self.var_revisar.get())
-        ).grid(row=3, column=0, columnspan=3, pady=(6, 0), sticky="w")
+        ).grid(row=3, column=0, columnspan=3, pady=(4, 0), sticky="w")
         self._alternar_baixa_energia(salvar=False)
-
-        # Barra de Progresso Geral do Lote
-        self.progress_bar = ctk.CTkProgressBar(self, width=400, height=8, corner_radius=4, progress_color="#5CB85C", fg_color="#E0E0E0")
-        self.progress_bar.pack(pady=(5, 5))
-        self.progress_bar.set(0.0)
-
-        # Barra de Status do Rodapé do Card
-        self.label_status_siga = ctk.CTkLabel(self, text="Aguardando extratos ou faturas...", font=("Open Sans", 12), text_color="#666666")
-        self.label_status_siga.pack(pady=(0, 10))
-
-        # ==========================================
-        # FOOTER (Assinatura do Software)
-        # ==========================================
-        self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
-        self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 5))
-
-        texto_rodape = f"AutoSIGA v{VERSION} · Desenvolvido por PAIRUS Soluções Tecnológicas"
-        self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=(tema.FONTE, 11),
-                                         text_color=tema.CINZA_TEXTO)
-        self.label_rodape.pack()
 
     def atualizar_status(self, texto, cor="#666666"):
         """

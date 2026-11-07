@@ -407,7 +407,10 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
                       command=self.cadastrar_nova_localidade).grid(row=2, column=0, columnspan=2, pady=(4, 8))
 
     def _alternar_nova_localidade(self):
-        largura, altura = self.winfo_width(), self.winfo_height()
+        tamanho = self.geometry().partition("+")[0]
+        w_str, _, h_str = tamanho.partition("x")
+        largura = int(w_str) if w_str.isdigit() else 380
+        altura = int(h_str) if h_str.isdigit() else 390
         if self.frame_nova.winfo_ismapped():
             self.frame_nova.pack_forget()
             self.geometry(f"{largura}x{altura - _ALTURA_NOVA_LOCALIDADE}")

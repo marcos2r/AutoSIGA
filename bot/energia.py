@@ -10,6 +10,16 @@ from caminhos import diretorio_base
 from controllers.anexo_fatura import CONTA_DESPESA_ENERGIA, preparar_anexo
 
 
+def _navegador_fechado(page, erro=None):
+    """True se a aba ou janela do navegador foi fechada."""
+    if erro is not None and "has been closed" in str(erro):
+        return True
+    try:
+        return bool(getattr(page, "is_closed", lambda: False)())
+    except Exception:
+        return False
+
+
 class EnergiaMixin:
     """Injeção das faturas de energia extraídas dos PDFs."""
 
@@ -33,7 +43,8 @@ class EnergiaMixin:
             for i, fat in enumerate(faturas):
                 gravou = False
                 try:
-                    if not self.browser_aberto:
+                    if not self.browser_aberto or _navegador_fechado(page):
+                        self.browser_aberto = False
                         break
 
                     self._verificar_sessao_ativa(page)
@@ -67,12 +78,6 @@ class EnergiaMixin:
                         time.sleep(1)
                         continue
 
-                    # Garante que a localidade ativa do SIGA é "ADM - DOURADOS - MS" e a competência é a da fatura
-                    try:
-                        self._garantir_localidade_competencia(page, uc, competencia_fatura)
-                    except Exception as e_loc:
-                        logging.warning(f"Não foi possível garantir localidade/competência no cabeçalho: {e_loc}")
-
                     # --- PRÉ-CHECK DE DUPLICIDADE ---
                     # Sempre no SIGA e logo antes de gravar: outra pessoa pode ter lançado em outra
                     # máquina. Sem número ou sem conseguir conferir, a fatura não é lançada.
@@ -80,10 +85,31 @@ class EnergiaMixin:
                         self.motivos_energia[numero_fatura] = "o PDF não traz o número da fatura"
                         self.update_status(f"⚠️ Fatura da UC {uc} sem número: não lançada.", "#F89406")
                         continue
+
+                    # Garante que a localidade ativa do SIGA é a ADM e a competência é a da fatura
+                    try:
+                        self._garantir_localidade_competencia(page, uc, competencia_fatura)
+                    except Exception as e_loc:
+                        if _navegador_fechado(page, e_loc):
+                            self.browser_aberto = False
+                            self.motivos_energia[numero_fatura] = "navegador fechado"
+                            break
+                        logging.warning(f"Não foi possível garantir localidade/competência no cabeçalho: {e_loc}")
+                        if competencia_fatura:
+                            competencias_fechadas.add(competencia_fatura)
+                        self.motivos_energia[numero_fatura] = (
+                            f"localidade ADM ou competência {competencia_fatura or 'atual'} indisponível no SIGA"
+                        )
+                        continue
+
                     try:
                         ja_lancada = self.verificar_fatura_ja_lancada(page, numero_fatura, emissao=emissao,
                                                                       vencimento=vencimento, fatura=fat)
                     except Exception as e_check:
+                        if _navegador_fechado(page, e_check):
+                            self.browser_aberto = False
+                            self.motivos_energia[numero_fatura] = "navegador fechado"
+                            break
                         logging.error(f"Não foi possível conferir a fatura {numero_fatura} no SIGA: {e_check}", exc_info=True)
                         self.motivos_energia[numero_fatura] = "não deu para conferir no SIGA se já estava lançada"
                         self.update_status(f"⚠️ Não consegui conferir a fatura {numero_fatura} no SIGA: não lançada.", "#D9534F")
@@ -374,9 +400,12 @@ class EnergiaMixin:
                     faturas_sucesso.append(fat)
                     qtd_injetada += 1
                 except Exception as e_fat:
-                    # Uma fatura com erro não derruba as outras; se o Gravar já foi clicado, a
-                    # auditoria final confere no SIGA se ela ficou gravada
+                    # Uma fatura com erro não derruba as outras; se o navegador fechou, interrompe o laço
                     num_erro = fat.get("numero_fatura", "")
+                    if _navegador_fechado(page, e_fat):
+                        self.browser_aberto = False
+                        self.motivos_energia[num_erro] = "navegador fechado"
+                        break
                     logging.error(f"Erro ao lançar a fatura {num_erro}: {e_fat}", exc_info=True)
                     self._capturar_tela_e_log(page, "erro_fatura_energia")
                     if gravou:
@@ -387,28 +416,30 @@ class EnergiaMixin:
                     self.update_status(f"⚠️ Erro na fatura {num_erro}; seguindo para a próxima.", "#D9534F")
 
             # --- AUDITORIA FINAL ---
-            if faturas_sucesso:
+            if faturas_sucesso and self.browser_aberto:
                 self.update_status("🔍 Iniciando Auditoria Final no Banco do SIGA...", "#337AB7")
                 sucessos_auditados = 0
                 faturas_confirmadas = []
                 for fat_aud in faturas_sucesso:
+                    if not self.browser_aberto or _navegador_fechado(page):
+                        self.browser_aberto = False
+                        break
                     num_doc = fat_aud.get("numero_fatura", "")
                     emissao_aud = fat_aud.get("emissao", "")
                     venc_aud = fat_aud.get("vencimento", "")
                     uc_aud = fat_aud.get("uc", "")
 
+                    comp_aud = ""
                     if emissao_aud and len(emissao_aud.split('/')) == 3:
                         partes = emissao_aud.split('/')
                         comp_aud = f"{partes[1]}/{partes[2]}"
-                        try:
-                            self._garantir_localidade_competencia(page, uc_aud, comp_aud)
-                        except Exception as e:
-                            logging.warning(f"Auditoria: Erro ao ajustar competência para {comp_aud}: {e}")
-
-                    # O verificar_fatura_ja_lancada vai cuidar de ir para o TES01501 e buscar a nota
                     try:
+                        self._garantir_localidade_competencia(page, uc_aud, comp_aud)
                         existe = self.verificar_fatura_ja_lancada(page, num_doc, emissao=emissao_aud, vencimento=venc_aud)
                     except Exception as e_aud:
+                        if _navegador_fechado(page, e_aud):
+                            self.browser_aberto = False
+                            break
                         logging.error(f"Auditoria: falha ao consultar a fatura {num_doc}: {e_aud}", exc_info=True)
                         existe = False
                     if existe:

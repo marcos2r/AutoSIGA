@@ -38,3 +38,39 @@ def test_contexto_diverge_quando_localidade_e_outra():
 def test_sem_mes_alvo_confere_so_a_localidade():
     pagina = PaginaCabecalho("ADM - DOURADOS - MS", "05/2026")
     assert SigaBot._contexto_ativo_confere(pagina, "adm", "dourados - ms", "")
+
+
+def test_garantir_localidade_energia_troca_do_dr_para_a_adm(monkeypatch):
+    pagina = PaginaCabecalho("DOURADOS\nDR - DOURADOS", "10/2026")
+    bot = SigaBot([{"tipo_adm": "ADM", "nome_adm": "DOURADOS - MS"},
+                   {"tipo_adm": "DR", "nome_adm": "DOURADOS"}], callbacks={})
+    trocas = []
+    monkeypatch.setattr(bot, "_ajustar_localidade_competencia",
+                        lambda p, tipo, nome, mes: trocas.append((tipo, nome, mes)) or True)
+
+    bot._garantir_localidade_competencia(pagina, "123", "10/2026")
+
+    assert trocas == [("ADM", "DOURADOS - MS", "10/2026")]
+
+
+def test_garantir_localidade_energia_nao_troca_quando_ja_esta_na_adm(monkeypatch):
+    pagina = PaginaCabecalho("DOURADOS\nADM - DOURADOS - MS", "10/2026")
+    bot = SigaBot([{"tipo_adm": "ADM", "nome_adm": "DOURADOS - MS"}], callbacks={})
+    trocas = []
+    monkeypatch.setattr(bot, "_ajustar_localidade_competencia",
+                        lambda p, tipo, nome, mes: trocas.append((tipo, nome, mes)) or True)
+
+    bot._garantir_localidade_competencia(pagina, "123", "10/2026")
+
+    assert trocas == []
+
+
+def test_garantir_localidade_energia_levanta_erro_se_nao_ficar_na_adm(monkeypatch):
+    import pytest
+
+    pagina = PaginaCabecalho("DOURADOS\nDR - DOURADOS", "10/2026")
+    bot = SigaBot([], callbacks={})
+    monkeypatch.setattr(bot, "_ajustar_localidade_competencia", lambda p, tipo, nome, mes: False)
+
+    with pytest.raises(RuntimeError, match="O SIGA não ficou em ADM"):
+        bot._garantir_localidade_competencia(pagina, "123", "10/2026")

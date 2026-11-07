@@ -20,6 +20,7 @@ Localizado na pasta `/models`, abriga classes que lidam exclusivamente com I/O (
 - **`config_manager.py`**: Acessa e edita o `config.json`. As chaves de energia (e-mail, localidades, UCs, faturas processadas) ficam no mixin `config_energia.py`; o catálogo de contas lido do SIGA (`catalogo_contas`), no mixin `config_catalogo.py`.
 - **`faturas_pendentes.py`**: Guarda no `config.json` as faturas de energia cuja UC ainda não foi mapeada (e as descartadas pelo usuário), para que nenhuma se perca entre importações.
 - **`ofx_reader.py`**: Traduz arquivos físicos `.ofx` para dicionários nativos do Python usando a biblioteca `ofxparse`.
+- **`xls_reader.py`**, **`xls_conta_corrente.py`** e **`xls_sicoob.py`**: Traduzem planilhas `.xls` (via `xlrd`) e `.xlsx` (via `openpyxl`) de extratos do Sicredi e do Sicoob (conta corrente, aplicação e relatório PIX) para o formato padronizado do sistema.
 
 ### 2. Controllers (Lógica de Negócios)
 Localizado em `/controllers`, contém a inteligência de processamento matemático e expurgo.

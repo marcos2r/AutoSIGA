@@ -15,6 +15,7 @@ from typing import Any
 import xlrd
 
 from models.xls_conta_corrente import eh_conta_corrente, ler_conta_corrente
+from models.xls_sicoob import abrir_workbook, eh_planilha_sicoob, ler_planilha_sicoob
 
 # Número de conta Sicredi (ex.: "12345-6"), usado quando o rótulo da conta não é achado
 _RE_CONTA = re.compile(r"\d{4,6}-\d")
@@ -93,7 +94,9 @@ class XlsReader:
             raise FileNotFoundError(f"O arquivo {caminho} não foi encontrado no disco.")
 
         try:
-            workbook = xlrd.open_workbook(caminho)
+            workbook = abrir_workbook(caminho) if caminho.lower().endswith(".xlsx") else xlrd.open_workbook(caminho)
+        except xlrd.compdoc.CompDocError:
+            workbook = xlrd.open_workbook(caminho, ignore_workbook_corruption=True)
         except Exception as e:
             raise ValueError(f"O arquivo não pôde ser aberto como planilha Excel (XLS/XLSX) válida. Erro: {e}") from e
 
@@ -107,6 +110,8 @@ class XlsReader:
         sheet = workbook.sheet_by_index(0)
         if sheet.nrows < 5:
             raise ValueError("A planilha carregada contém poucas linhas para ser um extrato Sicredi válido.")
+        if eh_planilha_sicoob(sheet):
+            return ler_planilha_sicoob(sheet, caminho)
         if eh_conta_corrente(sheet):
             return ler_conta_corrente(sheet)  # mesmo extrato do OFX, no formato do OfxReader
 

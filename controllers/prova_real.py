@@ -156,6 +156,8 @@ def movimentos_do_banco(dados: dict[str, Any]) -> list[tuple[str, float, str]] |
     Returns:
         A lista, ou None se o extrato não tiver os movimentos completos.
     """
+    if dados.get("movimentos_completos") is False:
+        return None
     if dados.get("tipo_extrato") == "APLICACAO":
         movimentos = dados.get("movimentos")
         if movimentos is None:

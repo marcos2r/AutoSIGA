@@ -8,6 +8,7 @@ permitindo a importação manual em lote no sistema legado do SIGA.
 
 import calendar
 import logging
+import unicodedata
 from datetime import datetime
 
 from controllers.baixa_contas_pagar import resumo_resultado as resumo_resultado_cp
@@ -64,7 +65,7 @@ class Exportador:
 
             # Formato SIGA Csv: DATA;HISTÓRICO;VALOR
             # O histórico (MEMO + NAME) é o texto exportado; a filtragem usa só o MEMO.
-            historico = tx.get('historico') or tx.get('descricao', '')
+            historico = " ".join((tx.get('historico') or tx.get('descricao', '')).replace(";", ",").splitlines())
             linhas_limpas.append(f"{tx.get('data', '')};{historico.strip()};{valor_fmt}")
 
         try:
@@ -82,7 +83,16 @@ class Exportador:
     # Palavras bloqueadas que categorizam lançamentos que NÃO são Ofertas puras.
     # Por exemplo: Rendimentos de aplicação, saques aplicados e dinheiro em
     # caixa já lançado direto (depositos ou congregação).
-    PALAVRAS_BLOQUEADAS = ["APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "RESG.", "DEP ", "CONGREGACAO", "TRANSFERENCIA"]
+    PALAVRAS_BLOQUEADAS = [
+        "APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "RESG.", "DEP ", "CONGREGACAO", "TRANSFERENCIA", "TRANSF.",
+    ]
+    # Pagadores que indicam transferência/repasse entre administrações da própria igreja
+    # (em bancos como o Sicoob, o nome do pagador fica só em 'historico', fora do MEMO).
+    PAGADORES_BLOQUEADOS = ["CONGREGACAO"]
+
+    @staticmethod
+    def _sem_acento(texto: str) -> str:
+        return unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode("ascii").upper()
 
     @staticmethod
     def filtrar_ofertas(transacoes):
@@ -98,10 +108,15 @@ class Exportador:
         ofertas = []
         qtd_descartadas = 0
         for tx in transacoes or []:
-            descricao = tx.get("descricao", "").upper()
+            descricao = Exportador._sem_acento(tx.get("descricao", ""))
+            historico = Exportador._sem_acento(tx.get("historico", ""))
             # COND. 1: Somente valores POSITIVOS (o SIGA não aceita estornos neste arquivo).
             # COND. 2: Nenhuma palavra bloqueada no MEMO.
-            if tx.get("valor", 0.0) <= 0 or any(p in descricao for p in Exportador.PALAVRAS_BLOQUEADAS):
+            if (
+                tx.get("valor", 0.0) <= 0
+                or any(p in descricao for p in Exportador.PALAVRAS_BLOQUEADAS)
+                or any(p in historico for p in Exportador.PAGADORES_BLOQUEADOS)
+            ):
                 qtd_descartadas += 1
                 continue
             ofertas.append(tx)

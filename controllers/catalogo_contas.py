@@ -154,11 +154,20 @@ def mesmo_extrato(a: dict[str, Any], b: dict[str, Any]) -> bool:
     Compara período, tipo e produto, e a conta por `cc_bate`, porque o OFX traz a conta com
     o prefixo da agência e o XLS não.
     """
+    if bool(a.get("movimentos_completos", True)) != bool(b.get("movimentos_completos", True)):
+        return False
     campos = ("data_inicial", "data_final", "tipo_extrato", "produto")
     if any(str(a.get(c) or "").strip() != str(b.get(c) or "").strip() for c in campos):
         return False
     conta_a, conta_b = str(a.get("conta_id", "")).strip(), str(b.get("conta_id", "")).strip()
-    return conta_a == conta_b or cc_bate(conta_a, conta_b)
+    if cc_bate(conta_a, conta_b):
+        return True
+    if conta_a != conta_b:
+        return False
+    if not so_digitos(conta_a):
+        return (a.get("saldo_atual") == b.get("saldo_atual")
+                and len(a.get("transacoes", [])) == len(b.get("transacoes", [])))
+    return True
 
 
 def separar_localidade(localidade: str) -> tuple[str, str]:

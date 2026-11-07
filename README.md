@@ -1,11 +1,18 @@
-# AutoSIGA v1.12.0 🚀
+# AutoSIGA v1.13.0 🚀
 
 **AutoSIGA** é um motor avançado de RPA (Robotic Process Automation) construído em Python, voltado para a automatização e conciliação de tesourarias baseadas nas regras IT.TES.05. Ele cruza digitalmente extratos bancários brutos (`.OFX`) com o painel contábil administrativo SIGA (Sistema de Informação e Gestão), injetando dados, poupando centenas de horas humanas e reduzindo a taxa de erros a zero.
 
 ## 🎯 Por que o AutoSIGA existe?
 A conciliação bancária entre múltiplas jurisdições (como a de Administração/Conta Corrente e de Ponto de Pregação/Fundo de Aplicação) no SIGA era uma tarefa manual, exaustiva e suscetível à desorganização humana. O AutoSIGA atua como um robô que enxerga o sistema exatamente como você.
 
-## ✨ Destaques da Versão v1.12.0
+## ✨ Destaques da Versão v1.13.0
+
+- **Extrato de Conta Corrente do Sicoob em Excel (`.xlsx` e `.xls`)**: O AutoSIGA passa a reconhecer o modelo de extrato de conta corrente do Sicoob (aba `LANÇAMENTOS`, colunas `DATA | DOCUMENTO | HISTÓRICO | INFORMAÇÕES COMPLEMENTARES | VALOR`). Como o Sicoob exporta os dias em ordem decrescente (do fim para o começo do mês), o leitor reorganiza os lançamentos em ordem cronológica crescente, ignora `SALDO BLOQUEADO ANTERIOR` e confere matematicamente se `SALDO ANTERIOR + soma dos movimentos == último SALDO DO DIA` antes de liberar o extrato. Quando a planilha não traz o número da conta nas células, ele tenta ler do nome do arquivo (ex: `extrato_601.134-9.xlsx`) ou identifica como `"SICOOB"` para vínculo no card guiado.
+- **Relatório de Recebimentos PIX do Sicoob (`.xlsx` e `.xls`)**: Reconhece os relatórios detalhado (`.xlsx`) e sintético (`.xls`) da aba `Extrato Pix` do Sicoob, lendo o número da conta corrente (`CC:`), o período consultado, o pagador, o valor e o `TxId`, além de validar a quantidade e a soma total contra o quadro `Resumo` do próprio relatório. Mesmo arquivos `.xls` exportados pelo Sicoob com falha de alocação interna de blocos são abertos com segurança.
+- **Relatório PIX Protegido na Prova Real e na Deduplicação**: Por conter apenas entradas de PIX (sem tarifas, transferências ou saídas e sem saldo bancário), o Relatório PIX é marcado com `movimentos_completos=False`. Assim, a prova real não aponta as saídas da conta no SIGA como "lançamentos sem par no banco", e a deduplicação do lote nunca descarta o extrato completo de conta corrente caso os dois arquivos da mesma conta sejam selecionados juntos.
+- **PIX e Transferências da Própria Congregação Fora das Ofertas**: Na geração e importação do TXT de ofertas, recebimentos de PIX ou TED cujo pagador seja a própria Congregação (`CONGREGACAO CRISTA NO BRASIL` / `Congregação Cristã no Brasil`, com ou sem acento) passam a ser ignorados automaticamente mesmo quando o nome do pagador vem separado do `MEMO` (no `NAME` do OFX, em `INFORMAÇÕES COMPLEMENTARES` do extrato Sicoob ou na coluna `Pagador` do Relatório PIX), evitando que repasses e transferências administrativas entre administrações entrem como coleta. A abreviação `TRANSF.` (`DÉB.TRANSF.` / `CRÉD.TRANSF.`) usada pelo Sicoob também entrou na lista de bloqueio, e quebras de linha ou `;` nas informações complementares são higienizados para não quebrar o layout do TXT da `TES05602`.
+
+### Novidades da v1.12.0
 
 - **Contas Correntes Antes das Aplicações**: O lote processa primeiro todas as contas correntes e só depois as aplicações. A aplicação e o resgate entram no SIGA pela transferência lançada na conta corrente (às vezes de outra localidade); antes, a prova real da aplicação rodava antes dessa transferência e apontava como faltando movimentos que o robô lançava minutos depois.
 - **E-mail em Paralelo**: As faturas de energia são baixadas do Gmail numa thread desde o início do lote, enquanto o navegador abre, o login é feito e os primeiros extratos são conciliados. As provisões esperam o download só no primeiro extrato com débito de energia, ou no fim do lote se nenhum tiver.

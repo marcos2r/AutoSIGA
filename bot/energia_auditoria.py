@@ -44,51 +44,27 @@ class AuditoriaEnergiaMixin:
         return acao in (JA_LANCADA, JA_LANCADA_MANUAL)
 
     def _garantir_localidade_competencia(self, page, uc, competencia_fatura):
-        """Garante que a localidade ativa é 'ADM - DOURADOS - MS' e a competência bate com a fatura"""
-        active_local = page.locator('li.green span.user-info').text_content() or ""
-        active_comp = page.locator('span#f_competencianome').text_content() or ""
+        """Garante que a localidade ativa no SIGA é a ADM e a competência bate com a fatura.
 
-        loc_incorreta = "ADM - DOURADOS" not in active_local
-        comp_incorreta = competencia_fatura and (active_comp.strip() != competencia_fatura.strip())
+        Contas de energia ficam sempre na ADM, mesmo que o lote tenha terminado de conciliar
+        um extrato do DR ou do PIA. Usa o modal "Outros Meses" (`_ajustar_localidade_competencia`)
+        para trocar tanto a localidade quanto o mês de trabalho, e falha se o cabeçalho do SIGA
+        não confirmar a troca.
+        """
+        nome_adm = next(
+            (str(d.get("nome_adm", "")).strip() for d in getattr(self, "lote_processados", [])
+             if isinstance(d, dict) and str(d.get("tipo_adm", "")).strip().upper() == "ADM"),
+            "",
+        )
+        if self._contexto_ativo_confere(page, "ADM", nome_adm, competencia_fatura):
+            return
 
-        if loc_incorreta or comp_incorreta:
-            self.update_status(f"Ajustando localidade/competência para ADM - DOURADOS - MS ({competencia_fatura})...", "#428BCA")
-            mes_encontrado = page.evaluate(f'''() => {{
-                if ("{competencia_fatura}" !== "") {{
-                    var selectMes = document.getElementById("f_competencia_webmaster");
-                    if (selectMes) {{
-                        for (let opt of selectMes.options) {{
-                            if (opt.text.indexOf("{competencia_fatura}") > -1) {{
-                                return true;
-                            }}
-                        }}
-                    }}
-                }}
-                return false;
-            }}''')
-
-            if mes_encontrado:
-                js_submit = f'''() => {{
-                    var selectMes = document.getElementById("f_competencia_webmaster");
-                    for (let opt of selectMes.options) {{
-                        if (opt.text.indexOf("{competencia_fatura}") > -1) {{
-                            if (window.jQuery) {{
-                                window.jQuery("#form-competencia-competencia").val(opt.value);
-                                window.jQuery("#form-competencia").submit();
-                            }} else {{
-                                document.getElementById("form-competencia-competencia").value = opt.value;
-                                document.getElementById("form-competencia").submit();
-                            }}
-                            break;
-                        }}
-                    }}
-                }}'''
-                with page.expect_navigation(timeout=15000):
-                    page.evaluate(js_submit)
-                import time
-                time.sleep(1.5)
-                self.esperar_loading(page)
-            else:
-                self.update_status(f"⚠️ Mês de Trabalho {competencia_fatura} não encontrado no SIGA.", "#D9534F")
-                import time
-                time.sleep(1)
+        alvo = f"ADM - {nome_adm}" if nome_adm else "ADM"
+        self.update_status(
+            f"Ajustando localidade/competência para {alvo} ({competencia_fatura or 'mês atual'})...",
+            "#428BCA",
+        )
+        if not self._ajustar_localidade_competencia(page, "ADM", nome_adm, competencia_fatura):
+            raise RuntimeError(
+                f"O SIGA não ficou em {alvo} ({competencia_fatura or 'mês atual'})."
+            )

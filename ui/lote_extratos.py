@@ -6,7 +6,7 @@ import logging
 import os
 from tkinter import filedialog, messagebox
 
-from controllers.catalogo_contas import mesmo_extrato
+from controllers.catalogo_contas import mesmo_extrato, so_digitos
 from controllers.exportador import Exportador
 from models.ofx_reader import OfxReader
 from models.xls_reader import XlsReader
@@ -54,12 +54,19 @@ class LoteExtratosMixin:
                 else:
                     dados = OfxReader.parse_file(caminho)
 
+                dados["caminho_arquivo"] = caminho
                 mantido = next((d for d in self.dados_processados_lote if mesmo_extrato(dados, d)), None)
                 if mantido is not None:
-                    arquivos_descartados.append(_aviso_duplicado(caminho, mantido))
+                    if _prioridade_extrato(dados) < _prioridade_extrato(mantido):
+                        _herdar_conta_id(dados, mantido)
+                        idx = self.dados_processados_lote.index(mantido)
+                        self.dados_processados_lote[idx] = dados
+                        arquivos_descartados.append(_aviso_duplicado(mantido["caminho_arquivo"], dados))
+                    else:
+                        _herdar_conta_id(mantido, dados)
+                        arquivos_descartados.append(_aviso_duplicado(caminho, mantido))
                     continue
 
-                dados["caminho_arquivo"] = caminho
                 self.dados_processados_lote.append(dados)
             except Exception as e:
                 nome_arq = os.path.basename(caminho)
@@ -211,6 +218,22 @@ class LoteExtratosMixin:
                     messagebox.showwarning("Aviso", "Não sobrou nenhuma linha de Oferta para gerar arquivo!")
             except Exception as e:
                 messagebox.showerror("Erro ao Salvar", str(e))
+
+
+def _prioridade_extrato(dados):
+    """Prioridade na deduplicação do lote: 0 = OFX, 1 = planilha completa, 2 = relatório parcial (PIX)."""
+    caminho = str(dados.get("caminho_arquivo", "")).lower()
+    if caminho.endswith(".ofx"):
+        return 0
+    if bool(dados.get("movimentos_completos", True)):
+        return 1
+    return 2
+
+
+def _herdar_conta_id(vencedor, descartado):
+    """Se o extrato mantido veio sem número de conta ('SICOOB') e o descartado tem, aproveita o número."""
+    if not so_digitos(vencedor.get("conta_id")) and so_digitos(descartado.get("conta_id")):
+        vencedor["conta_id"] = descartado["conta_id"]
 
 
 def _aviso_duplicado(caminho, mantido):

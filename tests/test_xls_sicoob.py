@@ -215,7 +215,9 @@ def test_relatorio_pix_sicoob_recusa_quando_resumo_diverge(monkeypatch, tmp_path
         _ler(monkeypatch, tmp_path, _relatorio_pix_sicoob(qtd=99), aba="Extrato Pix")
 
 
-def test_mesmo_extrato_distingue_contas_sem_numero_e_relatorio_pix(monkeypatch, tmp_path):
+def test_mesmo_extrato_distingue_contas_sem_numero_e_prioriza_ofx_e_extrato_completo(monkeypatch, tmp_path):
+    from ui.lote_extratos import _herdar_conta_id, _prioridade_extrato
+
     ext_a = _ler(monkeypatch, tmp_path, _extrato_sicoob(), aba="LANÇAMENTOS")
     ext_b = _ler(monkeypatch, tmp_path, _extrato_sicoob(saldo_anterior=10.0, saldo_dia_30=4032.54), aba="LANÇAMENTOS")
     rel_pix_1 = _ler(monkeypatch, tmp_path, _relatorio_pix_sicoob(), aba="Extrato Pix")
@@ -226,9 +228,33 @@ def test_mesmo_extrato_distingue_contas_sem_numero_e_relatorio_pix(monkeypatch, 
     assert not mesmo_extrato(ext_a, ext_b)
     # Relatório PIX detalhado.xlsx e sintetico.xls da mesma conta e período são duplicados entre si
     assert mesmo_extrato(rel_pix_1, rel_pix_2)
-    # Mas o Relatório PIX não é confundido com o extrato completo da mesma conta
-    ext_com_conta = dict(ext_a, conta_id="601.134-9", data_final="31/10/2026")
-    assert not mesmo_extrato(ext_com_conta, rel_pix_1)
+
+    # OFX do Sicoob (com conta e data final 31/10) casa com a planilha .xlsx da mesma conta (sem número e data 30/10)
+    ofx_mesma_conta = dict(ext_a, conta_id="601134-9", data_final="31/10/2026", caminho_arquivo="sicoob.ofx")
+    assert mesmo_extrato(ofx_mesma_conta, ext_a)
+    assert not mesmo_extrato(ofx_mesma_conta, ext_b)
+
+    # OFX ou extrato completo da mesma conta (601.134-9) também absorve o Relatório PIX parcial da mesma conta
+    assert mesmo_extrato(ofx_mesma_conta, rel_pix_1)
+    assert not mesmo_extrato(dict(ofx_mesma_conta, conta_id="7000733-0"), rel_pix_1)
+
+    # Sem número de conta na planilha .xlsx ('SICOOB'), só casa com o Relatório PIX se os PIX pertencerem ao extrato
+    assert not mesmo_extrato(ext_a, rel_pix_1)
+    rel_pix_do_ext_a = dict(
+        rel_pix_1,
+        transacoes=[
+            {"data": "01/10/2026", "valor": 350.0, "tipo": "credit", "descricao": "Pix", "historico": "Pix"},
+            {"data": "30/10/2026", "valor": 972.54, "tipo": "credit", "descricao": "Pix", "historico": "Pix"},
+        ],
+    )
+    assert mesmo_extrato(ext_a, rel_pix_do_ext_a)
+
+    # Prioridade: OFX (0) > planilha completa (1) > relatório PIX parcial (2), herdando o número da conta quando faltar
+    ext_a["caminho_arquivo"] = "extrato.xlsx"
+    rel_pix_do_ext_a["caminho_arquivo"] = "detalhado.xlsx"
+    assert _prioridade_extrato(ofx_mesma_conta) < _prioridade_extrato(ext_a) < _prioridade_extrato(rel_pix_do_ext_a)
+    _herdar_conta_id(ext_a, rel_pix_do_ext_a)
+    assert ext_a["conta_id"] == "601.134-9"
 
 
 def test_montar_historico_sicoob_higieniza_quebras_e_ponto_e_virgula():

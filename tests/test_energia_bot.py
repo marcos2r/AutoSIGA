@@ -144,3 +144,35 @@ def test_ja_lancada_por_outra_pessoa_fica_com_o_motivo(bot_energia):
     bot.inserir_faturas_energia_siga(PaginaGravadora(), [_fatura("F1")])
 
     assert "já estava no SIGA" in bot.motivos_energia["F1"]
+
+
+
+def test_falha_ao_trocar_para_adm_pula_a_fatura_sem_consultar_nem_lancar(bot_energia, monkeypatch):
+    bot, reg = bot_energia
+
+    def falhar_troca(page, uc, comp):
+        raise RuntimeError("O SIGA não ficou em ADM")
+
+    monkeypatch.setattr(bot, "_garantir_localidade_competencia", falhar_troca)
+
+    bot.inserir_faturas_energia_siga(PaginaGravadora(), [_fatura("F1"), _fatura("F2")])
+
+    assert reg.consultas == []
+    assert reg.gravacoes == 0
+    assert "localidade ADM" in bot.motivos_energia["F1"]
+
+
+def test_navegador_fechado_para_o_laco_na_hora(bot_energia, monkeypatch):
+    bot, reg = bot_energia
+
+    def fechar_na_primeira(page, campo, termo, dropdown_is_ajax=True):
+        raise RuntimeError("Locator.wait_for: Target page, context or browser has been closed")
+
+    monkeypatch.setattr(bot, "selecionar_select2", fechar_na_primeira)
+
+    bot.inserir_faturas_energia_siga(PaginaGravadora(), [_fatura("F1"), _fatura("F2"), _fatura("F3")])
+
+    assert reg.consultas == ["F1"]
+    assert bot.browser_aberto is False
+    assert "navegador fechado" in bot.motivos_energia["F1"]
+    assert "F2" not in bot.motivos_energia

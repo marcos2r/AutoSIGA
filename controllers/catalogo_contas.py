@@ -148,26 +148,101 @@ def cc_bate(cc_catalogo: str, conta_extrato: str) -> bool:
     return a == b or a.endswith(b) or b.endswith(a)
 
 
+def _mes_ano(data: Any) -> str:
+    """Extrai 'MM/YYYY' de uma data 'DD/MM/YYYY', ou '' se inválida."""
+    texto = str(data or "").strip()
+    return texto[3:] if len(texto) == 10 and texto[2] == "/" and texto[5] == "/" else ""
+
+
+def _assinatura_transacoes(extrato: dict[str, Any]) -> list[tuple[str, float]]:
+    """Lista ordenada de (data, valor) das transações para identificar o mesmo extrato."""
+    return sorted(
+        (str(t.get("data", "")).strip(), round(float(t.get("valor", 0.0)), 2))
+        for t in extrato.get("transacoes", [])
+    )
+
+
+def _pix_contido_no_extrato(parcial: dict[str, Any], completo: dict[str, Any]) -> bool:
+    """Diz se os recebimentos de um relatório PIX parcial pertencem ao extrato completo."""
+    txs_parciais = [
+        (str(t.get("data", "")).strip(), round(float(t.get("valor", 0.0)), 2))
+        for t in parcial.get("transacoes", [])
+        if round(float(t.get("valor", 0.0)), 2) != 0.0
+    ]
+    if not txs_parciais:
+        return False
+    disponiveis = _assinatura_transacoes(completo)
+    for item in txs_parciais:
+        if item not in disponiveis:
+            return False
+        disponiveis.remove(item)
+    return True
+
+
+def _saldos_compativeis(saldo_a: Any, saldo_b: Any) -> bool:
+    """Diz se dois saldos finais batem (0,00 e 1,00 viram None no OFX, mas permanecem no XLS)."""
+    if saldo_a is None and saldo_b is None:
+        return True
+    if saldo_a is None or saldo_b is None:
+        outro = float(saldo_b if saldo_a is None else saldo_a)
+        return outro in (0.0, 1.0)
+    return abs(float(saldo_a) - float(saldo_b)) <= 0.01
+
+
 def mesmo_extrato(a: dict[str, Any], b: dict[str, Any]) -> bool:
     """Diz se dois extratos lidos são o mesmo (a mesma conta e período em OFX e em XLS, por exemplo).
 
-    Compara período, tipo e produto, e a conta por `cc_bate`, porque o OFX traz a conta com
-    o prefixo da agência e o XLS não.
+    Compara período, tipo e produto, e a conta por `cc_bate` (ou pelas transações quando a
+    planilha do Sicoob não traz o número da conta ou é um relatório parcial de PIX).
     """
-    if bool(a.get("movimentos_completos", True)) != bool(b.get("movimentos_completos", True)):
+    if any(str(a.get(c) or "").strip() != str(b.get(c) or "").strip() for c in ("tipo_extrato", "produto")):
         return False
-    campos = ("data_inicial", "data_final", "tipo_extrato", "produto")
-    if any(str(a.get(c) or "").strip() != str(b.get(c) or "").strip() for c in campos):
+    banco_a, banco_b = so_digitos(a.get("banco")), so_digitos(b.get("banco"))
+    if banco_a and banco_b and banco_a != banco_b:
         return False
+
+    mesmo_periodo = (
+        str(a.get("data_inicial") or "").strip() == str(b.get("data_inicial") or "").strip()
+        and str(a.get("data_final") or "").strip() == str(b.get("data_final") or "").strip()
+    )
+    mes_a, mes_b = _mes_ano(a.get("data_inicial")), _mes_ano(b.get("data_inicial"))
+    mesmo_mes = bool(
+        mes_a
+        and mes_a == mes_b
+        and mes_a == _mes_ano(a.get("data_final"))
+        and mes_b == _mes_ano(b.get("data_final"))
+    )
+    if not (mesmo_periodo or mesmo_mes):
+        return False
+
+    completos_a = bool(a.get("movimentos_completos", True))
+    completos_b = bool(b.get("movimentos_completos", True))
     conta_a, conta_b = str(a.get("conta_id", "")).strip(), str(b.get("conta_id", "")).strip()
-    if cc_bate(conta_a, conta_b):
-        return True
-    if conta_a != conta_b:
+    tem_cc_a, tem_cc_b = bool(so_digitos(conta_a)), bool(so_digitos(conta_b))
+
+    if completos_a != completos_b:
+        parcial, completo = (b, a) if completos_a else (a, b)
+        if tem_cc_a and tem_cc_b:
+            return cc_bate(conta_a, conta_b)
+        return _pix_contido_no_extrato(parcial, completo)
+
+    if tem_cc_a and tem_cc_b:
+        if not cc_bate(conta_a, conta_b):
+            return False
+        if mesmo_periodo:
+            return True
+        tx_a = _assinatura_transacoes(a)
+        return bool(tx_a) and tx_a == _assinatura_transacoes(b)
+
+    if tem_cc_a != tem_cc_b:
+        tx_a = _assinatura_transacoes(a)
+        if not tx_a or tx_a != _assinatura_transacoes(b):
+            return False
+        return _saldos_compativeis(a.get("saldo_atual"), b.get("saldo_atual"))
+
+    if conta_a != conta_b or not mesmo_periodo:
         return False
-    if not so_digitos(conta_a):
-        return (a.get("saldo_atual") == b.get("saldo_atual")
-                and len(a.get("transacoes", [])) == len(b.get("transacoes", [])))
-    return True
+    return a.get("saldo_atual") == b.get("saldo_atual") and _assinatura_transacoes(a) == _assinatura_transacoes(b)
 
 
 def separar_localidade(localidade: str) -> tuple[str, str]:

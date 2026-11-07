@@ -2,6 +2,13 @@
 
 Histórico das versões, da mais recente para a mais antiga. A versão atual é definida em `version.py`.
 
+## v1.13.1
+
+- **Provisão e Auditoria de Energia Sempre na ADM**: Quando a etapa de provisão de energia roda ao final de um lote que terminou em outra localidade (como `DR` ou `PIA`), o robô agora abre o modal **Outros Meses** para trocar efetivamente a localidade de volta para a `ADM` antes de consultar a Contas a Pagar (`TES01501`) ou lançar faturas (`TES01502`). Se o cabeçalho do SIGA não confirmar a `ADM`, nenhuma fatura é consultada ou lançada na localidade errada.
+- **Parada Imediata se o Navegador for Fechado nas Faturas de Energia**: Se o usuário fechar a janela do Edge durante a conferência ou o lançamento de faturas de energia, o laço é interrompido na hora em vez de tentar processar as faturas seguintes numa aba fechada.
+- **Painel Final Livre para Minimizar e Exportar Excel**: A janela **Métricas de Produtividade AutoSIGA** não fica mais travada no topo (`-topmost` permanente e `grab_set`), permitindo minimizá-la e alternar livremente para o navegador do SIGA, e o diálogo de salvar ao clicar em **Exportar Excel (.xlsx)** agora abre sempre à frente do painel (`parent=janela`).
+- **Preferência ao OFX sobre Planilhas da Mesma Conta (Sicredi e Sicoob)**: Quando um arquivo `.ofx` e uma planilha `.xls`/`.xlsx` da mesma conta e período são selecionados juntos no lote (inclusive quando a planilha `.xlsx` do Sicoob não traz o número da conta nas células ou quando vem acompanhada do Relatório PIX), o AutoSIGA mantém sempre o `.ofx` (ou o extrato completo sobre o relatório parcial de PIX, aproveitando o número da conta do relatório quando necessário) e descarta os arquivos repetidos.
+
 ## v1.13.0
 
 - **Extrato de Conta Corrente do Sicoob em Excel (`.xlsx` e `.xls`)**: O AutoSIGA passa a reconhecer o modelo de extrato de conta corrente do Sicoob (aba `LANÇAMENTOS`, colunas `DATA | DOCUMENTO | HISTÓRICO | INFORMAÇÕES COMPLEMENTARES | VALOR`). Como o Sicoob exporta os dias em ordem decrescente (do fim para o começo do mês), o leitor reorganiza os lançamentos em ordem cronológica crescente, ignora `SALDO BLOQUEADO ANTERIOR` e confere matematicamente se `SALDO ANTERIOR + soma dos movimentos == último SALDO DO DIA` antes de liberar o extrato. Quando a planilha não traz o número da conta nas células, ele tenta ler do nome do arquivo (ex: `extrato_601.134-9.xlsx`) ou identifica como `"SICOOB"` para vínculo no card guiado.

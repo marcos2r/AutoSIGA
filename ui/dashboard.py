@@ -144,8 +144,8 @@ class DashboardMixin:
         janela.configure(fg_color="#F1F5F9")
         janela.lift()
         janela.focus_force()
-        janela.attributes('-topmost', True)
-        janela.grab_set()
+        janela.attributes("-topmost", True)
+        janela.after(150, lambda: janela.attributes("-topmost", False))
 
         tipo_lote = telemetria.get("tipo_lote", "extrato")
 
@@ -203,7 +203,7 @@ class DashboardMixin:
         painel = None
         largura_texto = 0
         if tem_detalhe:
-            janela.after(0, lambda: janela.state("zoomed"))
+            janela.after(20, lambda: janela.state("zoomed"))
             frame.grid_columnconfigure(1, weight=1)
             frame.grid_rowconfigure(0, weight=1)
             coluna = ctk.CTkFrame(frame, fg_color="transparent", width=_LARGURA_RESUMO)
@@ -269,7 +269,9 @@ class DashboardMixin:
 
         # Função para salvar a planilha Excel
         def exportar_planilha():
+            janela.attributes("-topmost", False)
             filepath = filedialog.asksaveasfilename(
+                parent=janela,
                 defaultextension=".xlsx",
                 initialfile="RELATORIO_PRODUTIVIDADE_AUTOSIGA.xlsx",
                 title="Exportar Relatório de Produtividade",

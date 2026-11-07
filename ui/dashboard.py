@@ -39,7 +39,8 @@ class DashboardMixin:
         }.get(tipo, (f"Lançamentos a Importar ({qtd})", f"Lançar {qtd} itens", "Pular este extrato"))
         janela = ctk.CTkToplevel(self)
         janela.title("Ação Necessária: Lançamentos Pendentes")
-        janela.geometry("650x500")
+        altura_modal = min(500, max(360, self.winfo_screenheight() - 80))
+        janela.geometry(f"650x{altura_modal}")
         janela.configure(fg_color="#FFFFFF")
         janela.lift()
         janela.focus_force()
@@ -47,14 +48,23 @@ class DashboardMixin:
         janela.grab_set() # Foca os cliques apenas neste modal
 
         lbl_titulo = ctk.CTkLabel(janela, text=titulo, font=self.fonte_titulo, text_color=self.cor_azul_header)
-        lbl_titulo.pack(pady=(20, 2))
+        lbl_titulo.pack(pady=(15, 2))
         if contexto:
             cabecalho = "Faturas do e-mail sem provisão no SIGA" if tipo == "provisoes"                 else f"Conta {contexto.get('conta', '')} · {contexto.get('localidade', '')}"
             ctk.CTkLabel(janela, text=cabecalho,
-                         font=(tema.FONTE, 12), text_color=tema.CINZA_TEXTO).pack(pady=(0, 8))
+                         font=(tema.FONTE, 12), text_color=tema.CINZA_TEXTO).pack(pady=(0, 6))
 
-        frame_scroll = ctk.CTkScrollableFrame(janela, width=600, height=300, fg_color="#F8F9FA", corner_radius=6)
-        frame_scroll.pack(padx=20, pady=10, fill="both", expand=True)
+        frame_botoes = ctk.CTkFrame(janela, fg_color="transparent")
+        frame_botoes.pack(side="bottom", pady=12)
+
+        ctk.CTkButton(frame_botoes, text=rotulo_ok, command=lambda: self.autorizar_lancamentos(janela),
+                      fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, height=40).pack(side="left", padx=10)
+        ctk.CTkButton(frame_botoes, text=rotulo_pular, command=lambda: self.cancelar_lancamentos(janela),
+                      fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER, text_color=tema.CINZA_TEXTO,
+                      border_width=1, border_color=tema.CINZA_BORDA, height=40).pack(side="right", padx=10)
+
+        frame_scroll = ctk.CTkScrollableFrame(janela, width=600, height=160, fg_color="#F8F9FA", corner_radius=6)
+        frame_scroll.pack(padx=20, pady=8, fill="both", expand=True)
 
         # Dinamicamente cria uma linha colorida (Verde/Vermelho) para cada registro
         for tx in lancamentos:
@@ -70,15 +80,6 @@ class DashboardMixin:
             ctk.CTkLabel(frame_item, text=desc if baixas else desc[:50], font=("Open Sans", 12), anchor="w",
                          justify="left", wraplength=360).pack(side="left", padx=10, pady=5, fill="x", expand=True)
             ctk.CTkLabel(frame_item, text=valor_fmt, font=("Open Sans", 13, "bold"), text_color=cor_valor).pack(side="right", padx=15, pady=5)
-
-        frame_botoes = ctk.CTkFrame(janela, fg_color="transparent")
-        frame_botoes.pack(pady=15)
-
-        ctk.CTkButton(frame_botoes, text=rotulo_ok, command=lambda: self.autorizar_lancamentos(janela),
-                      fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, height=40).pack(side="left", padx=10)
-        ctk.CTkButton(frame_botoes, text=rotulo_pular, command=lambda: self.cancelar_lancamentos(janela),
-                      fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER, text_color=tema.CINZA_TEXTO,
-                      border_width=1, border_color=tema.CINZA_BORDA, height=40).pack(side="right", padx=10)
 
         janela.protocol("WM_DELETE_WINDOW", lambda: self.cancelar_lancamentos(janela))
 
@@ -140,7 +141,8 @@ class DashboardMixin:
         """Exibe o popup parabenizando a finalização dos trabalhos com métricas e ROI financeiro."""
         janela = ctk.CTkToplevel(self)
         janela.title("Métricas de Produtividade AutoSIGA")
-        janela.geometry("540x530")
+        altura_dash = min(530, max(420, self.winfo_screenheight() - 80))
+        janela.geometry(f"540x{altura_dash}")
         janela.configure(fg_color="#F1F5F9")
         janela.lift()
         janela.focus_force()
@@ -307,4 +309,6 @@ class DashboardMixin:
 
         if painel is not None:
             # Ao sair do maximizado, a janela volta num tamanho em que as duas colunas ainda cabem
-            janela.geometry(f"{_LARGURA_RESUMO + 760}x720")
+            w_rest = min(_LARGURA_RESUMO + 760, max(880, janela.winfo_screenwidth() - 40))
+            h_rest = min(720, max(500, janela.winfo_screenheight() - 80))
+            janela.geometry(f"{w_rest}x{h_rest}")

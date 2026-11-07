@@ -129,6 +129,8 @@ class FaturaEnergiaController:
             pdfs = EmailReader.buscar_faturas_periodo(
                 inicio, fim, pasta_temp, service=service,
                 progresso=lambda n, total: log_msg(f"Baixando as faturas do e-mail: {n} de {total} mensagens...", "#428BCA"))
+            if pdfs:
+                log_msg(f"Lendo {len(pdfs)} fatura(s) baixada(s) do e-mail...", "#428BCA")
             lidas = [d for pdf in pdfs if (d := FaturaEnergiaController._extrair_e_organizar(
                 pdf, "", pasta_organizada, log_msg))]
         finally:
@@ -202,11 +204,17 @@ class FaturaEnergiaController:
             dict | None: Dados da fatura, ou None se ela foi descartada.
         """
         try:
+            nome_base = os.path.basename(pdf_path)
+            if "reaviso" in nome_base.lower():
+                logging.info(f"Carta de reaviso de vencimento ignorada (não é fatura): {nome_base}")
+                os.remove(pdf_path)
+                return None
+
             dados_fat = PdfExtractor.extrair_dados_fatura(pdf_path)
 
             # Validações estruturais mínimas
             if not dados_fat["uc"] or not dados_fat["vencimento"] or dados_fat["valor"] <= 0.0:
-                log_msg(f"Fatura inválida ou ilegível ignorada: {os.path.basename(pdf_path)}", "#D9534F")
+                log_msg(f"Fatura inválida ou ilegível ignorada: {nome_base}", "#D9534F")
                 os.remove(pdf_path)
                 return None
 

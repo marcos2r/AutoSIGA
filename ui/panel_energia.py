@@ -64,6 +64,13 @@ class PanelEnergia(ctk.CTkFrame):
         )
         self.btn_ucs.pack(side="right", fill="x", expand=True, padx=5)
 
+        # Botão Importar Faturas (ancorado embaixo para continuar visível mesmo com pendências em telas menores)
+        self.btn_importar = ctk.CTkButton(
+            self, text="⚡ BUSCAR E LANÇAR CONTAS DE ENERGIA ⚡", font=("Open Sans", 13, "bold"),
+            fg_color="#5CB85C", hover_color="#4CAE4C", height=40, command=self.iniciar_importacao_energia
+        )
+        self.btn_importar.pack(side="bottom", padx=15, pady=10, fill="x")
+
         # Faturas pendentes de mapeamento (só aparece quando há alguma)
         self.frame_pendentes = ctk.CTkFrame(self, fg_color="#FCF8E3", border_width=1, border_color="#FAEBCC", corner_radius=6)
         self.lbl_pendentes = ctk.CTkLabel(self.frame_pendentes, text="", font=("Open Sans", 12, "bold"), text_color="#8A6D3B")
@@ -72,15 +79,8 @@ class PanelEnergia(ctk.CTkFrame):
             self.frame_pendentes, text="Clique em Buscar e Lançar para mapear a UC de cada uma.",
             font=("Open Sans", 10), text_color="#666666"
         ).pack(padx=10, anchor="w")
-        self.scroll_pendentes = ctk.CTkScrollableFrame(self.frame_pendentes, fg_color="transparent", height=110)
-        self.scroll_pendentes.pack(padx=5, pady=(4, 8), fill="x")
-
-        # Botão Importar Faturas
-        self.btn_importar = ctk.CTkButton(
-            self, text="⚡ BUSCAR E LANÇAR CONTAS DE ENERGIA ⚡", font=("Open Sans", 13, "bold"),
-            fg_color="#5CB85C", hover_color="#4CAE4C", height=40, command=self.iniciar_importacao_energia
-        )
-        self.btn_importar.pack(padx=15, pady=15, fill="x")
+        self.scroll_pendentes = ctk.CTkScrollableFrame(self.frame_pendentes, fg_color="transparent", height=80)
+        self.scroll_pendentes.pack(padx=5, pady=(4, 8), fill="both", expand=True)
 
     def atualizar_pendentes(self):
         """Redesenha a lista de faturas pendentes a partir do config.json."""
@@ -93,7 +93,7 @@ class PanelEnergia(ctk.CTkFrame):
             return
 
         self.lbl_pendentes.configure(text=f"⚠️ {len(faturas)} fatura(s) aguardando mapeamento de UC")
-        self.frame_pendentes.pack(padx=15, pady=(0, 5), fill="x", before=self.btn_importar)
+        self.frame_pendentes.pack(padx=15, pady=(0, 5), fill="both", expand=True)
 
         for fat in faturas:
             linha = ctk.CTkFrame(self.scroll_pendentes, fg_color="#FFFFFF", border_width=1, border_color="#DDDDDD", corner_radius=4)

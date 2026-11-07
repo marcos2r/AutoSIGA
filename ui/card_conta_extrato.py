@@ -72,19 +72,19 @@ class CardContaExtrato(ctk.CTkFrame):
         self.btn_remover.pack(side="left", padx=(8, 0))
 
         ctk.CTkLabel(self, text="Localidade:", font=fonte).grid(row=1, column=0, padx=(10, 4), pady=2, sticky="e")
-        self.combo_local = ctk.CTkComboBox(self, values=[], width=300, height=28, font=fonte,
+        self.combo_local = ctk.CTkComboBox(self, values=[], width=260, height=28, font=fonte,
                                            command=lambda v: self._ao_mudar_localidade())
-        self.combo_local.grid(row=1, column=1, columnspan=3, padx=2, pady=2, sticky="w")
+        self.combo_local.grid(row=1, column=1, columnspan=3, padx=2, pady=2, sticky="ew")
 
         ctk.CTkLabel(self, text="C. Corrente:", font=fonte).grid(row=2, column=0, padx=(10, 4), pady=2, sticky="e")
-        self.combo_cc = ctk.CTkComboBox(self, values=[], width=210, height=28, font=fonte,
+        self.combo_cc = ctk.CTkComboBox(self, values=[], width=175, height=28, font=fonte,
                                         command=lambda v: self._ao_mudar_conta())
-        self.combo_cc.grid(row=2, column=1, padx=2, pady=2, sticky="w")
+        self.combo_cc.grid(row=2, column=1, padx=2, pady=2, sticky="ew")
 
         ctk.CTkLabel(self, text="C. Aplicação:", font=fonte).grid(row=2, column=2, padx=(10, 4), pady=2, sticky="e")
-        self.combo_ca = ctk.CTkComboBox(self, values=[], width=210, height=28, font=fonte,
+        self.combo_ca = ctk.CTkComboBox(self, values=[], width=175, height=28, font=fonte,
                                         command=lambda v: self._ao_mudar_conta())
-        self.combo_ca.grid(row=2, column=3, padx=2, pady=2, sticky="w")
+        self.combo_ca.grid(row=2, column=3, padx=2, pady=2, sticky="ew")
 
         # Em modo Editar, o texto digitado é avaliado ao sair do campo ou ao teclar Enter
         for combo, acao in ((self.combo_local, self._ao_mudar_localidade), (self.combo_cc, self._ao_mudar_conta),
@@ -115,6 +115,8 @@ class CardContaExtrato(ctk.CTkFrame):
         if self.is_aplicacao:
             self.combo_cc.set("N/A")
             self.combo_cc.configure(state="disabled")
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(3, weight=1)
         self.grid_columnconfigure(4, weight=1)
 
     # ------------------------------------------------------------------ dados

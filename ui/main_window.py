@@ -317,6 +317,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         Usa o self.after(0) para garantir que a Thread secundária (Bot)
         possa modificar a UI (Main Thread) sem gerar Segmentation Fault.
         """
+        cor = tema.COR_LEGADA.get(str(cor).upper(), cor)
         self.after(0, lambda: self.label_status_siga.configure(text=texto, text_color=cor))
 
     def exibir_mensagem_topo(self, tipo, titulo, mensagem):

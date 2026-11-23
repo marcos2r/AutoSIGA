@@ -91,6 +91,8 @@ class ResultadoExtrato:
     periodo: str = ""
     # Boletos e PIX do extrato com provisão na Contas a Pagar (None quando não houve a etapa)
     baixas_cp: list["ResultadoPagamento"] | None = None
+    # Avisos que não são erro (rendimento ou tarifa faltando), de controllers/avisos_extrato
+    avisos: list[str] = field(default_factory=list)
 
 
 def valor_br(texto: Any) -> float | None:

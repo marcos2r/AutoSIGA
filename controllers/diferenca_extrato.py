@@ -87,8 +87,9 @@ def linhas_do_extrato(r: ResultadoExtrato) -> list[tuple[str, str]]:
         list[tuple[str, str]]: (nível, texto); o nível só escolhe a cor.
     """
     baixas = linhas_do_painel(r.baixas) + linhas_dos_pagamentos(r.baixas_cp)
+    avisos = [("alerta", f"{_RECUO}Aviso: {a}") for a in r.avisos]
     if r.saldo.status != DIVERGE or r.sobras is None or r.faltas is None:
-        return baixas
+        return avisos + baixas
     c = compor_diferenca(r.saldo.diferenca, r.sobras, r.faltas)
     linhas = [("neutro", f"{_RECUO}De onde vem a diferença de {moeda(r.saldo.diferenca)}:")]
     if c.sobras:
@@ -112,7 +113,7 @@ def linhas_do_extrato(r: ResultadoExtrato) -> list[tuple[str, str]]:
     if c.sem_explicacao:
         linhas.append(("alerta", f"{_RECUO}• {_efeito(c.sem_explicacao)}: sem explicação nos movimentos do "
                                  "período (confira o saldo inicial e lançamentos fora do período)"))
-    return linhas + baixas
+    return linhas + avisos + baixas
 
 
 def _efeito(valor: float) -> str:

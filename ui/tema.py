@@ -37,6 +37,16 @@ FUNDO_JANELA = "#F1F5F9"
 FUNDO_PAINEL = "#F8F9FA"
 BRANCO = "#FFFFFF"
 
+# Cores antigas que o robô (bot/) ainda manda para a barra de status: todas reprovavam no
+# contraste. A janela troca pelo token antes de pintar.
+COR_LEGADA = {
+    "#F89406": AMARELO_TEXTO, "#F0AD4E": AMARELO_TEXTO,
+    "#428BCA": AZUL_INFO_TEXTO, "#5BC0DE": AZUL_INFO_TEXTO,
+    "#D9534F": VERMELHO_TEXTO,
+    "#5CB85C": VERDE_TEXTO,
+    "#999999": CINZA_TEXTO,
+}
+
 # Selo de cada estado do card: (fundo, texto)
 SELO = {
     estado_card.CONFIRMADO: (VERDE_FUNDO, VERDE_TEXTO),

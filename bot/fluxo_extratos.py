@@ -8,6 +8,7 @@ import time
 
 from bot.descoberta_contas import _JS_LER_CONTAS_TES
 from bot.extratos import MesFechadoError
+from controllers.avisos_extrato import avisos_do_extrato
 from controllers.catalogo_contas import escolher_opcao_conta
 from controllers.conciliador import Conciliador, fora_do_periodo
 from controllers.exportador import Exportador
@@ -308,7 +309,7 @@ class FluxoExtratosMixin:
             conta_id=str(dados.get("conta_id", "")), conta_siga=conta_siga or "",
             localidade=dados.get("localidade_selecionada", ""), tipo=dados.get("tipo_extrato", ""),
             situacao=situacao, lancados=lancados, pendentes=pendentes, sobras=sobras, baixas=baixas, faltas=faltas,
-            periodo=_periodo(dados), baixas_cp=dados.get("baixas_cp"))
+            periodo=_periodo(dados), baixas_cp=dados.get("baixas_cp"), avisos=avisos_do_extrato(dados, faltas))
         if saldo is not None:
             resultado.saldo = saldo
         telemetria_lote.setdefault("extratos", []).append(resultado)

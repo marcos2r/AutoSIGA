@@ -51,7 +51,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         # Configurações nativas da Janela
         self.title(f"AutoSIGA v{VERSION} - Importação de Lançamentos")
         self.aplicar_geometria()
-        self.configure(fg_color="#F1F5F9")
+        self.configure(fg_color=tema.FUNDO_JANELA)
 
         # Intercepta o botão "X" da janela para fechamento gracioso
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -68,7 +68,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         # Paleta de Cores e Tipografia (Bootstrap Theme like)
         self.fonte_padrao = ("Open Sans", 14)
         self.fonte_titulo = ("Open Sans", 24, "bold")
-        self.cor_laranja_logo = "#F89406"
+        self.cor_laranja_logo = tema.LARANJA_LOGO
         # Azul da navbar do SIGA: branco sobre ele tem 5,7:1 (o #438EB9 antigo ficava abaixo de 4,5:1)
         self.cor_azul_header = tema.AZUL_NAVBAR
 
@@ -169,7 +169,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.label_chevron = ctk.CTkLabel(self.frame_header, text="> ", font=self.fonte_titulo, text_color=self.cor_laranja_logo)
         self.label_chevron.pack(side="left", padx=(20, 0), pady=10)
 
-        self.label_titulo = ctk.CTkLabel(self.frame_header, text="AutoSIGA", font=self.fonte_titulo, text_color="#FFFFFF")
+        self.label_titulo = ctk.CTkLabel(self.frame_header, text="AutoSIGA", font=self.fonte_titulo, text_color=tema.BRANCO)
         self.label_titulo.pack(side="left", pady=10)
 
         # Ação rara: botão discreto (contorno branco) para não competir com o fluxo principal
@@ -204,7 +204,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         # ==========================================
         # MAIN TABVIEW (Alternar entre Extratos e Energia)
         # ==========================================
-        self.tabview = ctk.CTkTabview(self, corner_radius=6, border_width=1, border_color="#DDDDDD", fg_color="#FFFFFF")
+        self.tabview = ctk.CTkTabview(self, corner_radius=6, border_width=1, border_color=tema.CINZA_BORDA, fg_color=tema.BRANCO)
         self.tabview.pack(pady=(8, 4), padx=14, fill="both", expand=True)
 
         self.tab_extratos = self.tabview.add("Conciliação de Extratos")
@@ -223,7 +223,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         # Sessão 1: Leitura do Extrato (Instanciado na tab de extratos)
         self.frame_card = self.tab_extratos # Redireciona a hierarquia dos widgets de extrato para a tab
 
-        self.label_instrucao = ctk.CTkLabel(self.frame_card, text="1. Importe seus Extratos (OFX ou XLS)", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
+        self.label_instrucao = ctk.CTkLabel(self.frame_card, text="1. Importe seus Extratos (OFX ou XLS)", font=("Open Sans", 14, "bold"), text_color=tema.AZUL_TITULO)
         self.label_instrucao.pack(pady=(6, 2))
 
         self.botao_carregar = ctk.CTkButton(
@@ -233,15 +233,15 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         )
         self.botao_carregar.pack(pady=2)
 
-        self.label_arquivo = ctk.CTkLabel(self.frame_card, text="Nenhum arquivo selecionado.", font=("Open Sans", 11), text_color="#666666", wraplength=500)
+        self.label_arquivo = ctk.CTkLabel(self.frame_card, text="Nenhum arquivo selecionado.", font=("Open Sans", 11), text_color=tema.CINZA_TEXTO, wraplength=500)
         self.label_arquivo.pack(pady=(2, 4))
 
         # Linha Divisória Horizontal
-        self.frame_divisor = ctk.CTkFrame(self.frame_card, height=1, fg_color="#EEEEEE")
+        self.frame_divisor = ctk.CTkFrame(self.frame_card, height=1, fg_color=tema.CINZA_DIVISOR)
         self.frame_divisor.pack(fill="x", padx=15, pady=4)
 
         # Sessão 2: Configurações do SIGA
-        self.label_instrucao2 = ctk.CTkLabel(self.frame_card, text="2. Mapeamento de Contas no SIGA", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
+        self.label_instrucao2 = ctk.CTkLabel(self.frame_card, text="2. Mapeamento de Contas no SIGA", font=("Open Sans", 14, "bold"), text_color=tema.AZUL_TITULO)
         self.label_instrucao2.pack(pady=(2, 4))
         self.construir_faixa_catalogo(self.frame_card, depois_de=self.label_instrucao2)
 
@@ -249,11 +249,11 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.frame_botoes = ctk.CTkFrame(self.frame_card, fg_color="transparent")
         self.frame_botoes.pack(side="bottom", pady=(4, 6))
 
-        self.frame_divisor2 = ctk.CTkFrame(self.frame_card, height=1, fg_color="#EEEEEE")
+        self.frame_divisor2 = ctk.CTkFrame(self.frame_card, height=1, fg_color=tema.CINZA_DIVISOR)
         self.frame_divisor2.pack(side="bottom", fill="x", padx=15, pady=4)
 
         # Scrollable Frame para os Cards (expande no espaço restante entre o topo e os botões)
-        self.scroll_lote = ctk.CTkScrollableFrame(self.frame_card, fg_color="#F8F9FA", corner_radius=6, height=100)
+        self.scroll_lote = ctk.CTkScrollableFrame(self.frame_card, fg_color=tema.FUNDO_PAINEL, corner_radius=6, height=100)
         self.scroll_lote.pack(fill="both", expand=True, padx=15, pady=4)
 
         self.lbl_no_data = ctk.CTkLabel(self.scroll_lote, text="Carregue extratos para configurar os mapeamentos.",

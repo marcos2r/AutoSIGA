@@ -78,7 +78,7 @@ class ModalCredenciais(ctk.CTkToplevel):
         self.title("Configurar Credenciais Seguras")
         self.geometry("380x250")
         self.resizable(False, False)
-        self.configure(fg_color="#FFFFFF")
+        self.configure(fg_color=tema.BRANCO)
 
         # Centraliza na janela pai
         self.transient(parent)
@@ -91,7 +91,7 @@ class ModalCredenciais(ctk.CTkToplevel):
 
     def construir_widgets(self):
         # Título interno
-        lbl_titulo = ctk.CTkLabel(self, text="Credenciais de Acesso ao SIGA", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
+        lbl_titulo = ctk.CTkLabel(self, text="Credenciais de Acesso ao SIGA", font=("Open Sans", 14, "bold"), text_color=tema.AZUL_TITULO)
         lbl_titulo.pack(pady=(15, 10))
 
         lbl_info = ctk.CTkLabel(
@@ -151,7 +151,10 @@ class ModalCredenciais(ctk.CTkToplevel):
             # Salva a senha de forma encriptada no Windows Credential Manager
             keyring.set_password("AutoSIGA", usuario, senha)
 
-            messagebox.showinfo("Sucesso", "Credenciais gravadas com segurança no Windows Keyring!", parent=self)
+            # Confirmação na barra de status da janela principal, sem janela extra para fechar
+            avisar = getattr(self.master, "atualizar_status", None)
+            if avisar:
+                avisar("Credenciais do SIGA salvas no Gerenciador de Credenciais do Windows.", tema.VERDE_TEXTO)
             self.destroy()
         except Exception as e:
             messagebox.showerror("Erro de Gravação", f"Não foi possível salvar no keyring: {e}", parent=self)

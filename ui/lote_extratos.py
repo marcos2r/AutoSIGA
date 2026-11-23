@@ -222,7 +222,8 @@ class LoteExtratosMixin:
             try:
                 sucesso, qtd_limpas, qtd_desc = Exportador.gerar_txt_ofertas(transacoes_acumuladas, filepath)
                 if sucesso:
-                    messagebox.showinfo("Sucesso", f"Exportação finalizada!\nOfertas Mantidas: {qtd_limpas}\nDescartadas: {qtd_desc}")
+                    self.atualizar_status(f"TXT de ofertas salvo: {qtd_limpas} oferta(s) mantida(s), "
+                                          f"{qtd_desc} descartada(s).", tema.VERDE_TEXTO)
                 else:
                     messagebox.showwarning("Aviso", "Não sobrou nenhuma linha de Oferta para gerar arquivo!")
             except Exception as e:

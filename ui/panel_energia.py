@@ -19,7 +19,7 @@ class PanelEnergia(ctk.CTkFrame):
     Aba dedicada para configuração, controle de e-mail e cadastro das Localidades da Energisa.
     """
     def __init__(self, parent, config_manager, callback_log, callback_topmost, trigger_bot_callback):
-        super().__init__(parent, fg_color="#FFFFFF")
+        super().__init__(parent, fg_color=tema.BRANCO)
         self.config_manager = config_manager
         self.callback_log = callback_log
         self.callback_topmost = callback_topmost
@@ -32,17 +32,19 @@ class PanelEnergia(ctk.CTkFrame):
 
     def construir_widgets(self):
         # Título
-        lbl_tit = ctk.CTkLabel(self, text="Provisionamento Automático de Energia (Energisa)", font=("Open Sans", 13, "bold"), text_color="#3D71A8")
+        lbl_tit = ctk.CTkLabel(self, text="Provisionamento Automático de Energia (Energisa)", font=("Open Sans", 13, "bold"), text_color=tema.AZUL_TITULO)
         lbl_tit.pack(pady=(10, 5))
 
         # Configurações do E-mail (Grid)
-        frame_config = ctk.CTkFrame(self, fg_color="#F8F9FA", border_width=1, border_color="#DDDDDD", corner_radius=6)
+        frame_config = ctk.CTkFrame(self, fg_color=tema.FUNDO_PAINEL, border_width=1, border_color=tema.CINZA_BORDA, corner_radius=6)
         frame_config.pack(padx=15, pady=5, fill="x")
 
         ctk.CTkLabel(frame_config, text="E-mail (Gmail):", font=("Open Sans", 11)).grid(row=0, column=0, padx=5, pady=5, sticky="e")
         # Placeholder neutro: um e-mail real ali parecia valor já preenchido
         self.entry_email = ctk.CTkEntry(frame_config, placeholder_text="nome@gmail.com", width=250, height=28, font=(tema.FONTE, 12))
         self.entry_email.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        self.entry_email.bind("<FocusOut>", self.salvar_dados_email)
+        self.entry_email.bind("<Return>", self.salvar_dados_email)
 
         secundario = dict(font=(tema.FONTE, 12), fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER,
                           text_color=tema.AZUL_NAVBAR, border_width=1, border_color=tema.CINZA_BORDA)
@@ -73,12 +75,12 @@ class PanelEnergia(ctk.CTkFrame):
         self.btn_importar.pack(side="bottom", padx=15, pady=10, fill="x")
 
         # Faturas pendentes de mapeamento (só aparece quando há alguma)
-        self.frame_pendentes = ctk.CTkFrame(self, fg_color="#FCF8E3", border_width=1, border_color="#FAEBCC", corner_radius=6)
-        self.lbl_pendentes = ctk.CTkLabel(self.frame_pendentes, text="", font=("Open Sans", 12, "bold"), text_color="#8A6D3B")
+        self.frame_pendentes = ctk.CTkFrame(self, fg_color=tema.AMARELO_FUNDO, border_width=1, border_color=tema.AMARELO_BORDA, corner_radius=6)
+        self.lbl_pendentes = ctk.CTkLabel(self.frame_pendentes, text="", font=("Open Sans", 12, "bold"), text_color=tema.AMARELO_TEXTO)
         self.lbl_pendentes.pack(padx=10, pady=(8, 0), anchor="w")
         ctk.CTkLabel(
             self.frame_pendentes, text="Clique em Buscar e Lançar para mapear a UC de cada uma.",
-            font=("Open Sans", 10), text_color="#666666"
+            font=("Open Sans", 10), text_color=tema.CINZA_TEXTO
         ).pack(padx=10, anchor="w")
         self.scroll_pendentes = ctk.CTkScrollableFrame(self.frame_pendentes, fg_color="transparent", height=80)
         self.scroll_pendentes.pack(padx=5, pady=(4, 8), fill="both", expand=True)
@@ -97,14 +99,14 @@ class PanelEnergia(ctk.CTkFrame):
         self.frame_pendentes.pack(padx=15, pady=(0, 5), fill="both", expand=True)
 
         for fat in faturas:
-            linha = ctk.CTkFrame(self.scroll_pendentes, fg_color="#FFFFFF", border_width=1, border_color="#DDDDDD", corner_radius=4)
+            linha = ctk.CTkFrame(self.scroll_pendentes, fg_color=tema.BRANCO, border_width=1, border_color=tema.CINZA_BORDA, corner_radius=4)
             linha.pack(fill="x", pady=2, padx=2)
 
             valor = f"R$ {float(fat.get('valor') or 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             texto = f"UC {fat.get('uc', '')}  ·  Ref. {fat.get('referencia', '')}  ·  {valor}  ·  Venc. {fat.get('vencimento', '')}"
             if fat.get("origem"):
                 texto += f"  ·  {fat['origem']}"
-            ctk.CTkLabel(linha, text=texto, font=("Open Sans", 11), text_color="#333333", anchor="w").pack(side="left", padx=8, pady=4, fill="x", expand=True)
+            ctk.CTkLabel(linha, text=texto, font=("Open Sans", 11), text_color=tema.TEXTO, anchor="w").pack(side="left", padx=8, pady=4, fill="x", expand=True)
 
             ctk.CTkButton(
                 linha, text="Descartar", font=("Open Sans", 10),
@@ -133,17 +135,25 @@ class PanelEnergia(ctk.CTkFrame):
     def carregar_dados(self):
         cfg = self.config_manager.get_email_config()
         self.entry_email.insert(0, cfg.get("email", ""))
+        self._email_salvo = cfg.get("email", "")
 
-    def salvar_dados_email(self):
+    def salvar_dados_email(self, event=None):
+        """Grava o e-mail do Gmail.
+
+        Pelo botão, avisa se estiver vazio. Ao sair do campo ou teclar Enter (``event``),
+        salva em silêncio só o que mudou e for um e-mail: ninguém precisa lembrar de clicar.
+        """
         email_str = self.entry_email.get().strip()
-
-        if not email_str:
+        if event is not None:
+            if "@" not in email_str or email_str == self._email_salvo:
+                return
+        elif not email_str:
             messagebox.showerror("Erro", "Informe o e-mail do Gmail.", parent=self)
             return
 
         self.config_manager.salvar_email_config(email_str, "imap.gmail.com")
-
-        messagebox.showinfo("Sucesso", "Configurações de energia gravadas com sucesso!", parent=self)
+        self._email_salvo = email_str
+        self.callback_log(f"E-mail das faturas de energia salvo: {email_str}", tema.VERDE_TEXTO)
 
     def abrir_localidades(self):
         ModalLocalidades(self.winfo_toplevel(), self.config_manager)

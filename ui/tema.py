@@ -19,15 +19,22 @@ AZUL_INFO_TEXTO = "#31708F"
 VERDE_FUNDO = "#DFF0D8"       # .alert-success
 VERDE_TEXTO = "#3C763D"
 AMARELO_FUNDO = "#FCF8E3"     # .alert-warning
-AMARELO_TEXTO = "#8A6D3B"
+AMARELO_TEXTO = "#806535"     # um tom abaixo do #8A6D3B do SIGA, que ficava com 4,43:1 no fundo da janela
 VERMELHO_FUNDO = "#F2DEDE"    # .alert-danger
 VERMELHO_TEXTO = "#A94442"   # também fundo de botão destrutivo: branco sobre ele tem 6,3:1
 VERMELHO_HOVER = "#843534"
 ROXO_MES = "#A069C3"          # chip "Mês de Trabalho"
 VERDE_LOCAL = "#69AA46"       # chip "Localidade" (só borda/ícone: 2,8:1 em texto)
+AMARELO_BORDA = "#FAEBCC"
+LARANJA_LOGO = "#F89406"      # só o ">" decorativo do logo; nunca texto ou fundo de botão
+TEXTO = "#333333"             # texto principal (12,6:1)
 CINZA_TEXTO = "#666666"       # texto secundário (5,7:1); #999999 reprova
 CINZA_BORDA = "#DDDDDD"
+CINZA_DIVISOR = "#EEEEEE"
 CINZA_HOVER = "#E6E6E6"
+CINZA_HOVER_FORTE = "#D4D4D4"
+FUNDO_JANELA = "#F1F5F9"
+FUNDO_PAINEL = "#F8F9FA"
 BRANCO = "#FFFFFF"
 
 # Selo de cada estado do card: (fundo, texto)

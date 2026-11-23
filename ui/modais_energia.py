@@ -26,7 +26,7 @@ class ModalLocalidades(ctk.CTkToplevel):
         self.title("Manutenção de Localidades")
         self.geometry("580x420")
         self.resizable(False, False)
-        self.configure(fg_color="#FFFFFF")
+        self.configure(fg_color=tema.BRANCO)
 
         self.transient(parent)
         self.attributes("-topmost", True)
@@ -36,7 +36,7 @@ class ModalLocalidades(ctk.CTkToplevel):
         self.carregar_tabela()
 
     def construir_widgets(self):
-        lbl_titulo = ctk.CTkLabel(self, text="Cadastro de Localidades", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
+        lbl_titulo = ctk.CTkLabel(self, text="Cadastro de Localidades", font=("Open Sans", 14, "bold"), text_color=tema.AZUL_TITULO)
         lbl_titulo.pack(pady=10)
 
         # Campos de Cadastro
@@ -56,14 +56,14 @@ class ModalLocalidades(ctk.CTkToplevel):
         btn_salvar.grid(row=1, column=0, columnspan=2, padx=5, pady=10, sticky="ew")
 
         # Divisor
-        div = ctk.CTkFrame(self, height=1, fg_color="#EEEEEE")
+        div = ctk.CTkFrame(self, height=1, fg_color=tema.CINZA_DIVISOR)
         div.pack(fill="x", padx=15, pady=5)
 
-        lbl_lista = ctk.CTkLabel(self, text="Localidades Cadastradas", font=("Open Sans", 12, "bold"), text_color="#3D71A8")
+        lbl_lista = ctk.CTkLabel(self, text="Localidades Cadastradas", font=("Open Sans", 12, "bold"), text_color=tema.AZUL_TITULO)
         lbl_lista.pack(pady=(5, 2))
 
         # Lista rolável
-        self.scroll_tabela = ctk.CTkScrollableFrame(self, fg_color="#F8F9FA", corner_radius=6, height=200)
+        self.scroll_tabela = ctk.CTkScrollableFrame(self, fg_color=tema.FUNDO_PAINEL, corner_radius=6, height=200)
         self.scroll_tabela.pack(padx=20, pady=5, fill="both", expand=True)
 
     def carregar_tabela(self):
@@ -78,13 +78,13 @@ class ModalLocalidades(ctk.CTkToplevel):
             return
 
         for loc in localidades:
-            item_frame = ctk.CTkFrame(self.scroll_tabela, fg_color="#FFFFFF", border_width=1, border_color="#DDDDDD", corner_radius=4)
+            item_frame = ctk.CTkFrame(self.scroll_tabela, fg_color=tema.BRANCO, border_width=1, border_color=tema.CINZA_BORDA, corner_radius=4)
             item_frame.pack(fill="x", pady=2, padx=2)
 
             cod = loc.get("codigo", "")
             nome = loc.get("nome", "")
 
-            lbl_cod = ctk.CTkLabel(item_frame, text=cod, font=("Open Sans", 11, "bold"), text_color="#3D71A8", width=120, anchor="w")
+            lbl_cod = ctk.CTkLabel(item_frame, text=cod, font=("Open Sans", 11, "bold"), text_color=tema.AZUL_TITULO, width=120, anchor="w")
             lbl_cod.pack(side="left", padx=10, pady=5)
 
             btn_del = ctk.CTkButton(
@@ -96,7 +96,7 @@ class ModalLocalidades(ctk.CTkToplevel):
 
             btn_edit = ctk.CTkButton(
                 item_frame, text="Editar", font=("Open Sans", 10),
-                fg_color="#F0AD4E", hover_color="#EC971F", width=60, height=20,
+                fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER, text_color=tema.AZUL_NAVBAR, border_width=1, border_color=tema.CINZA_BORDA, width=60, height=20,
                 command=lambda c=cod, n=nome: self.editar_localidade(c, n)
             )
             btn_edit.pack(side="right", padx=5, pady=5)
@@ -126,7 +126,8 @@ class ModalLocalidades(ctk.CTkToplevel):
         self.entry_codigo.delete(0, "end")
         self.entry_nome.delete(0, "end")
         self.carregar_tabela()
-        messagebox.showinfo("Sucesso", "Localidade gravada com sucesso!", parent=self)
+        # A tabela atualizada já confirma; o foco volta ao código para cadastrar a próxima
+        self.entry_codigo.focus_set()
 
     def excluir_localidade(self, codigo):
         if messagebox.askyesno("Confirmar", f"Deseja excluir a localidade {codigo}?", parent=self):
@@ -146,7 +147,7 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
         self.title("Manutenção de UCs")
         self.geometry("580x420")
         self.resizable(False, False)
-        self.configure(fg_color="#FFFFFF")
+        self.configure(fg_color=tema.BRANCO)
 
         self.transient(parent)
         self.attributes("-topmost", True)
@@ -156,7 +157,7 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
         self.carregar_tabela()
 
     def construir_widgets(self):
-        lbl_titulo = ctk.CTkLabel(self, text="Mapeamento UC -> Localidade", font=("Open Sans", 14, "bold"), text_color="#3D71A8")
+        lbl_titulo = ctk.CTkLabel(self, text="Mapeamento UC -> Localidade", font=("Open Sans", 14, "bold"), text_color=tema.AZUL_TITULO)
         lbl_titulo.pack(pady=10)
 
         # Cadastro
@@ -183,14 +184,14 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
         btn_salvar.grid(row=1, column=0, columnspan=2, padx=5, pady=10, sticky="ew")
 
         # Divisor
-        div = ctk.CTkFrame(self, height=1, fg_color="#EEEEEE")
+        div = ctk.CTkFrame(self, height=1, fg_color=tema.CINZA_DIVISOR)
         div.pack(fill="x", padx=15, pady=5)
 
-        lbl_lista = ctk.CTkLabel(self, text="Mapeamentos UC Existentes", font=("Open Sans", 12, "bold"), text_color="#3D71A8")
+        lbl_lista = ctk.CTkLabel(self, text="Mapeamentos UC Existentes", font=("Open Sans", 12, "bold"), text_color=tema.AZUL_TITULO)
         lbl_lista.pack(pady=(5, 2))
 
         # Lista rolável
-        self.scroll_tabela = ctk.CTkScrollableFrame(self, fg_color="#F8F9FA", corner_radius=6, height=200)
+        self.scroll_tabela = ctk.CTkScrollableFrame(self, fg_color=tema.FUNDO_PAINEL, corner_radius=6, height=200)
         self.scroll_tabela.pack(padx=20, pady=5, fill="both", expand=True)
 
     def carregar_tabela(self):
@@ -204,13 +205,13 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
             return
 
         for m in mapeamentos:
-            item_frame = ctk.CTkFrame(self.scroll_tabela, fg_color="#FFFFFF", border_width=1, border_color="#DDDDDD", corner_radius=4)
+            item_frame = ctk.CTkFrame(self.scroll_tabela, fg_color=tema.BRANCO, border_width=1, border_color=tema.CINZA_BORDA, corner_radius=4)
             item_frame.pack(fill="x", pady=2, padx=2)
 
             uc_num = m.get("uc", "")
             loc_cod = m.get("localidade_codigo", "")
 
-            lbl_uc = ctk.CTkLabel(item_frame, text=uc_num, font=("Open Sans", 11, "bold"), text_color="#3D71A8", width=130, anchor="w")
+            lbl_uc = ctk.CTkLabel(item_frame, text=uc_num, font=("Open Sans", 11, "bold"), text_color=tema.AZUL_TITULO, width=130, anchor="w")
             lbl_uc.pack(side="left", padx=10, pady=5)
 
             btn_del = ctk.CTkButton(
@@ -226,7 +227,7 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
 
             btn_edit = ctk.CTkButton(
                 item_frame, text="Editar", font=("Open Sans", 10),
-                fg_color="#F0AD4E", hover_color="#EC971F", width=60, height=20,
+                fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER, text_color=tema.AZUL_NAVBAR, border_width=1, border_color=tema.CINZA_BORDA, width=60, height=20,
                 command=lambda u=uc_num, ln=loc_nome: self.editar_mapeamento(u, ln)
             )
             btn_edit.pack(side="right", padx=5, pady=5)
@@ -268,7 +269,8 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
         self.config_manager.salvar_mapeamento_uc(uc, codigo_loc)
         self.entry_uc.delete(0, "end")
         self.carregar_tabela()
-        messagebox.showinfo("Sucesso", "Relação gravada com sucesso!", parent=self)
+        # A tabela atualizada já confirma; o foco volta à UC para relacionar a próxima
+        self.entry_uc.focus_set()
 
     def excluir_mapeamento(self, uc):
         if messagebox.askyesno("Confirmar", f"Deseja remover o relacionamento da UC {uc}?", parent=self):
@@ -313,7 +315,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         self.title("Mapear Unidade Consumidora")
         self.geometry("380x390" if detalhe else "380x360")
         self.resizable(False, False)
-        self.configure(fg_color="#FFFFFF")
+        self.configure(fg_color=tema.BRANCO)
 
         self.transient(parent)
         self.attributes("-topmost", True)
@@ -330,18 +332,18 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
 
         lbl_desc = ctk.CTkLabel(
             self, text=f"Deseja relacionar a Unidade Consumidora {self.uc} a alguma localidade para lançar no SIGA?",
-            font=("Open Sans", 11), text_color="#333333", wraplength=320
+            font=("Open Sans", 11), text_color=tema.TEXTO, wraplength=320
         )
         lbl_desc.pack(pady=8)
         if self.detalhe:
-            ctk.CTkLabel(self, text=self.detalhe, font=("Open Sans", 11, "bold"), text_color="#333333",
+            ctk.CTkLabel(self, text=self.detalhe, font=("Open Sans", 11, "bold"), text_color=tema.TEXTO,
                          wraplength=320).pack(pady=(0, 4))
 
         # Botão para visualizar nota fiscal (PDF) se houver
         if self.caminho_pdf and os.path.exists(self.caminho_pdf):
             btn_ver_nota = ctk.CTkButton(
                 self, text="Ver fatura (PDF)", font=("Open Sans", 11, "underline"),
-                fg_color="transparent", text_color=tema.AZUL_NAVBAR, hover_color="#EEEEEE",
+                fg_color="transparent", text_color=tema.AZUL_NAVBAR, hover_color=tema.CINZA_DIVISOR,
                 width=280, height=25, command=self.abrir_nota
             )
             btn_ver_nota.pack(pady=5)
@@ -349,7 +351,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         # Dropdown
         self.combo_loc = ctk.CTkComboBox(self, values=[], width=280, height=30, font=("Open Sans", 10))
         self._carregar_localidades()
-        ctk.CTkLabel(self, text="Localidade:", font=("Open Sans", 11), text_color="#333333").pack(pady=(4, 0))
+        ctk.CTkLabel(self, text="Localidade:", font=("Open Sans", 11), text_color=tema.TEXTO).pack(pady=(4, 0))
         self.combo_loc.pack(pady=(0, 2))
         self._construir_nova_localidade()
 
@@ -366,14 +368,14 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
 
         btn_pendente = ctk.CTkButton(
             frame_btn, text=self.rotulo_pular, font=("Open Sans", 11),
-            fg_color="#E6E6E6", hover_color="#D4D4D4", text_color="#333333",
+            fg_color=tema.CINZA_HOVER, hover_color=tema.CINZA_HOVER_FORTE, text_color=tema.TEXTO,
             width=110, height=32, command=self.deixar_pendente
         )
         btn_pendente.grid(row=0, column=1)
 
         lbl_dica = ctk.CTkLabel(
             self, text="Faturas pendentes ficam na aba Energia e podem ser lançadas depois.",
-            font=("Open Sans", 10), text_color="#666666", wraplength=320
+            font=("Open Sans", 10), text_color=tema.CINZA_TEXTO, wraplength=320
         )
         lbl_dica.pack(pady=(4, 8))
 
@@ -392,11 +394,11 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         """Link "+ Nova localidade" e o formulário curto (código e nome), escondido até o clique."""
         self.btn_nova = ctk.CTkButton(
             self, text="+ Nova localidade (não está na lista)", font=("Open Sans", 10, "underline"),
-            fg_color="transparent", text_color=tema.AZUL_NAVBAR, hover_color="#EEEEEE",
+            fg_color="transparent", text_color=tema.AZUL_NAVBAR, hover_color=tema.CINZA_DIVISOR,
             width=280, height=22, command=self._alternar_nova_localidade
         )
         self.btn_nova.pack(pady=(0, 4))
-        self.frame_nova = ctk.CTkFrame(self, fg_color="#F5F5F5", corner_radius=6)
+        self.frame_nova = ctk.CTkFrame(self, fg_color=tema.FUNDO_PAINEL, corner_radius=6)
         ctk.CTkLabel(self.frame_nova, text="Código:", font=("Open Sans", 10)).grid(row=0, column=0, padx=(8, 4), pady=(6, 2), sticky="w")
         self.entry_nova_codigo = ctk.CTkEntry(self.frame_nova, placeholder_text="BR 10-0000", width=200, height=26)
         self.entry_nova_codigo.grid(row=0, column=1, padx=(0, 8), pady=(6, 2))

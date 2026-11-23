@@ -41,7 +41,7 @@ class DashboardMixin:
         janela.title("Ação Necessária: Lançamentos Pendentes")
         altura_modal = min(500, max(360, self.winfo_screenheight() - 80))
         janela.geometry(f"650x{altura_modal}")
-        janela.configure(fg_color="#FFFFFF")
+        janela.configure(fg_color=tema.BRANCO)
         janela.lift()
         janela.focus_force()
         janela.attributes('-topmost', True)
@@ -63,16 +63,16 @@ class DashboardMixin:
                       fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER, text_color=tema.CINZA_TEXTO,
                       border_width=1, border_color=tema.CINZA_BORDA, height=40).pack(side="right", padx=10)
 
-        frame_scroll = ctk.CTkScrollableFrame(janela, width=600, height=160, fg_color="#F8F9FA", corner_radius=6)
+        frame_scroll = ctk.CTkScrollableFrame(janela, width=600, height=160, fg_color=tema.FUNDO_PAINEL, corner_radius=6)
         frame_scroll.pack(padx=20, pady=8, fill="both", expand=True)
 
         # Dinamicamente cria uma linha colorida (Verde/Vermelho) para cada registro
         for tx in lancamentos:
-            frame_item = ctk.CTkFrame(frame_scroll, fg_color="#FFFFFF", corner_radius=4, border_width=1, border_color="#DDDDDD")
+            frame_item = ctk.CTkFrame(frame_scroll, fg_color=tema.BRANCO, corner_radius=4, border_width=1, border_color=tema.CINZA_BORDA)
             frame_item.pack(fill="x", pady=5, padx=5)
 
             valor = tx.get("valor", 0.0)
-            cor_valor = "#3C763D" if valor >= 0 else tema.VERMELHO_TEXTO
+            cor_valor = tema.VERDE_TEXTO if valor >= 0 else tema.VERMELHO_TEXTO
             valor_fmt = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
             ctk.CTkLabel(frame_item, text=tx.get("data", ""), font=("Open Sans", 13, "bold"), width=80).pack(side="left", padx=10, pady=5)
@@ -132,7 +132,7 @@ class DashboardMixin:
         self._titulo_secao(container, "PROVA REAL (SALDO DO SIGA × BANCO)", resumo)
         for r, nivel in zip(resultados, niveis, strict=True):
             cartao = self._cartao(container, alerta=nivel == "alerta")
-            ctk.CTkLabel(cartao, text=cabecalho_extrato(r), font=(tema.FONTE, 12, "bold"), text_color="#333333",
+            ctk.CTkLabel(cartao, text=cabecalho_extrato(r), font=(tema.FONTE, 12, "bold"), text_color=tema.TEXTO,
                          anchor="w").pack(fill="x", padx=12, pady=(8, 2))
             # O resumo do saldo e, abaixo, de onde vem a diferença e as baixas de energia com o motivo
             self._linhas_no_cartao(cartao, [resumo_resultado(r)] + linhas_do_extrato(r), largura)
@@ -143,7 +143,7 @@ class DashboardMixin:
         janela.title("Métricas de Produtividade AutoSIGA")
         altura_dash = min(530, max(420, self.winfo_screenheight() - 80))
         janela.geometry(f"540x{altura_dash}")
-        janela.configure(fg_color="#F1F5F9")
+        janela.configure(fg_color=tema.FUNDO_JANELA)
         janela.lift()
         janela.focus_force()
         janela.attributes("-topmost", True)
@@ -200,7 +200,7 @@ class DashboardMixin:
         # Com prova real ou provisões, a tela abre maximizada: métricas à esquerda e o detalhe, que é o que
         # pede ação, à direita, com uma rolagem só. Sem detalhe, fica a janela pequena de sempre.
         tem_detalhe = bool(telemetria.get("extratos") or telemetria.get("provisoes_energia"))
-        frame = ctk.CTkFrame(janela, fg_color="#FFFFFF", corner_radius=8, border_width=1, border_color="#DDDDDD")
+        frame = ctk.CTkFrame(janela, fg_color=tema.BRANCO, corner_radius=8, border_width=1, border_color=tema.CINZA_BORDA)
         frame.pack(fill="both", expand=True, padx=20, pady=20)
         painel = None
         largura_texto = 0
@@ -211,30 +211,30 @@ class DashboardMixin:
             coluna = ctk.CTkFrame(frame, fg_color="transparent", width=_LARGURA_RESUMO)
             coluna.grid(row=0, column=0, sticky="ns", padx=(15, 8), pady=10)
             coluna.pack_propagate(False)
-            painel = ctk.CTkScrollableFrame(frame, fg_color="#F8F9FA", corner_radius=6)
+            painel = ctk.CTkScrollableFrame(frame, fg_color=tema.FUNDO_PAINEL, corner_radius=6)
             painel.grid(row=0, column=1, sticky="nsew", padx=(8, 15), pady=15)
             largura_texto = max(480, janela.winfo_screenwidth() - _LARGURA_RESUMO - 200)
         else:
             coluna = frame
 
-        ctk.CTkLabel(coluna, text="Lote concluído", font=("Open Sans", 20, "bold"), text_color="#3C763D").pack(pady=(12, 4))
+        ctk.CTkLabel(coluna, text="Lote concluído", font=("Open Sans", 20, "bold"), text_color=tema.VERDE_TEXTO).pack(pady=(12, 4))
 
         # Painel central de dados
-        frame_tabela = ctk.CTkFrame(coluna, fg_color="#F8F9FA", corner_radius=6)
+        frame_tabela = ctk.CTkFrame(coluna, fg_color=tema.FUNDO_PAINEL, corner_radius=6)
         frame_tabela.pack(padx=15, pady=8, fill="both", expand=True)
 
         # Auxiliar de linha
-        def add_linha(container, label, valor, cor_valor="#333333", negrito=False):
+        def add_linha(container, label, valor, cor_valor=tema.TEXTO, negrito=False):
             f_row = ctk.CTkFrame(container, fg_color="transparent")
             f_row.pack(fill="x", padx=12, pady=3)
             font_lbl = ("Open Sans", 11)
             font_val = ("Open Sans", 11, "bold") if negrito else ("Open Sans", 11)
 
-            ctk.CTkLabel(f_row, text=label, font=font_lbl, text_color="#555555").pack(side="left")
+            ctk.CTkLabel(f_row, text=label, font=font_lbl, text_color=tema.CINZA_TEXTO).pack(side="left")
             ctk.CTkLabel(f_row, text=valor, font=font_val, text_color=cor_valor).pack(side="right")
 
         # Bloco 1: Métricas Operacionais
-        lbl_secao1 = ctk.CTkLabel(frame_tabela, text="MÉTRICAS OPERACIONAIS", font=("Open Sans", 10, "bold"), text_color="#3D71A8")
+        lbl_secao1 = ctk.CTkLabel(frame_tabela, text="MÉTRICAS OPERACIONAIS", font=("Open Sans", 10, "bold"), text_color=tema.AZUL_TITULO)
         lbl_secao1.pack(anchor="w", padx=12, pady=(10, 4))
 
         if tipo_lote == "energia":
@@ -245,17 +245,17 @@ class DashboardMixin:
             add_linha(frame_tabela, "Contas processadas no lote:", f"{total_contas}")
             add_linha(frame_tabela, "Transações de extrato verificadas:", f"{ofx_itens}")
             add_linha(frame_tabela, "Lançamentos importados no SIGA:", f"{injecoes}")
-        add_linha(frame_tabela, "Taxa de assertividade:", f"{assertividade:.1f}%", cor_valor="#3C763D" if assertividade > 95 else tema.AMARELO_TEXTO, negrito=True)
+        add_linha(frame_tabela, "Taxa de assertividade:", f"{assertividade:.1f}%", cor_valor=tema.VERDE_TEXTO if assertividade > 95 else tema.AMARELO_TEXTO, negrito=True)
 
         # Divisor
-        div = ctk.CTkFrame(frame_tabela, height=1, fg_color="#E5E7EB")
+        div = ctk.CTkFrame(frame_tabela, height=1, fg_color=tema.CINZA_DIVISOR)
         div.pack(fill="x", padx=10, pady=6)
 
         # Bloco 2: Métricas Financeiras e ROI
-        lbl_secao2 = ctk.CTkLabel(frame_tabela, text="RETORNO & ECONOMIA (ROI)", font=("Open Sans", 10, "bold"), text_color="#3D71A8")
+        lbl_secao2 = ctk.CTkLabel(frame_tabela, text="RETORNO & ECONOMIA (ROI)", font=("Open Sans", 10, "bold"), text_color=tema.AZUL_TITULO)
         lbl_secao2.pack(anchor="w", padx=12, pady=(2, 4))
 
-        add_linha(frame_tabela, "Volume financeiro total processado:", volume_fmt, cor_valor="#333333", negrito=True)
+        add_linha(frame_tabela, "Volume financeiro total processado:", volume_fmt, cor_valor=tema.TEXTO, negrito=True)
         add_linha(frame_tabela, "Tempo gasto pelo AutoSIGA:", f"{minutos}m {segundos}s", cor_valor=tema.AZUL_INFO_TEXTO, negrito=True)
         add_linha(frame_tabela, "Tempo estimado (Manual):", f"{h_minutos}m {h_segundos}s", cor_valor=tema.VERMELHO_TEXTO)
         add_linha(frame_tabela, "Tempo economizado:", f"{e_minutos}m {e_segundos}s", cor_valor=tema.VERDE_TEXTO, negrito=True)
@@ -282,7 +282,9 @@ class DashboardMixin:
             if filepath:
                 try:
                     Exportador.gerar_excel_lote(telemetria, self.dados_processados_lote, filepath)
-                    messagebox.showinfo("Sucesso", "Relatório Excel exportado com sucesso!", parent=janela)
+                    # Confirmação no próprio botão, sem outra janela por cima do painel
+                    btn_excel.configure(text="Excel salvo")
+                    self.atualizar_status(f"Relatório salvo em {filepath}", tema.VERDE_TEXTO)
                 except Exception as ex:
                     messagebox.showerror("Erro ao Exportar", str(ex), parent=janela)
 

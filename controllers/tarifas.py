@@ -27,15 +27,62 @@ PADRAO = {
     "centro_custo": "ADM",
 }
 
-# Fornecedor obrigatório na TES01702 (visto no teste de 23/11/2026): o próprio banco do extrato.
-# Código do banco (FEBRABAN) -> termo de busca no cadastro de fornecedores do SIGA
-FORNECEDOR_POR_BANCO = {"748": "SICREDI CENTRO-SUL", "756": "SICOOB"}  # Sicredi: a cooperativa da agência 0903
+# Fornecedor obrigatório na TES01702 (visto no teste de 23/11/2026): o próprio banco da conta.
+# Cada administração tem o seu cadastro (Dourados usa "SICREDI CENTRO-SUL MS/BA"), então o robô
+# pesquisa pelo nome do banco e escolhe entre os resultados o da cidade da administração.
+# Código do banco (FEBRABAN) -> termos de busca no cadastro de fornecedores do SIGA
+TERMOS_POR_BANCO = {
+    "748": ["SICREDI"],
+    "756": ["SICOOB", "BANCOOB"],
+    "1": ["BANCO DO BRASIL"],
+    "104": ["CAIXA ECONOMICA", "CAIXA ECONÔMICA"],
+    "237": ["BRADESCO"],
+    "341": ["ITAU", "ITAÚ"],
+    "33": ["SANTANDER"],
+}
 
 
-def fornecedor_do_banco(banco: str | None) -> str:
-    """Termo para achar o fornecedor da tarifa; banco desconhecido cai no Sicredi, o mais comum."""
-    codigo = "".join(c for c in str(banco or "") if c.isdigit()).lstrip("0")
-    return FORNECEDOR_POR_BANCO.get(codigo, "SICREDI CENTRO-SUL")
+def codigo_banco(banco: Any) -> str:
+    """Código do banco só com dígitos e sem zeros à esquerda ("0748" → "748")."""
+    return "".join(c for c in str(banco or "") if c.isdigit()).lstrip("0")
+
+
+def termos_do_banco(banco: Any, extras: dict[str, Any] | None = None) -> list[str]:
+    """Termos de busca do fornecedor da conta; o config.json ("fornecedores") vem primeiro.
+
+    Returns:
+        list[str]: vazia se o banco é desconhecido e não há termo no config.
+    """
+    codigo = codigo_banco(banco)
+    do_config = (extras or {}).get(codigo)
+    termos = [do_config] if isinstance(do_config, str) and do_config.strip() else []
+    return termos + [t for t in TERMOS_POR_BANCO.get(codigo, []) if t not in termos]
+
+
+def escolher_fornecedor(resultados: list[str], termo: str, cidade: str) -> int | None:
+    """Qual resultado da busca usar: o que traz o termo, preferindo o da cidade da administração.
+
+    Args:
+        resultados: Texto de cada resultado do Select2 (nome, endereço, CNPJ).
+        termo: O que foi pesquisado (ex.: "SICREDI").
+        cidade: Cidade da administração (ex.: "DOURADOS"); vazia aceita o primeiro.
+
+    Returns:
+        O índice escolhido, ou None se nenhum resultado traz o termo.
+    """
+    from controllers.classificador_extrato import normalizar
+
+    alvo, local = normalizar(termo), normalizar(cidade)
+    candidatos = [i for i, r in enumerate(resultados) if alvo in normalizar(r)]
+    if not candidatos:
+        return None
+    da_cidade = [i for i in candidatos if local and local in normalizar(resultados[i])]
+    return (da_cidade or candidatos)[0]
+
+
+def cidade_da_localidade(nome_adm: Any) -> str:
+    """"DOURADOS - MS" → "DOURADOS": a cidade que aparece no endereço do fornecedor local."""
+    return str(nome_adm or "").split(" - ")[0].strip()
 
 
 @dataclass(frozen=True)
@@ -48,14 +95,19 @@ class RegraTarifa:
     tipo_documento: str
     forma_pagamento: str
     centro_custo: str
+    # Termo de busca do fornecedor por código de banco ({"748": "SICREDI CENTRO-SUL"}), opcional
+    fornecedores: tuple[tuple[str, str], ...] = ()
 
     @classmethod
     def da_config(cls, dados: dict[str, Any] | None) -> RegraTarifa:
         """Junta o que está no config.json com os padrões; chave desconhecida é ignorada."""
         valores = {**PADRAO, **{k: v for k, v in (dados or {}).items() if k in PADRAO}}
+        extras = (dados or {}).get("fornecedores")
+        fornecedores = tuple((codigo_banco(k), str(v)) for k, v in extras.items()) if isinstance(extras, dict) else ()
         return cls(ativo=bool(valores["ativo"]), despesa=str(valores["despesa"]),
                    historico=str(valores["historico"]), tipo_documento=str(valores["tipo_documento"]),
-                   forma_pagamento=str(valores["forma_pagamento"]), centro_custo=str(valores["centro_custo"]))
+                   forma_pagamento=str(valores["forma_pagamento"]), centro_custo=str(valores["centro_custo"]),
+                   fornecedores=fornecedores)
 
 
 @dataclass(frozen=True)

@@ -10,7 +10,7 @@ import logging
 import time
 
 from bot.extratos import MesFechadoError
-from controllers.tarifas import RegraTarifa, fornecedor_do_banco, planejar
+from controllers.tarifas import RegraTarifa, cidade_da_localidade, escolher_fornecedor, planejar, termos_do_banco
 
 _JS_DATA = '''([campo, data]) => {
     const inp = document.getElementById(campo);
@@ -54,8 +54,13 @@ class TarifasMixin:
             self.update_status(f"⏭️ {len(plano)} tarifa(s) não autorizada(s) ficaram pendentes.", "#F89406")
             return False
 
-        gravadas = self.inserir_tarifas_siga(page, plano, conta_alvo, regra,
-                                             fornecedor_do_banco(dados.get("banco")))
+        termos = termos_do_banco(dados.get("banco"), dict(regra.fornecedores))
+        if not termos:
+            self.update_status(f"⏭️ Banco {dados.get('banco') or '?'} sem fornecedor conhecido: "
+                               f"{len(plano)} tarifa(s) ficaram pendentes.", "#F89406")
+            return False
+        fornecedor = (termos, cidade_da_localidade(dados.get("nome_adm")))
+        gravadas = self.inserir_tarifas_siga(page, plano, conta_alvo, regra, fornecedor)
         telemetria_lote["injecoes"] += gravadas
         if not gravadas:
             return False
@@ -69,7 +74,7 @@ class TarifasMixin:
         dados["extrato_siga"] = extrato
         return True
 
-    def inserir_tarifas_siga(self, page, plano, conta_alvo, regra, fornecedor="SICREDI"):
+    def inserir_tarifas_siga(self, page, plano, conta_alvo, regra, fornecedor=(("SICREDI",), "")):
         """Preenche e grava uma despesa por tarifa na TES01702 ("Salvar e Novo" entre elas).
 
         Returns:
@@ -105,8 +110,8 @@ class TarifasMixin:
                 if not (page.locator('#f_valorRateio').input_value() or "").strip():
                     page.evaluate(_JS_VALOR, ["f_percentualRateio", 100])
                 self.selecionar_select2(page, "f_historico_debito", regra.historico, dropdown_is_ajax=False)
-                # Fornecedor obrigatório: o próprio banco (Select2 por AJAX, como na provisão de energia)
-                self.selecionar_select2(page, "f_fornecedor", fornecedor)
+                # Fornecedor obrigatório: o próprio banco da conta, pesquisado no cadastro do SIGA
+                self._escolher_fornecedor(page, *fornecedor)
                 complemento = f"TARIFA - {self.sanitizar_descricao(lc.descricao)}"
                 self._preencher_campos(page, {"f_complemento2": complemento})
 
@@ -142,6 +147,40 @@ class TarifasMixin:
             self._capturar_tela_e_log(page, "erro_inserir_tarifas")
             self.update_status(f"Falha ao lançar tarifa: {e}", "#D9534F")
         return gravadas
+
+    def _escolher_fornecedor(self, page, termos, cidade):
+        """Pesquisa o banco no Select2 de fornecedor (AJAX, busca com Enter) e escolhe o resultado.
+
+        Tenta cada termo (ex.: "SICREDI"); entre os resultados, prefere o da cidade da
+        administração (o cadastro da cooperativa local), como `escolher_fornecedor` decide.
+
+        Raises:
+            RuntimeError: nenhum termo trouxe um fornecedor do banco.
+        """
+        for termo in termos:
+            self._esperar_sem_overlay(page)
+            page.evaluate("() => window.jQuery && window.jQuery('#f_fornecedor').select2('open')")
+            busca = page.locator('#select2-drop:visible .select2-input')
+            busca.wait_for(state="visible", timeout=5000)
+            busca.fill("")
+            busca.type(termo, delay=50)
+            busca.press("Enter")
+            resultados = page.locator('#select2-drop:visible .select2-result-selectable')
+            try:
+                resultados.first.wait_for(state="visible", timeout=8000)
+            except Exception:
+                page.keyboard.press("Escape")
+                continue
+            textos = resultados.all_inner_texts()
+            escolhido = escolher_fornecedor(textos, termo, cidade)
+            if escolhido is None:
+                page.keyboard.press("Escape")
+                continue
+            resultados.nth(escolhido).click()
+            time.sleep(0.5)
+            logging.info(f"Fornecedor da tarifa: {' '.join(textos[escolhido].split())[:80]}")
+            return
+        raise RuntimeError(f"fornecedor do banco não encontrado no SIGA (buscou: {', '.join(termos)})")
 
     def _recusar_se_invalido(self, page):
         """Para se o SIGA recusou a gravação ("Formulário Incompleto", campo obrigatório).

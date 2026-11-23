@@ -18,7 +18,7 @@ class RoboFalso(TarifasMixin):
         self.previa = (itens, conta, tipo)
         return self._autoriza
 
-    def inserir_tarifas_siga(self, page, plano, conta, regra, fornecedor="SICREDI"):
+    def inserir_tarifas_siga(self, page, plano, conta, regra, fornecedor=None):
         self.gravou, self.fornecedor = plano, fornecedor
         return self._grava
 
@@ -30,7 +30,7 @@ class RoboFalso(TarifasMixin):
 
 
 def rodar(robo, faltas):
-    telemetria, dados = {"injecoes": 0}, {}
+    telemetria, dados = {"injecoes": 0}, {"banco": "748", "nome_adm": "DOURADOS - MS"}
     resultado = robo._lancar_tarifas(None, dados, "10130", faltas, ("10130", "01/11/2026", "30/11/2026"), telemetria)
     return resultado, telemetria, dados
 
@@ -41,6 +41,7 @@ def test_grava_so_as_tarifas_e_rele_a_grade():
     assert resultado is True and telemetria["injecoes"] == 1
     assert [lc.valor for lc in robo.gravou] == [45.0]
     assert robo.previa[2] == "tarifas" and dados["extrato_siga"] == ["linha"]
+    assert robo.fornecedor == (["SICREDI"], "DOURADOS")
 
 
 def test_sem_tarifa_nao_faz_nada():
@@ -68,10 +69,17 @@ def test_conta_sumiu_na_releitura():
     assert rodar(RoboFalso(grade=None), [TARIFA])[0] is False
 
 
-def test_fornecedor_e_o_banco_do_extrato():
+def test_fornecedor_e_pesquisado_pelo_banco_e_cidade_da_conta():
     robo = RoboFalso()
-    robo._lancar_tarifas(None, {"banco": "756"}, "10130", [TARIFA], ("10130", "", ""), {"injecoes": 0})
-    assert robo.fornecedor == "SICOOB"
+    dados = {"banco": "756", "nome_adm": "DOURADOS - MS"}
+    robo._lancar_tarifas(None, dados, "10130", [TARIFA], ("10130", "", ""), {"injecoes": 0})
+    assert robo.fornecedor == (["SICOOB", "BANCOOB"], "DOURADOS")
+
+
+def test_banco_desconhecido_fica_pendente():
+    robo = RoboFalso()
+    r = robo._lancar_tarifas(None, {"banco": "999"}, "10130", [TARIFA], ("10130", "", ""), {"injecoes": 0})
+    assert r is False and robo.gravou == [] and "sem fornecedor" in robo.status[-1]
 
 
 class PaginaComErro:

@@ -72,7 +72,7 @@ class DashboardMixin:
             frame_item.pack(fill="x", pady=5, padx=5)
 
             valor = tx.get("valor", 0.0)
-            cor_valor = "#3C763D" if valor >= 0 else "#D9534F"
+            cor_valor = "#3C763D" if valor >= 0 else tema.VERMELHO_TEXTO
             valor_fmt = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
             ctk.CTkLabel(frame_item, text=tx.get("data", ""), font=("Open Sans", 13, "bold"), width=80).pack(side="left", padx=10, pady=5)
@@ -217,7 +217,7 @@ class DashboardMixin:
         else:
             coluna = frame
 
-        ctk.CTkLabel(coluna, text="✅ Missão Cumprida!", font=("Open Sans", 20, "bold"), text_color="#3C763D").pack(pady=(12, 4))
+        ctk.CTkLabel(coluna, text="Lote concluído", font=("Open Sans", 20, "bold"), text_color="#3C763D").pack(pady=(12, 4))
 
         # Painel central de dados
         frame_tabela = ctk.CTkFrame(coluna, fg_color="#F8F9FA", corner_radius=6)
@@ -245,7 +245,7 @@ class DashboardMixin:
             add_linha(frame_tabela, "Contas processadas no lote:", f"{total_contas}")
             add_linha(frame_tabela, "Transações de extrato verificadas:", f"{ofx_itens}")
             add_linha(frame_tabela, "Lançamentos importados no SIGA:", f"{injecoes}")
-        add_linha(frame_tabela, "Taxa de assertividade:", f"{assertividade:.1f}%", cor_valor="#3C763D" if assertividade > 95 else "#F89406", negrito=True)
+        add_linha(frame_tabela, "Taxa de assertividade:", f"{assertividade:.1f}%", cor_valor="#3C763D" if assertividade > 95 else tema.AMARELO_TEXTO, negrito=True)
 
         # Divisor
         div = ctk.CTkFrame(frame_tabela, height=1, fg_color="#E5E7EB")
@@ -256,10 +256,10 @@ class DashboardMixin:
         lbl_secao2.pack(anchor="w", padx=12, pady=(2, 4))
 
         add_linha(frame_tabela, "Volume financeiro total processado:", volume_fmt, cor_valor="#333333", negrito=True)
-        add_linha(frame_tabela, "Tempo gasto pelo AutoSIGA:", f"{minutos}m {segundos}s", cor_valor="#428BCA", negrito=True)
-        add_linha(frame_tabela, "Tempo estimado (Manual):", f"{h_minutos}m {h_segundos}s", cor_valor="#D9534F")
-        add_linha(frame_tabela, "Tempo economizado:", f"🔥 {e_minutos}m {e_segundos}s", cor_valor="#5CB85C", negrito=True)
-        add_linha(frame_tabela, "Retorno financeiro estimado (ROI):", roi_fmt, cor_valor="#5CB85C", negrito=True)
+        add_linha(frame_tabela, "Tempo gasto pelo AutoSIGA:", f"{minutos}m {segundos}s", cor_valor=tema.AZUL_INFO_TEXTO, negrito=True)
+        add_linha(frame_tabela, "Tempo estimado (Manual):", f"{h_minutos}m {h_segundos}s", cor_valor=tema.VERMELHO_TEXTO)
+        add_linha(frame_tabela, "Tempo economizado:", f"{e_minutos}m {e_segundos}s", cor_valor=tema.VERDE_TEXTO, negrito=True)
+        add_linha(frame_tabela, "Retorno financeiro estimado (ROI):", roi_fmt, cor_valor=tema.VERDE_TEXTO, negrito=True)
 
         if painel is not None:
             # As métricas não ocupam a sobra de altura, para os botões ficarem logo abaixo delas
@@ -295,14 +295,14 @@ class DashboardMixin:
 
         btn_excel = ctk.CTkButton(
             frame_acoes, text="Exportar Excel (.xlsx)", font=("Open Sans", 13, "bold"),
-            fg_color="#5CB85C", hover_color="#4CAE4C", height=32, width=155,
+            fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, height=32, width=155,
             command=exportar_planilha
         )
         btn_excel.grid(row=0, column=0, padx=5)
 
         btn_fechar = ctk.CTkButton(
             frame_acoes, text="Fechar", font=("Open Sans", 13, "bold"),
-            fg_color="#428BCA", hover_color="#3071A9", height=32, width=120,
+            fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, height=32, width=120,
             command=janela.destroy
         )
         btn_fechar.grid(row=0, column=1, padx=5)

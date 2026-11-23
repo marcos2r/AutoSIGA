@@ -7,6 +7,8 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
+from ui import tema
+
 
 class CredenciaisMixin:
     """Verificação e solicitação de credenciais do SIGA pela janela principal."""
@@ -95,31 +97,33 @@ class ModalCredenciais(ctk.CTkToplevel):
         lbl_info = ctk.CTkLabel(
             self,
             text="Sua senha será salva de forma encriptada no Windows Credential Manager.",
-            font=("Open Sans", 9), text_color="#666666", wraplength=340
+            font=(tema.FONTE, 11), text_color=tema.CINZA_TEXTO, wraplength=340
         )
         lbl_info.pack(pady=(0, 15))
 
-        # Usuário
-        self.entry_usuario = ctk.CTkEntry(self, placeholder_text="Usuário (CPF ou E-mail)", width=280, height=30, font=("Open Sans", 11))
-        self.entry_usuario.pack(pady=5)
+        # Label sempre visível acima do campo: o placeholder some ao digitar
+        ctk.CTkLabel(self, text="Usuário (CPF ou e-mail)", font=(tema.FONTE, 12)).pack(anchor="w", padx=40)
+        self.entry_usuario = ctk.CTkEntry(self, width=280, height=30, font=(tema.FONTE, 12))
+        self.entry_usuario.pack(pady=(0, 8))
 
-        # Senha
-        self.entry_senha = ctk.CTkEntry(self, placeholder_text="Senha do SIGA", show="*", width=280, height=30, font=("Open Sans", 11))
-        self.entry_senha.pack(pady=5)
+        ctk.CTkLabel(self, text="Senha do SIGA", font=(tema.FONTE, 12)).pack(anchor="w", padx=40)
+        self.entry_senha = ctk.CTkEntry(self, show="*", width=280, height=30, font=(tema.FONTE, 12))
+        self.entry_senha.pack(pady=(0, 5))
 
-        # Botões
+        # Botões: um primário (salvar) e um secundário (cancelar), sem vermelho de perigo
         self.frame_botoes = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_botoes.pack(pady=20)
 
         self.btn_salvar = ctk.CTkButton(
-            self.frame_botoes, text="Gravar", width=100, height=30, font=("Open Sans", 12, "bold"),
-            fg_color="#5CB85C", hover_color="#4CAE4C", command=self.salvar_credenciais
+            self.frame_botoes, text="Salvar credenciais", width=140, height=32, font=(tema.FONTE, 12, "bold"),
+            fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, command=self.salvar_credenciais
         )
         self.btn_salvar.grid(row=0, column=0, padx=5)
 
         self.btn_cancelar = ctk.CTkButton(
-            self.frame_botoes, text="Cancelar", width=100, height=30, font=("Open Sans", 12, "bold"),
-            fg_color="#D9534F", hover_color="#C9302C", command=self.destroy
+            self.frame_botoes, text="Cancelar", width=100, height=32, font=(tema.FONTE, 12),
+            fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER, text_color=tema.AZUL_NAVBAR,
+            border_width=1, border_color=tema.CINZA_BORDA, command=self.destroy
         )
         self.btn_cancelar.grid(row=0, column=1, padx=5)
 

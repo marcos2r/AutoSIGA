@@ -96,17 +96,17 @@ class LoteExtratosMixin:
                 texto_arquivos = f"{qtd} arquivo(s) selecionado(s):\n" + ", ".join(nomes_arquivos[:3]) + f" ... (+ {qtd - 3} outros)"
             else:
                 texto_arquivos = f"{qtd} arquivo(s) selecionado(s):\n" + ", ".join(nomes_arquivos)
-            self.label_arquivo.configure(text=texto_arquivos, text_color="#3C763D")
+            self.label_arquivo.configure(text=texto_arquivos, text_color=tema.VERDE_TEXTO)
 
             self.validar_lote_e_atualizar_botoes()
         else:
             self.lbl_no_data.pack(pady=40)
-            self.label_arquivo.configure(text="Nenhum arquivo selecionado.", text_color="#666666")
+            self.label_arquivo.configure(text="Nenhum arquivo selecionado.", text_color=tema.CINZA_TEXTO)
             self.botao_conectar.configure(state="disabled")
             self.botao_gerar_txt.configure(state="disabled")
             self.botao_importar_ofertas.configure(state="disabled")
             self.atualizar_faixa_catalogo()
-            self.atualizar_status("Nenhum arquivo carregado com sucesso.", "#D9534F")
+            self.atualizar_status("Nenhum arquivo pôde ser lido.", tema.VERMELHO_TEXTO)
 
         # Depois dos cards, para o aviso não aparecer sobre a tela vazia
         if arquivos_descartados:
@@ -117,19 +117,28 @@ class LoteExtratosMixin:
                 "Para não conciliar duas vezes, entrou só um deles:\n\n" + "\n\n".join(arquivos_descartados))
 
     def resetar_lote(self, event=None):
-        """Limpa toda a seleção de arquivos e reseta o estado da janela principal (atalho Esc)."""
+        """Limpa toda a seleção de arquivos e reseta o estado da janela principal (atalho Esc).
+
+        Pelo Esc (``event`` presente) pede confirmação quando há cards: um toque acidental
+        não pode jogar fora o mapeamento feito na sessão.
+        """
+        if event is not None and self.cards_lote and not messagebox.askyesno(
+                "Limpar o lote",
+                f"Tirar os {len(self.cards_lote)} extrato(s) do lote?\n\n"
+                "Os mapeamentos já confirmados continuam salvos.", parent=self):
+            return
         self.dados_processados_lote = []
         for card in self.cards_lote:
             card.destroy()
         self.cards_lote = []
         self.lbl_no_data.pack(pady=40)
-        self.label_arquivo.configure(text="Nenhum arquivo selecionado.", text_color="#666666")
+        self.label_arquivo.configure(text="Nenhum arquivo selecionado.", text_color=tema.CINZA_TEXTO)
         self.botao_conectar.configure(state="disabled")
         self.botao_gerar_txt.configure(state="disabled")
         self.botao_importar_ofertas.configure(state="disabled")
         self.progress_bar.set(0.0)
         self.atualizar_faixa_catalogo()
-        self.atualizar_status("Lote limpo com sucesso. Aguardando novos arquivos.", "#666666")
+        self.atualizar_status("Lote limpo. Aguardando novos arquivos.", tema.CINZA_TEXTO)
 
     def remover_extrato_do_lote(self, card):
         """Tira um extrato do lote (ex.: conta que não existe no SIGA) sem apagar mapeamentos."""

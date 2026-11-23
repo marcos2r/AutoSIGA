@@ -68,10 +68,9 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         # Paleta de Cores e Tipografia (Bootstrap Theme like)
         self.fonte_padrao = ("Open Sans", 14)
         self.fonte_titulo = ("Open Sans", 24, "bold")
-        self.cor_azul_botao = "#428BCA"
-        self.cor_azul_hover = "#3071A9"
         self.cor_laranja_logo = "#F89406"
-        self.cor_azul_header = "#438EB9"
+        # Azul da navbar do SIGA: branco sobre ele tem 5,7:1 (o #438EB9 antigo ficava abaixo de 4,5:1)
+        self.cor_azul_header = tema.AZUL_NAVBAR
 
         # Inicializa a UI e restaura estado local
         self.construir_interface()
@@ -173,10 +172,12 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.label_titulo = ctk.CTkLabel(self.frame_header, text="AutoSIGA", font=self.fonte_titulo, text_color="#FFFFFF")
         self.label_titulo.pack(side="left", pady=10)
 
+        # Ação rara: botão discreto (contorno branco) para não competir com o fluxo principal
         self.btn_credenciais = ctk.CTkButton(
-            self.frame_header, text="Credenciais 🔑", font=("Open Sans", 11, "bold"),
-            fg_color="#F89406", hover_color="#DF8505", text_color="#FFFFFF",
-            width=100, height=28, corner_radius=4, command=self.abrir_modal_credenciais
+            self.frame_header, text="Credenciais do SIGA", font=(tema.FONTE, 12),
+            fg_color="transparent", hover_color=tema.AZUL_NAVBAR_HOVER, text_color=tema.BRANCO,
+            border_width=1, border_color=tema.BRANCO,
+            width=140, height=30, corner_radius=4, command=self.abrir_modal_credenciais
         )
         self.btn_credenciais.pack(side="right", padx=20, pady=14)
 
@@ -191,10 +192,12 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
                                          text_color=tema.CINZA_TEXTO)
         self.label_rodape.pack()
 
-        self.label_status_siga = ctk.CTkLabel(self, text="Aguardando extratos ou faturas...", font=("Open Sans", 12), text_color="#666666")
+        self.label_status_siga = ctk.CTkLabel(self, text="Aguardando extratos ou faturas...",
+                                              font=(tema.FONTE, 13, "bold"), text_color=tema.CINZA_TEXTO)
         self.label_status_siga.pack(side="bottom", pady=(0, 4))
 
-        self.progress_bar = ctk.CTkProgressBar(self, width=400, height=8, corner_radius=4, progress_color="#5CB85C", fg_color="#E0E0E0")
+        self.progress_bar = ctk.CTkProgressBar(self, width=400, height=8, corner_radius=4,
+                                               progress_color=tema.VERDE_TEXTO, fg_color=tema.CINZA_BORDA)
         self.progress_bar.pack(side="bottom", pady=(2, 4))
         self.progress_bar.set(0.0)
 
@@ -224,8 +227,8 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.label_instrucao.pack(pady=(6, 2))
 
         self.botao_carregar = ctk.CTkButton(
-            self.frame_card, text="Selecionar Extratos (OFX / XLS)", font=("Open Sans", 13, "bold"),
-            fg_color=self.cor_azul_botao, hover_color=self.cor_azul_hover, text_color="#FFFFFF",
+            self.frame_card, text="Selecionar extratos (OFX / XLS)   Ctrl+O", font=("Open Sans", 13, "bold"),
+            fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, text_color=tema.BRANCO,
             corner_radius=4, height=34, command=self.selecionar_arquivo
         )
         self.botao_carregar.pack(pady=2)
@@ -253,27 +256,31 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.scroll_lote = ctk.CTkScrollableFrame(self.frame_card, fg_color="#F8F9FA", corner_radius=6, height=100)
         self.scroll_lote.pack(fill="both", expand=True, padx=15, pady=4)
 
-        self.lbl_no_data = ctk.CTkLabel(self.scroll_lote, text="Carregue extratos para configurar os mapeamentos.", font=("Open Sans", 12), text_color="#999999")
+        self.lbl_no_data = ctk.CTkLabel(self.scroll_lote, text="Carregue extratos para configurar os mapeamentos.",
+                                        font=("Open Sans", 12), text_color=tema.CINZA_TEXTO)
         self.lbl_no_data.pack(pady=30)
 
+        # Um só primário (cheio); os outros dois são secundários (contorno), sem cor que sugira perigo
         self.botao_conectar = ctk.CTkButton(
-            self.frame_botoes, text="Conectar ao SIGA", font=("Open Sans", 13, "bold"),
-            fg_color="#5CB85C", hover_color="#4CAE4C", text_color="#FFFFFF",
-            corner_radius=4, height=34, state="disabled", command=self.iniciar_conexao_siga
+            self.frame_botoes, text="Conciliar no SIGA   Ctrl+I", font=("Open Sans", 13, "bold"),
+            fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, text_color=tema.BRANCO,
+            text_color_disabled=tema.CINZA_TEXTO,
+            corner_radius=4, height=36, state="disabled", command=self.iniciar_conexao_siga
         )
         self.botao_conectar.grid(row=0, column=0, padx=5)
 
+        secundario = dict(font=("Open Sans", 13), fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER,
+                          text_color=tema.AZUL_NAVBAR, text_color_disabled=tema.CINZA_TEXTO,
+                          border_width=1, border_color=tema.CINZA_BORDA, corner_radius=4, height=36)
         self.botao_gerar_txt = ctk.CTkButton(
-            self.frame_botoes, text="Gerar .TXT Ofertas", font=("Open Sans", 13, "bold"),
-            fg_color="#D9534F", hover_color="#C9302C", text_color="#FFFFFF",
-            corner_radius=4, height=34, state="disabled", command=self.gerar_txt_ofertas
+            self.frame_botoes, text="Gerar .TXT de ofertas   Ctrl+E", state="disabled",
+            command=self.gerar_txt_ofertas, **secundario
         )
         self.botao_gerar_txt.grid(row=0, column=1, padx=5)
 
         self.botao_importar_ofertas = ctk.CTkButton(
-            self.frame_botoes, text="Importar Ofertas no SIGA", font=("Open Sans", 13, "bold"),
-            fg_color="#428BCA", hover_color="#3071A9", text_color="#FFFFFF",
-            corner_radius=4, height=34, state="disabled", command=self.iniciar_importacao_ofertas
+            self.frame_botoes, text="Importar ofertas no SIGA", state="disabled",
+            command=self.iniciar_importacao_ofertas, **secundario
         )
         self.botao_importar_ofertas.grid(row=0, column=2, padx=5)
 
@@ -293,7 +300,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         ).grid(row=3, column=0, columnspan=3, pady=(4, 0), sticky="w")
         self._alternar_baixa_energia(salvar=False)
 
-    def atualizar_status(self, texto, cor="#666666"):
+    def atualizar_status(self, texto, cor=tema.CINZA_TEXTO):
         """
         Thread-safe method para atualizar a Label de status inferior.
         Usa o self.after(0) para garantir que a Thread secundária (Bot)

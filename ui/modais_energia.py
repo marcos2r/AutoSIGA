@@ -11,6 +11,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from controllers.localidades_siga import codigo_localidade_valido
+from ui import tema
 
 
 class ModalLocalidades(ctk.CTkToplevel):
@@ -50,7 +51,7 @@ class ModalLocalidades(ctk.CTkToplevel):
 
         btn_salvar = ctk.CTkButton(
             frame_inputs, text="Adicionar / Salvar", font=("Open Sans", 11, "bold"),
-            fg_color="#5CB85C", hover_color="#4CAE4C", height=28, command=self.salvar_localidade
+            fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, height=28, command=self.salvar_localidade
         )
         btn_salvar.grid(row=1, column=0, columnspan=2, padx=5, pady=10, sticky="ew")
 
@@ -72,7 +73,7 @@ class ModalLocalidades(ctk.CTkToplevel):
 
         localidades = self.config_manager.get_localidades_energia()
         if not localidades:
-            lbl_empty = ctk.CTkLabel(self.scroll_tabela, text="Nenhuma localidade cadastrada.", font=("Open Sans", 11), text_color="#999999")
+            lbl_empty = ctk.CTkLabel(self.scroll_tabela, text="Nenhuma localidade cadastrada.", font=("Open Sans", 11), text_color=tema.CINZA_TEXTO)
             lbl_empty.pack(pady=40)
             return
 
@@ -88,7 +89,7 @@ class ModalLocalidades(ctk.CTkToplevel):
 
             btn_del = ctk.CTkButton(
                 item_frame, text="Excluir", font=("Open Sans", 10),
-                fg_color="#D9534F", hover_color="#C9302C", width=60, height=20,
+                fg_color=tema.VERMELHO_TEXTO, hover_color=tema.VERMELHO_HOVER, width=60, height=20,
                 command=lambda c=cod: self.excluir_localidade(c)
             )
             btn_del.pack(side="right", padx=10, pady=5)
@@ -177,7 +178,7 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
 
         btn_salvar = ctk.CTkButton(
             frame_inputs, text="Relacionar UC", font=("Open Sans", 11, "bold"),
-            fg_color="#5CB85C", hover_color="#4CAE4C", height=28, command=self.salvar_mapeamento
+            fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, height=28, command=self.salvar_mapeamento
         )
         btn_salvar.grid(row=1, column=0, columnspan=2, padx=5, pady=10, sticky="ew")
 
@@ -198,7 +199,7 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
 
         mapeamentos = self.config_manager.get_mapeamentos_uc()
         if not mapeamentos:
-            lbl_empty = ctk.CTkLabel(self.scroll_tabela, text="Nenhum mapeamento de UC cadastrado.", font=("Open Sans", 11), text_color="#999999")
+            lbl_empty = ctk.CTkLabel(self.scroll_tabela, text="Nenhum mapeamento de UC cadastrado.", font=("Open Sans", 11), text_color=tema.CINZA_TEXTO)
             lbl_empty.pack(pady=40)
             return
 
@@ -214,7 +215,7 @@ class ModalMapeamentoUC(ctk.CTkToplevel):
 
             btn_del = ctk.CTkButton(
                 item_frame, text="Excluir", font=("Open Sans", 10),
-                fg_color="#D9534F", hover_color="#C9302C", width=60, height=20,
+                fg_color=tema.VERMELHO_TEXTO, hover_color=tema.VERMELHO_HOVER, width=60, height=20,
                 command=lambda u=uc_num: self.excluir_mapeamento(u)
             )
             btn_del.pack(side="right", padx=10, pady=5)
@@ -324,7 +325,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         self.construir_widgets()
 
     def construir_widgets(self):
-        lbl_titulo = ctk.CTkLabel(self, text="Nova UC Detectada!", font=("Open Sans", 14, "bold"), text_color="#D9534F")
+        lbl_titulo = ctk.CTkLabel(self, text="Nova UC Detectada!", font=("Open Sans", 14, "bold"), text_color=tema.VERMELHO_TEXTO)
         lbl_titulo.pack(pady=8)
 
         lbl_desc = ctk.CTkLabel(
@@ -339,8 +340,8 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         # Botão para visualizar nota fiscal (PDF) se houver
         if self.caminho_pdf and os.path.exists(self.caminho_pdf):
             btn_ver_nota = ctk.CTkButton(
-                self, text="📄 Visualizar Fatura (Abrir PDF)", font=("Open Sans", 11, "underline"),
-                fg_color="transparent", text_color="#428BCA", hover_color="#EEEEEE",
+                self, text="Ver fatura (PDF)", font=("Open Sans", 11, "underline"),
+                fg_color="transparent", text_color=tema.AZUL_NAVBAR, hover_color="#EEEEEE",
                 width=280, height=25, command=self.abrir_nota
             )
             btn_ver_nota.pack(pady=5)
@@ -359,7 +360,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
 
         btn_confirmar = ctk.CTkButton(
             frame_btn, text=self.rotulo_confirmar, font=("Open Sans", 12, "bold"),
-            fg_color="#5CB85C", hover_color="#4CAE4C", width=160, height=38, command=self.confirmar
+            fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, width=160, height=38, command=self.confirmar
         )
         btn_confirmar.grid(row=0, column=0, padx=(0, 16))
 
@@ -391,7 +392,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         """Link "+ Nova localidade" e o formulário curto (código e nome), escondido até o clique."""
         self.btn_nova = ctk.CTkButton(
             self, text="+ Nova localidade (não está na lista)", font=("Open Sans", 10, "underline"),
-            fg_color="transparent", text_color="#428BCA", hover_color="#EEEEEE",
+            fg_color="transparent", text_color=tema.AZUL_NAVBAR, hover_color="#EEEEEE",
             width=280, height=22, command=self._alternar_nova_localidade
         )
         self.btn_nova.pack(pady=(0, 4))
@@ -403,7 +404,7 @@ class ModalPerguntaMapeamentoUC(ctk.CTkToplevel):
         self.entry_nova_nome = ctk.CTkEntry(self.frame_nova, placeholder_text="como no SIGA", width=200, height=26)
         self.entry_nova_nome.grid(row=1, column=1, padx=(0, 8), pady=2)
         ctk.CTkButton(self.frame_nova, text="Cadastrar e Escolher", font=("Open Sans", 10, "bold"),
-                      fg_color="#428BCA", hover_color="#3071A9", width=160, height=26,
+                      fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, width=160, height=26,
                       command=self.cadastrar_nova_localidade).grid(row=2, column=0, columnspan=2, pady=(4, 8))
 
     def _alternar_nova_localidade(self):

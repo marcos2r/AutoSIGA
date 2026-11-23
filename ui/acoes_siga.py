@@ -11,6 +11,7 @@ from bot.siga_bot import SigaBot
 from controllers.localidades_siga import sincronizar_localidades
 from controllers.prova_real import moeda
 from models.faturas_pendentes import FaturasPendentes
+from ui import tema
 from ui.modais_energia import ModalPerguntaMapeamentoUC
 
 
@@ -32,12 +33,12 @@ class AcoesSigaMixin:
 
         # Encerra uma execução anterior que ainda esteja rodando (o Edge continua aberto)
         if getattr(self, 'bot_instance', None) and getattr(self.bot_instance, 'browser_aberto', False):
-            self.atualizar_status("Encerrando a execução anterior do robô...", "#F89406")
+            self.atualizar_status("Encerrando a execução anterior do robô...", tema.AMARELO_TEXTO)
             self.bot_instance.fechar_browser()
             self.update()
             time.sleep(2)
 
-        self.atualizar_status("Iniciando lote de automação no SIGA...", "#F89406")
+        self.atualizar_status("Iniciando lote de automação no SIGA...", tema.AMARELO_TEXTO)
         self.progress_bar.set(0.0)
 
         callbacks = {
@@ -68,7 +69,7 @@ class AcoesSigaMixin:
         if novas:
             # A barra de status é sobrescrita logo pelo robô: o registro fica no log
             logging.info(f"Localidades novas do SIGA: {', '.join(novas)}")
-            self.atualizar_status(f"📍 {len(novas)} localidade(s) nova(s) do SIGA: {', '.join(novas)}", "#428BCA")
+            self.atualizar_status(f"{len(novas)} localidade(s) nova(s) do SIGA: {', '.join(novas)}", tema.AZUL_INFO_TEXTO)
 
     def _perguntar_uc_do_lote(self, fatura, responder):
         """Janela de relacionar a UC à localidade, aberta pelo lote de extratos antes de abrir o SIGA."""
@@ -137,7 +138,7 @@ class AcoesSigaMixin:
             return
 
         self.botao_importar_ofertas.configure(state="disabled")
-        self.atualizar_status("Iniciando importação de ofertas no SIGA...", "#F89406")
+        self.atualizar_status("Iniciando importação de ofertas no SIGA...", tema.AMARELO_TEXTO)
         self.progress_bar.set(0.0)
         callbacks = {
             "update_status": self.atualizar_status,
@@ -156,7 +157,7 @@ class AcoesSigaMixin:
         if not self.verificar_e_solicitar_credenciais():
             return
 
-        self.atualizar_status("Obtendo faturas de energia do e-mail...", "#428BCA")
+        self.atualizar_status("Obtendo faturas de energia do e-mail...", tema.AZUL_INFO_TEXTO)
         self.progress_bar.configure(mode="indeterminate")
         self.progress_bar.start()
         self.panel_energia.btn_importar.configure(state="disabled")
@@ -176,7 +177,7 @@ class AcoesSigaMixin:
                 lote_valido, lote_pendente = FaturaEnergiaController.processar_lote_energia(self.atualizar_status)
 
                 if not lote_valido and not lote_pendente:
-                    self.atualizar_status("Nenhuma fatura a processar.", "#F89406")
+                    self.atualizar_status("Nenhuma fatura a processar.", tema.AMARELO_TEXTO)
                     self.after(0, lambda: self.progress_bar.stop())
                     self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
                     self.after(0, lambda: self.panel_energia.btn_importar.configure(state="normal"))
@@ -186,7 +187,7 @@ class AcoesSigaMixin:
                 # As faturas já estão gravadas como pendentes: quem não for mapeado agora
                 # continua na aba Energia para a próxima importação.
                 if lote_pendente:
-                    self.atualizar_status("Resolvendo UCs não mapeadas...", "#F89406")
+                    self.atualizar_status("Resolvendo UCs não mapeadas...", tema.AMARELO_TEXTO)
                     pendentes = FaturasPendentes(self.config_manager)
                     locs_dict = {l["codigo"]: l["nome"] for l in self.config_manager.get_localidades_energia()}
                     for fat in lote_pendente:
@@ -215,19 +216,19 @@ class AcoesSigaMixin:
                             lote_valido.append(fat)
                             pendentes.remover(fat)
                         else:
-                            self.atualizar_status(f"Fatura UC {uc_num} ficou pendente na aba Energia.", "#F89406")
+                            self.atualizar_status(f"Fatura UC {uc_num} ficou pendente na aba Energia.", tema.AMARELO_TEXTO)
 
                     self.after(0, self.panel_energia.atualizar_pendentes)
 
                 if not lote_valido:
-                    self.atualizar_status("Nenhuma fatura de energia restante para importar.", "#F89406")
+                    self.atualizar_status("Nenhuma fatura de energia restante para importar.", tema.AMARELO_TEXTO)
                     self.after(0, lambda: self.progress_bar.stop())
                     self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
                     self.after(0, lambda: self.panel_energia.btn_importar.configure(state="normal"))
                     return
             except Exception as e_thread:
                 logging.error(f"Erro na thread de energia: {e_thread}", exc_info=True)
-                self.atualizar_status(f"Erro: {e_thread}", "#D9534F")
+                self.atualizar_status(f"Erro: {e_thread}", tema.VERMELHO_TEXTO)
                 self.after(0, self.panel_energia.atualizar_pendentes)
                 self.after(0, lambda: self.progress_bar.stop())
                 self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
@@ -239,7 +240,7 @@ class AcoesSigaMixin:
 
             self.after(0, lambda: self.progress_bar.stop())
             self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
-            self.atualizar_status(f"Preparando importação de {len(lote_valido)} faturas no SIGA...", "#428BCA")
+            self.atualizar_status(f"Preparando importação de {len(lote_valido)} faturas no SIGA...", tema.AZUL_INFO_TEXTO)
 
             # Formata telemetria e inicia o SigaBot no modo energia
             callbacks = {

@@ -308,6 +308,12 @@ class CardContaExtrato(ctk.CTkFrame):
             self.confirmar()
 
     def limpar_mapeamento(self):
+        """Apaga o mapeamento salvo desta conta, depois de confirmar (não dá para desfazer)."""
+        if not messagebox.askyesno(
+                "Apagar mapeamento",
+                f"Apagar o mapeamento salvo da conta {self.conta_id}?\n\n"
+                "Na próxima vez, o card volta a mostrar só a sugestão.", parent=self):
+            return
         tipo_adm, nome_adm = separar_localidade(self._localidade_atual())
         if self.config_manager.limpar_conta(self.conta_id, tipo_adm, nome_adm, produto=self.produto):
             self.inicializando = True
@@ -315,7 +321,6 @@ class CardContaExtrato(ctk.CTkFrame):
             self.inicializando = False
             if self.on_change_callback:
                 self.on_change_callback()
-            messagebox.showinfo("Limpeza", f"O mapeamento da conta {self.conta_id} foi apagado.")
 
     def obter_dados_mapeados(self):
         tipo_adm, nome_adm = separar_localidade(self._localidade_atual())

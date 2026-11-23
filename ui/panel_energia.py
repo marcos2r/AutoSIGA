@@ -10,6 +10,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from models.faturas_pendentes import FaturasPendentes
+from ui import tema
 from ui.modais_energia import ModalLocalidades, ModalMapeamentoUC, abrir_pdf
 
 
@@ -39,35 +40,35 @@ class PanelEnergia(ctk.CTkFrame):
         frame_config.pack(padx=15, pady=5, fill="x")
 
         ctk.CTkLabel(frame_config, text="E-mail (Gmail):", font=("Open Sans", 11)).grid(row=0, column=0, padx=5, pady=5, sticky="e")
-        self.entry_email = ctk.CTkEntry(frame_config, placeholder_text="ccbdourados@gmail.com", width=250, height=24, font=("Open Sans", 11))
+        # Placeholder neutro: um e-mail real ali parecia valor já preenchido
+        self.entry_email = ctk.CTkEntry(frame_config, placeholder_text="nome@gmail.com", width=250, height=28, font=(tema.FONTE, 12))
         self.entry_email.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
+        secundario = dict(font=(tema.FONTE, 12), fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER,
+                          text_color=tema.AZUL_NAVBAR, border_width=1, border_color=tema.CINZA_BORDA)
         btn_save_cfg = ctk.CTkButton(
-            frame_config, text="Salvar Configuração 💾", font=("Open Sans", 11, "bold"),
-            fg_color="#428BCA", hover_color="#3071A9", width=150, height=24, command=self.salvar_dados_email
+            frame_config, text="Salvar e-mail", width=120, height=28, command=self.salvar_dados_email, **secundario
         )
         btn_save_cfg.grid(row=0, column=2, padx=5, pady=5, sticky="e")
 
-        # Cadastro de Tabelas (Localidades e UCs)
+        # Cadastros de apoio (Localidades e UCs): secundários, para não competir com a ação principal
         frame_tabelas = ctk.CTkFrame(self, fg_color="transparent")
         frame_tabelas.pack(padx=15, pady=10, fill="x")
 
         self.btn_locs = ctk.CTkButton(
-            frame_tabelas, text="Cadastrar Localidades 🏢", font=("Open Sans", 12, "bold"),
-            fg_color="#F89406", hover_color="#DF8505", height=32, command=self.abrir_localidades
+            frame_tabelas, text="Cadastrar localidades", height=32, command=self.abrir_localidades, **secundario
         )
         self.btn_locs.pack(side="left", fill="x", expand=True, padx=5)
 
         self.btn_ucs = ctk.CTkButton(
-            frame_tabelas, text="Mapear UCs 🔌", font=("Open Sans", 12, "bold"),
-            fg_color="#F89406", hover_color="#DF8505", height=32, command=self.abrir_ucs
+            frame_tabelas, text="Mapear UCs", height=32, command=self.abrir_ucs, **secundario
         )
         self.btn_ucs.pack(side="right", fill="x", expand=True, padx=5)
 
         # Botão Importar Faturas (ancorado embaixo para continuar visível mesmo com pendências em telas menores)
         self.btn_importar = ctk.CTkButton(
-            self, text="⚡ BUSCAR E LANÇAR CONTAS DE ENERGIA ⚡", font=("Open Sans", 13, "bold"),
-            fg_color="#5CB85C", hover_color="#4CAE4C", height=40, command=self.iniciar_importacao_energia
+            self, text="Buscar e lançar contas de energia", font=("Open Sans", 14, "bold"),
+            fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, height=40, command=self.iniciar_importacao_energia
         )
         self.btn_importar.pack(side="bottom", padx=15, pady=10, fill="x")
 
@@ -92,7 +93,7 @@ class PanelEnergia(ctk.CTkFrame):
             self.frame_pendentes.pack_forget()
             return
 
-        self.lbl_pendentes.configure(text=f"⚠️ {len(faturas)} fatura(s) aguardando mapeamento de UC")
+        self.lbl_pendentes.configure(text=f"{len(faturas)} fatura(s) aguardando mapeamento de UC")
         self.frame_pendentes.pack(padx=15, pady=(0, 5), fill="both", expand=True)
 
         for fat in faturas:
@@ -107,13 +108,13 @@ class PanelEnergia(ctk.CTkFrame):
 
             ctk.CTkButton(
                 linha, text="Descartar", font=("Open Sans", 10),
-                fg_color="#D9534F", hover_color="#C9302C", width=70, height=22,
+                fg_color=tema.VERMELHO_TEXTO, hover_color=tema.VERMELHO_HOVER, width=70, height=22,
                 command=lambda f=fat: self.descartar_pendente(f)
             ).pack(side="right", padx=(4, 8), pady=4)
 
             ctk.CTkButton(
                 linha, text="Ver PDF", font=("Open Sans", 10),
-                fg_color="#428BCA", hover_color="#3071A9", width=60, height=22,
+                fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, width=60, height=22,
                 command=lambda f=fat: abrir_pdf(f.get("caminho_arquivo", ""), self)
             ).pack(side="right", padx=4, pady=4)
 

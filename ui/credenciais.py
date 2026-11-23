@@ -88,6 +88,9 @@ class ModalCredenciais(ctk.CTkToplevel):
 
         self.construir_widgets()
         self.carregar_dados()
+        # A altura sai do conteúdo (labels acima dos campos), não de um número fixo que corta os botões
+        self.update_idletasks()
+        self.geometry(f"380x{max(250, self.winfo_reqheight())}")
 
     def construir_widgets(self):
         # Título interno

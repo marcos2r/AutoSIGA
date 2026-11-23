@@ -184,17 +184,19 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         # ==========================================
         # FOOTER E BARRA DE STATUS (Ancorados embaixo antes da área central)
         # ==========================================
+        # Status e rodapé dividem a mesma linha (status à esquerda, versão à direita)
         self.frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
-        self.frame_rodape.pack(side="bottom", fill="x", pady=(0, 4))
+        self.frame_rodape.pack(side="bottom", fill="x", padx=16, pady=(0, 4))
 
-        texto_rodape = f"AutoSIGA v{VERSION} · Desenvolvido por PAIRUS Soluções Tecnológicas"
+        texto_rodape = f"AutoSIGA v{VERSION} · PAIRUS Soluções Tecnológicas"
         self.label_rodape = ctk.CTkLabel(self.frame_rodape, text=texto_rodape, font=(tema.FONTE, 11),
                                          text_color=tema.CINZA_TEXTO)
-        self.label_rodape.pack()
+        self.label_rodape.pack(side="right")
 
-        self.label_status_siga = ctk.CTkLabel(self, text="Aguardando extratos ou faturas...",
-                                              font=(tema.FONTE, 13, "bold"), text_color=tema.CINZA_TEXTO)
-        self.label_status_siga.pack(side="bottom", pady=(0, 4))
+        self.label_status_siga = ctk.CTkLabel(self.frame_rodape, text="Aguardando extratos ou faturas...",
+                                              font=(tema.FONTE, 13, "bold"), text_color=tema.CINZA_TEXTO,
+                                              anchor="w", justify="left")
+        self.label_status_siga.pack(side="left", fill="x", expand=True)
 
         self.progress_bar = ctk.CTkProgressBar(self, width=400, height=8, corner_radius=4,
                                                progress_color=tema.VERDE_TEXTO, fg_color=tema.CINZA_BORDA)
@@ -223,36 +225,36 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         # Sessão 1: Leitura do Extrato (Instanciado na tab de extratos)
         self.frame_card = self.tab_extratos # Redireciona a hierarquia dos widgets de extrato para a tab
 
-        self.label_instrucao = ctk.CTkLabel(self.frame_card, text="1. Importe seus Extratos (OFX ou XLS)", font=("Open Sans", 14, "bold"), text_color=tema.AZUL_TITULO)
-        self.label_instrucao.pack(pady=(6, 2))
+        # Telas pequenas (notebook, 125% de escala): cada linha vertical conta. As três etapas
+        # ficam numa linha só, e o botão de seleção divide a linha com o nome dos arquivos.
+        frame_etapas = ctk.CTkFrame(self.frame_card, fg_color="transparent")
+        frame_etapas.pack(pady=(4, 2))
+        fonte_etapa = (tema.FONTE, 13, "bold")
+        self.label_instrucao = ctk.CTkLabel(frame_etapas, text="", font=fonte_etapa)
+        self.label_instrucao2 = ctk.CTkLabel(frame_etapas, text="", font=fonte_etapa)
+        self.label_instrucao3 = ctk.CTkLabel(frame_etapas, text="", font=fonte_etapa)
+        for i, rotulo in enumerate((self.label_instrucao, self.label_instrucao2, self.label_instrucao3)):
+            if i:
+                ctk.CTkLabel(frame_etapas, text="›", font=fonte_etapa, text_color=tema.CINZA_TEXTO).pack(side="left", padx=8)
+            rotulo.pack(side="left")
 
+        frame_arquivos = ctk.CTkFrame(self.frame_card, fg_color="transparent")
+        frame_arquivos.pack(fill="x", padx=15, pady=(2, 4))
         self.botao_carregar = ctk.CTkButton(
-            self.frame_card, text="Selecionar extratos (OFX / XLS)   Ctrl+O", font=("Open Sans", 13, "bold"),
+            frame_arquivos, text="Selecionar extratos (OFX / XLS)   Ctrl+O", font=("Open Sans", 13, "bold"),
             fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, text_color=tema.BRANCO,
             corner_radius=4, height=34, command=self.selecionar_arquivo
         )
-        self.botao_carregar.pack(pady=2)
+        self.botao_carregar.pack(side="left")
 
-        self.label_arquivo = ctk.CTkLabel(self.frame_card, text="Nenhum arquivo selecionado.", font=("Open Sans", 11), text_color=tema.CINZA_TEXTO, wraplength=500)
-        self.label_arquivo.pack(pady=(2, 4))
-
-        # Linha Divisória Horizontal
-        self.frame_divisor = ctk.CTkFrame(self.frame_card, height=1, fg_color=tema.CINZA_DIVISOR)
-        self.frame_divisor.pack(fill="x", padx=15, pady=4)
-
-        # Sessão 2: Configurações do SIGA
-        self.label_instrucao2 = ctk.CTkLabel(self.frame_card, text="2. Mapeamento de Contas no SIGA", font=("Open Sans", 14, "bold"), text_color=tema.AZUL_TITULO)
-        self.label_instrucao2.pack(pady=(2, 4))
-        self.construir_faixa_catalogo(self.frame_card, depois_de=self.label_instrucao2)
+        self.label_arquivo = ctk.CTkLabel(frame_arquivos, text="Nenhum arquivo selecionado.", font=(tema.FONTE, 12),
+                                          text_color=tema.CINZA_TEXTO, wraplength=480, justify="left", anchor="w")
+        self.label_arquivo.pack(side="left", padx=(12, 0), fill="x", expand=True)
+        self.construir_faixa_catalogo(self.frame_card, depois_de=frame_arquivos)
 
         # Sessão 3: Botões de Ação Final (ancorados no rodapé da aba antes da lista rolável)
         self.frame_botoes = ctk.CTkFrame(self.frame_card, fg_color="transparent")
-        self.frame_botoes.pack(side="bottom", pady=(4, 6))
-
-        # Etapa 3 visível: a tela mostra o caminho inteiro (importar, mapear, executar)
-        self.label_instrucao3 = ctk.CTkLabel(self.frame_card, text="3. Execute no SIGA", font=("Open Sans", 14, "bold"),
-                                             text_color=tema.AZUL_TITULO)
-        self.label_instrucao3.pack(side="bottom", pady=(2, 0))
+        self.frame_botoes.pack(side="bottom", pady=(2, 4))
 
         self.frame_divisor2 = ctk.CTkFrame(self.frame_card, height=1, fg_color=tema.CINZA_DIVISOR)
         self.frame_divisor2.pack(side="bottom", fill="x", padx=15, pady=4)
@@ -293,16 +295,19 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.var_baixar_energia = ctk.BooleanVar(value=self.config_manager.get_baixar_energia_pelo_extrato())
         # Revisão desligada por padrão: o robô grava sozinho o que passou nas conferências do SIGA
         self.var_revisar = ctk.BooleanVar(value=self.config_manager.get_revisar_antes_de_gravar())
+        # As duas opções dividem uma linha só: economiza altura em notebook
+        frame_opcoes = ctk.CTkFrame(self.frame_botoes, fg_color="transparent")
+        frame_opcoes.grid(row=2, column=0, columnspan=3, pady=(6, 0), sticky="w")
         ctk.CTkCheckBox(
-            self.frame_botoes, text="Baixar as provisões pagas no extrato (energia, boletos e PIX)",
+            frame_opcoes, text="Baixar as provisões pagas no extrato (energia, boletos e PIX)",
             font=("Open Sans", 12),
             variable=self.var_baixar_energia, command=self._alternar_baixa_energia
-        ).grid(row=2, column=0, columnspan=3, pady=(6, 0), sticky="w")
+        ).pack(side="left", padx=(5, 16))
         ctk.CTkCheckBox(
-            self.frame_botoes, text="Revisar antes de gravar no SIGA", font=("Open Sans", 12),
+            frame_opcoes, text="Revisar antes de gravar no SIGA", font=("Open Sans", 12),
             variable=self.var_revisar,
             command=lambda: self.config_manager.salvar_revisar_antes_de_gravar(self.var_revisar.get())
-        ).grid(row=3, column=0, columnspan=3, pady=(4, 0), sticky="w")
+        ).pack(side="left")
         self._alternar_baixa_energia(salvar=False)
         self.atualizar_etapas()
 

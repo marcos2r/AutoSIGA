@@ -172,9 +172,9 @@ class LoteExtratosMixin:
         tem_cards = bool(self.cards_lote)
         mapeado = tem_cards and all(c.obter_dados_mapeados()["valido"] for c in self.cards_lote)
         etapas = (
-            (self.label_instrucao, "1. Importe seus extratos (OFX ou XLS)", tem_cards, True),
-            (self.label_instrucao2, "2. Confira as contas no SIGA", mapeado, tem_cards),
-            (self.label_instrucao3, "3. Execute no SIGA", False, mapeado),
+            (self.label_instrucao, "1. Importar extratos", tem_cards, True),
+            (self.label_instrucao2, "2. Conferir contas", mapeado, tem_cards),
+            (self.label_instrucao3, "3. Executar no SIGA", False, mapeado),
         )
         for rotulo, texto, feita, liberada in etapas:
             if feita:

@@ -27,6 +27,7 @@ from controllers.prova_real import (
     parear,
     valor_br,
 )
+from controllers.transferencias_internas import a_lancar as a_lancar_transferencias
 
 # Lê a grade #grid1 da TES01701 (Data, Lançto, Documento, Histórico, Origem, Entrada, Saída, Saldo)
 _JS_LER_GRADE = '''() => {
@@ -80,6 +81,7 @@ class FluxoExtratosMixin:
     def _fluxo_extratos(self, page, telemetria_lote):
         """Processa todos os extratos do lote e mostra o status final."""
         contexto = {"localidade": None, "competencia": None}
+        self._preparar_transferencias()
 
         # As provisões de energia esperam o e-mail só quando o primeiro débito de energia precisa delas
         provisionado = False
@@ -229,16 +231,22 @@ class FluxoExtratosMixin:
         else:
             situacao = RECUSADO if recusado else (PENDENTE if pendentes else CONCILIADO)
             saldo, sobras, faltas = self._prova_real(page, dados, grade_atual)
-            # Tarifas que a prova real achou sem lançamento (só conta corrente): grava e confere de novo
-            if not is_aplicacao and faltas:
+            # Conta corrente: transferências entre contas (pela origem) e tarifas sem lançamento;
+            # se gravar algo, relê a grade e confere de novo
+            if not is_aplicacao:
+                consulta = (conta_alvo, dados.get("data_inicial", ""), data_final)
                 try:
-                    consulta = (conta_alvo, dados.get("data_inicial", ""), data_final)
-                    if self._lancar_tarifas(page, dados, conta_alvo, faltas, consulta, telemetria_lote):
+                    transf = a_lancar_transferencias(getattr(self, "_pares_transf", []), conta_alvo,
+                                                     dados.get("extrato_siga"))
+                    regravou = self._lancar_transferencias(page, transf, conta_alvo, consulta, dados, telemetria_lote)
+                    if regravou:
+                        saldo, sobras, faltas = self._prova_real(page, dados, True)
+                    if faltas and self._lancar_tarifas(page, dados, conta_alvo, faltas, consulta, telemetria_lote):
                         saldo, sobras, faltas = self._prova_real(page, dados, True)
                 except MesFechadoError:
                     self.competencias_fechadas.add(chave_competencia)
-                    self.update_status(f"⛔ [{self.localidade_selecionada}] Mês fechado: tarifas ficaram pendentes.",
-                                       "#D9534F")
+                    self.update_status(f"⛔ [{self.localidade_selecionada}] Mês fechado: transferências e tarifas "
+                                       "ficaram pendentes.", "#D9534F")
         self._registrar_resultado(telemetria_lote, dados, conta_alvo, situacao,
                                   telemetria_lote["injecoes"] - injecoes_antes, len(pendentes), saldo, sobras, baixas,
                                   faltas)
@@ -319,7 +327,7 @@ class FluxoExtratosMixin:
             conta_id=str(dados.get("conta_id", "")), conta_siga=conta_siga or "",
             localidade=dados.get("localidade_selecionada", ""), tipo=dados.get("tipo_extrato", ""),
             situacao=situacao, lancados=lancados, pendentes=pendentes, sobras=sobras, baixas=baixas, faltas=faltas,
-            periodo=_periodo(dados), baixas_cp=dados.get("baixas_cp"), avisos=avisos_do_extrato(dados, faltas))
+            periodo=_periodo(dados), baixas_cp=dados.get("baixas_cp"), avisos=avisos_do_extrato(dados, faltas) + self.avisos_transferencias(conta_siga or ""))
         if saldo is not None:
             resultado.saldo = saldo
         telemetria_lote.setdefault("extratos", []).append(resultado)

@@ -25,12 +25,13 @@ from bot.provisoes_energia import ProvisoesEnergiaMixin
 from bot.sessao import SessaoMixin
 from bot.siga_helpers import HelpersMixin
 from bot.tarifas import TarifasMixin
+from bot.transferencias_internas import TransferenciasInternasMixin
 from controllers.exportador import Exportador
 
 
 class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, AuditoriaEnergiaMixin, EnergiaMixin,
              OfertasMixin, DescobertaContasMixin, BaixaProvisoesMixin, BaixaContasPagarMixin, ProvisoesEnergiaMixin,
-             TarifasMixin):
+             TarifasMixin, TransferenciasInternasMixin):
     """
     Controlador do Navegador Playwright.
 

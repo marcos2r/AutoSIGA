@@ -87,8 +87,12 @@ class LoteExtratosMixin:
                     self.scroll_lote, dados, self.config_manager, self.validar_lote_e_atualizar_botoes,
                     catalogo=catalogo, on_remover=self.remover_extrato_do_lote
                 )
-                card.pack(fill="x", padx=5, pady=5)
                 self.cards_lote.append(card)
+
+            # Pendentes no topo: o que pede atenção aparece primeiro. A ordem só é fixada ao
+            # carregar, para os cards não pularem de lugar enquanto o usuário confirma
+            for card in sorted(self.cards_lote, key=lambda c: c.obter_dados_mapeados()["valido"]):
+                card.pack(fill="x", padx=5, pady=5)
 
             qtd = len(self.dados_processados_lote)
             nomes_arquivos = [os.path.basename(d["caminho_arquivo"]) for d in self.dados_processados_lote]
@@ -106,6 +110,7 @@ class LoteExtratosMixin:
             self.botao_gerar_txt.configure(state="disabled")
             self.botao_importar_ofertas.configure(state="disabled")
             self.atualizar_faixa_catalogo()
+            self.atualizar_etapas()
             self.atualizar_status("Nenhum arquivo pôde ser lido.", tema.VERMELHO_TEXTO)
 
         # Depois dos cards, para o aviso não aparecer sobre a tela vazia
@@ -138,6 +143,7 @@ class LoteExtratosMixin:
         self.botao_importar_ofertas.configure(state="disabled")
         self.progress_bar.set(0.0)
         self.atualizar_faixa_catalogo()
+        self.atualizar_etapas()
         self.atualizar_status("Lote limpo. Aguardando novos arquivos.", tema.CINZA_TEXTO)
 
     def remover_extrato_do_lote(self, card):
@@ -161,9 +167,26 @@ class LoteExtratosMixin:
         """Mantido para compatibilidade, delega para processar_multiplos_arquivos."""
         self.processar_multiplos_arquivos([caminho])
 
+    def atualizar_etapas(self):
+        """Marca as etapas 1-2-3 como concluída, atual ou futura, pelo estado do lote."""
+        tem_cards = bool(self.cards_lote)
+        mapeado = tem_cards and all(c.obter_dados_mapeados()["valido"] for c in self.cards_lote)
+        etapas = (
+            (self.label_instrucao, "1. Importe seus extratos (OFX ou XLS)", tem_cards, True),
+            (self.label_instrucao2, "2. Confira as contas no SIGA", mapeado, tem_cards),
+            (self.label_instrucao3, "3. Execute no SIGA", False, mapeado),
+        )
+        for rotulo, texto, feita, liberada in etapas:
+            if feita:
+                rotulo.configure(text=f"{texto}  ·  concluída", text_color=tema.VERDE_TEXTO)
+            else:
+                # Etapa futura fica em cinza; a atual, no azul de título
+                rotulo.configure(text=texto, text_color=tema.AZUL_TITULO if liberada else tema.CINZA_TEXTO)
+
     def validar_lote_e_atualizar_botoes(self):
         """Verifica se todos os cards do lote estão mapeados e gerencia a ativação dos botões."""
         self.atualizar_faixa_catalogo()
+        self.atualizar_etapas()
         if not self.cards_lote:
             self.botao_conectar.configure(state="disabled")
             self.botao_gerar_txt.configure(state="disabled")

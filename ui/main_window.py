@@ -249,6 +249,11 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.frame_botoes = ctk.CTkFrame(self.frame_card, fg_color="transparent")
         self.frame_botoes.pack(side="bottom", pady=(4, 6))
 
+        # Etapa 3 visível: a tela mostra o caminho inteiro (importar, mapear, executar)
+        self.label_instrucao3 = ctk.CTkLabel(self.frame_card, text="3. Execute no SIGA", font=("Open Sans", 14, "bold"),
+                                             text_color=tema.AZUL_TITULO)
+        self.label_instrucao3.pack(side="bottom", pady=(2, 0))
+
         self.frame_divisor2 = ctk.CTkFrame(self.frame_card, height=1, fg_color=tema.CINZA_DIVISOR)
         self.frame_divisor2.pack(side="bottom", fill="x", padx=15, pady=4)
 
@@ -299,6 +304,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
             command=lambda: self.config_manager.salvar_revisar_antes_de_gravar(self.var_revisar.get())
         ).grid(row=3, column=0, columnspan=3, pady=(4, 0), sticky="w")
         self._alternar_baixa_energia(salvar=False)
+        self.atualizar_etapas()
 
     def atualizar_status(self, texto, cor=tema.CINZA_TEXTO):
         """

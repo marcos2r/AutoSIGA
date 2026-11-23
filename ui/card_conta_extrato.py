@@ -64,6 +64,11 @@ class CardContaExtrato(ctk.CTkFrame):
         frame_topo.grid(row=0, column=4, padx=10, pady=(6, 2), sticky="e")
         self.lbl_selo = ctk.CTkLabel(frame_topo, text="", font=(tema.FONTE, 11, "bold"), corner_radius=10, height=24)
         self.lbl_selo.pack(side="left")
+        # Só aparece com o card recolhido: abre os campos de novo para trocar as contas
+        self.btn_alterar = ctk.CTkButton(frame_topo, text="Alterar", width=70, height=24, font=(tema.FONTE, 11),
+                                         fg_color=tema.BRANCO, hover_color=tema.CINZA_HOVER,
+                                         text_color=tema.AZUL_NAVBAR, border_width=1, border_color=tema.CINZA_BORDA,
+                                         command=lambda: self._expandir(True))
         # Tira só este extrato do lote (o mapeamento salvo continua): útil para conta que não existe no SIGA
         self.btn_remover = ctk.CTkButton(frame_topo, text="✕ Tirar do lote", width=100, height=24,
                                          font=(tema.FONTE, 11), fg_color=tema.BRANCO, hover_color=tema.VERMELHO_FUNDO,
@@ -118,6 +123,26 @@ class CardContaExtrato(ctk.CTkFrame):
         self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(3, weight=1)
         self.grid_columnconfigure(4, weight=1)
+
+        # Tudo abaixo do título forma o corpo, que some quando o card está confirmado:
+        # a lista passa a mostrar só o que ainda pede atenção
+        self._corpo = [w for w in self.grid_slaves() if int(w.grid_info()["row"]) >= 1]
+        self._expandido = True
+        self._aberto_pelo_usuario = False
+
+    def _expandir(self, abrir: bool, pelo_usuario: bool = True) -> None:
+        """Mostra ou recolhe os campos do card; "Alterar" fica visível só com ele recolhido."""
+        if pelo_usuario:
+            self._aberto_pelo_usuario = abrir
+        if abrir == self._expandido:
+            return
+        self._expandido = abrir
+        for widget in self._corpo:
+            widget.grid() if abrir else widget.grid_remove()
+        if abrir:
+            self.btn_alterar.pack_forget()
+        else:
+            self.btn_alterar.pack(side="left", padx=(8, 0), before=self.btn_remover)
 
     # ------------------------------------------------------------------ dados
     def _set(self, combo, valor):
@@ -237,6 +262,9 @@ class CardContaExtrato(ctk.CTkFrame):
         else:
             self.btn_editar.configure(text="Listas" if self.modo_edicao else "Editar")
             self.btn_editar.pack(side="left", padx=2, before=self.btn_confirmar)
+        # Confirmado recolhe (a menos que o usuário tenha aberto com "Alterar"); qualquer outro estado abre
+        confirmado = self.estado.chave == CONFIRMADO
+        self._expandir(not confirmado or self._aberto_pelo_usuario, pelo_usuario=False)
 
     def _aplicar_modo(self, edicao):
         self.modo_edicao = edicao
@@ -295,6 +323,7 @@ class CardContaExtrato(ctk.CTkFrame):
         self.confirmado = True
         self.origem_sugestao = False
         self._ultimo = self._valores()
+        self._aberto_pelo_usuario = False  # confirmou: o card volta a recolher
         self._aplicar_modo(edicao=self.catalogo.vazio)
         self.atualizar_status_visual()
         if self.on_change_callback:

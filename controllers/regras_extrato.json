@@ -13,7 +13,7 @@
     {"categoria": "resgate", "padrao": "RESG"},
     {"categoria": "aplicacao", "padrao": "APLIC|RDC|CDB|POUP|INVEST|CAPITALIZ"},
     {"categoria": "deposito", "padrao": "DEPOSITO|DEP "},
-    {"categoria": "transferencia", "padrao": "TRANSFERENCIA|TRANSF\\.|CONGREGACAO|DEBITO TED"},
+    {"categoria": "transferencia", "padrao": "TRANSFERENCIA|TRANSF\\.|TRANSF ENTRE CONTAS|CONGREGACAO|DEBITO TED"},
     {"categoria": "transferencia", "padrao": "CONGREGACAO", "campo": "historico"}
   ]
 }

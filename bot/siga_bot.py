@@ -24,11 +24,13 @@ from bot.ofertas import OfertasMixin
 from bot.provisoes_energia import ProvisoesEnergiaMixin
 from bot.sessao import SessaoMixin
 from bot.siga_helpers import HelpersMixin
+from bot.tarifas import TarifasMixin
 from controllers.exportador import Exportador
 
 
 class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, AuditoriaEnergiaMixin, EnergiaMixin,
-             OfertasMixin, DescobertaContasMixin, BaixaProvisoesMixin, BaixaContasPagarMixin, ProvisoesEnergiaMixin):
+             OfertasMixin, DescobertaContasMixin, BaixaProvisoesMixin, BaixaContasPagarMixin, ProvisoesEnergiaMixin,
+             TarifasMixin):
     """
     Controlador do Navegador Playwright.
 
@@ -38,7 +40,7 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
     """
 
     def __init__(self, lote_processados, callbacks, tipo_lote="extrato", revisar_antes_de_gravar=False,
-                 baixar_energia=False):
+                 baixar_energia=False, regra_tarifas=None):
         """
         Inicializa a configuração do bot de automação em lote.
 
@@ -56,6 +58,8 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
                 grava com autorização; também pergunta a localidade das UCs novas. Desligado, o robô
                 grava sozinho o que passou nas conferências do SIGA, e o resto vira pendência no painel.
             baixar_energia (bool): Aprova e baixa as faturas de energia debitadas nos extratos.
+            regra_tarifas (RegraTarifa | None): Como lançar as tarifas do extrato (TES01702); None
+                usa os padrões de controllers/tarifas.py.
         """
         # Contas correntes antes das aplicações: a aplicação e o resgate entram no SIGA pela
         # transferência da conta corrente (às vezes de outra localidade), e só depois disso a
@@ -71,6 +75,7 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
         self._qtd_injecoes_efetuadas = 0
         self.revisar_antes_de_gravar = revisar_antes_de_gravar
         self.baixar_energia = baixar_energia
+        self.regra_tarifas = regra_tarifas
         # Índice das faturas de energia (PDFs), montado na primeira baixa e reaproveitado no lote
         self._indice_energia = None
         # Prévia: a UI responde por responder_autorizacao(), que libera a thread do bot

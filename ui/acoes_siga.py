@@ -10,6 +10,7 @@ from tkinter import messagebox
 from bot.siga_bot import SigaBot
 from controllers.localidades_siga import sincronizar_localidades
 from controllers.prova_real import moeda
+from controllers.tarifas import RegraTarifa
 from models.faturas_pendentes import FaturasPendentes
 from ui import tema
 from ui.modais_energia import ModalPerguntaMapeamentoUC
@@ -54,7 +55,8 @@ class AcoesSigaMixin:
 
         self.bot_instance = SigaBot(lote_valido, callbacks,
                                     revisar_antes_de_gravar=self.config_manager.get_revisar_antes_de_gravar(),
-                                    baixar_energia=self.config_manager.get_baixar_energia_pelo_extrato())
+                                    baixar_energia=self.config_manager.get_baixar_energia_pelo_extrato(),
+                                    regra_tarifas=RegraTarifa.da_config(self.config_manager.get_tarifas()))
         threading.Thread(target=self.bot_instance.fluxo_automacao, daemon=True).start()
 
     def receber_localidades_siga(self, textos):

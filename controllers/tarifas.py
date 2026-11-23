@@ -5,8 +5,8 @@ Decisão pura, sem navegador. Parte das faltas da prova real (movimentos do banc
 lançamento no SIGA), escolhe as que o classificador marca como TARIFA e monta um
 lançamento por linha do extrato, para casar um a um na conferência seguinte.
 
-As contas vêm da configuração (`config.json`, chave "tarifas") e o recurso nasce
-desligado: só grava depois que o usuário confirmar a conta de despesa e o histórico.
+As contas vêm da configuração (`config.json`, chave "tarifas"); os padrões foram
+confirmados pelo usuário em 23/11/2026. "ativo": false no config.json desliga o recurso.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from controllers.prova_real import MovimentoBanco
 
 # Levantados na TES01702 em 23/11/2026 (docs/regras/siga.md); o usuário confirma antes de ligar
 PADRAO = {
-    "ativo": False,
+    "ativo": True,                 # contas confirmadas pelo usuário em 23/11/2026
     "despesa": "3030",            # 3030 - DESPESAS BANCARIAS
     "historico": "012",           # 012 - DESP.BANCÁRIAS
     "tipo_documento": "AVISO DE DÉBITO",

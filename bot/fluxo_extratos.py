@@ -229,6 +229,16 @@ class FluxoExtratosMixin:
         else:
             situacao = RECUSADO if recusado else (PENDENTE if pendentes else CONCILIADO)
             saldo, sobras, faltas = self._prova_real(page, dados, grade_atual)
+            # Tarifas que a prova real achou sem lançamento (só conta corrente): grava e confere de novo
+            if not is_aplicacao and faltas:
+                try:
+                    consulta = (conta_alvo, dados.get("data_inicial", ""), data_final)
+                    if self._lancar_tarifas(page, dados, conta_alvo, faltas, consulta, telemetria_lote):
+                        saldo, sobras, faltas = self._prova_real(page, dados, True)
+                except MesFechadoError:
+                    self.competencias_fechadas.add(chave_competencia)
+                    self.update_status(f"⛔ [{self.localidade_selecionada}] Mês fechado: tarifas ficaram pendentes.",
+                                       "#D9534F")
         self._registrar_resultado(telemetria_lote, dados, conta_alvo, situacao,
                                   telemetria_lote["injecoes"] - injecoes_antes, len(pendentes), saldo, sobras, baixas,
                                   faltas)

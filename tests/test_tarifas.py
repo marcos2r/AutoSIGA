@@ -11,9 +11,9 @@ FALTAS = [
 ]
 
 
-def test_desligado_por_padrao_nao_planeja_nada():
-    assert PADRAO["ativo"] is False
-    assert planejar(FALTAS, RegraTarifa.da_config(None)) == []
+def test_ligado_por_padrao_e_desligavel_pelo_config():
+    assert PADRAO["ativo"] is True  # contas confirmadas pelo usuário em 23/11/2026
+    assert planejar(FALTAS, RegraTarifa.da_config({"ativo": False})) == []
 
 
 def test_ligado_planeja_uma_despesa_por_tarifa():

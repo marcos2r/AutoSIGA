@@ -1,0 +1,19 @@
+{
+  "_sobre": "Regras do classificador de linhas do extrato (controllers/classificador_extrato.py). A primeira regra que casa decide. 'padrao' é regex sobre a descrição sem acento e em maiúsculas; 'sinal' limita a crédito (+) ou débito (-); 'campo' troca a descrição pelo histórico. Linha que nenhuma regra pega vira oferta se for crédito e desconhecida se for débito.",
+  "regras": [
+    {"categoria": "energia", "padrao": "DEBITO\\s+CONVENIOS-ENERGI", "sinal": "-"},
+    {"categoria": "convenio", "padrao": "DEBITO\\s+CONVENIOS", "sinal": "-"},
+    {"categoria": "boleto", "padrao": "^LIQUIDACAO BOLETO", "sinal": "-"},
+    {"categoria": "fatura_cartao", "padrao": "DEB\\.?\\s*CTA\\.?\\s*FATURA", "sinal": "-"},
+    {"categoria": "pix_fornecedor", "padrao": "^PAGAMENTO PIX", "sinal": "-"},
+    {"categoria": "tarifa", "padrao": "CESTA DE RELACIONAMENTO|\\bTARIFA|\\bTAR\\b", "sinal": "-"},
+    {"categoria": "cota_capital", "padrao": "INTEGR\\S*\\s*CAPITAL", "sinal": "-"},
+    {"categoria": "guia", "padrao": "DEBITO ARRECADACAO|\\bDARF|\\bGPS\\b|\\bFGTS|\\bISSQN", "sinal": "-"},
+    {"categoria": "rendimento", "padrao": "REND"},
+    {"categoria": "resgate", "padrao": "RESG"},
+    {"categoria": "aplicacao", "padrao": "APLIC|RDC|CDB|POUP|INVEST|CAPITALIZ"},
+    {"categoria": "deposito", "padrao": "DEPOSITO|DEP "},
+    {"categoria": "transferencia", "padrao": "TRANSFERENCIA|TRANSF\\.|CONGREGACAO|DEBITO TED"},
+    {"categoria": "transferencia", "padrao": "CONGREGACAO", "campo": "historico"}
+  ]
+}

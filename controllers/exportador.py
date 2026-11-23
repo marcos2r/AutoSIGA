@@ -8,11 +8,11 @@ permitindo a importação manual em lote no sistema legado do SIGA.
 
 import calendar
 import logging
-import unicodedata
 from datetime import datetime
 
 from controllers.baixa_contas_pagar import resumo_resultado as resumo_resultado_cp
 from controllers.baixa_energia import resumo_baixa
+from controllers.classificador_extrato import OFERTA, classificar
 from controllers.diferenca_extrato import itens_da_diferenca, tipo_legivel
 from controllers.prova_real import DIVERGE, resumo_resultado
 
@@ -80,24 +80,14 @@ class Exportador:
             logging.error(f"Erro ao salvar arquivo TXT das ofertas: {e}", exc_info=True)
             raise e
 
-    # Palavras bloqueadas que categorizam lançamentos que NÃO são Ofertas puras.
-    # Por exemplo: Rendimentos de aplicação, saques aplicados e dinheiro em
-    # caixa já lançado direto (depositos ou congregação).
-    PALAVRAS_BLOQUEADAS = [
-        "APLICA", "RESGATE", "RENDIMENT", "DEPOSITO", "RESG.", "DEP ", "CONGREGACAO", "TRANSFERENCIA", "TRANSF.",
-    ]
-    # Pagadores que indicam transferência/repasse entre administrações da própria igreja
-    # (em bancos como o Sicoob, o nome do pagador fica só em 'historico', fora do MEMO).
-    PAGADORES_BLOQUEADOS = ["CONGREGACAO"]
-
-    @staticmethod
-    def _sem_acento(texto: str) -> str:
-        return unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode("ascii").upper()
-
     @staticmethod
     def filtrar_ofertas(transacoes):
         """
         Separa as transações que são ofertas puras (regras IT.TES.05).
+
+        Quem decide é o classificador único do extrato: oferta é crédito que não é
+        aplicação, resgate, rendimento, depósito em espécie nem transferência (inclusive
+        a de outra administração, identificada pelo pagador no histórico do Sicoob).
 
         Args:
             transacoes (list): Lista de dicionários contendo transações do OFX.
@@ -105,22 +95,8 @@ class Exportador:
         Returns:
             tuple: (ofertas, qtd_descartadas), onde ofertas é a lista das transações mantidas.
         """
-        ofertas = []
-        qtd_descartadas = 0
-        for tx in transacoes or []:
-            descricao = Exportador._sem_acento(tx.get("descricao", ""))
-            historico = Exportador._sem_acento(tx.get("historico", ""))
-            # COND. 1: Somente valores POSITIVOS (o SIGA não aceita estornos neste arquivo).
-            # COND. 2: Nenhuma palavra bloqueada no MEMO.
-            if (
-                tx.get("valor", 0.0) <= 0
-                or any(p in descricao for p in Exportador.PALAVRAS_BLOQUEADAS)
-                or any(p in historico for p in Exportador.PAGADORES_BLOQUEADOS)
-            ):
-                qtd_descartadas += 1
-                continue
-            ofertas.append(tx)
-        return ofertas, qtd_descartadas
+        ofertas = [tx for tx in transacoes or [] if classificar(tx).categoria == OFERTA]
+        return ofertas, len(transacoes or []) - len(ofertas)
 
     @staticmethod
     def resumo_ofertas(ofertas):

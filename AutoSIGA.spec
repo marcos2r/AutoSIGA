@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('venv/Lib/site-packages/customtkinter', 'customtkinter/')],
+    datas=[('venv/Lib/site-packages/customtkinter', 'customtkinter/'), ('controllers/regras_extrato.json', 'controllers')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

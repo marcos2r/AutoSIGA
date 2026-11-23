@@ -9,6 +9,7 @@ foram lançadas no sistema.
 
 from datetime import datetime
 
+from controllers.classificador_extrato import classificar
 from controllers.prova_real import normalizar_linhas_siga
 
 
@@ -52,18 +53,14 @@ class Conciliador:
         # 2. Fase de Cruzamento (Conciliação)
         a_lancar = []
 
-        # Filtro de negócio: O robô só assume responsabilidade por transferências interbancárias
-        # de investimento. Depósitos em espécie e transferências PIX normais são ignorados.
-        kw_investimentos = ['APLIC', 'RESG', 'RDC', 'CDB', 'POUP', 'INVEST', 'REND', 'CAPITALIZ']
-
+        # Filtro de negócio: o robô só assume aqui os movimentos de investimento (aplicação,
+        # resgate e rendimento). Quem decide é o classificador único do extrato; um boleto pago
+        # a um "fundo de investimento" (FIDC) é boleto, não aplicação.
         for tx in ofx_txs:
             tx_data = tx.get("data", "")
             tx_valor = tx.get("valor", 0.0)
-            tx_desc = tx.get("descricao", "").upper()
 
-            # Verifica se a descrição do banco contém alguma das palavras-chave
-            eh_investimento = any(kw in tx_desc for kw in kw_investimentos)
-            if not eh_investimento:
+            if not classificar(tx).eh_investimento:
                 continue
 
             matched = False

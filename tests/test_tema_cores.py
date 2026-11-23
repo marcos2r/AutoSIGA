@@ -49,6 +49,7 @@ PARES_TEXTO = [
     (tema.VERDE_TEXTO, tema.FUNDO_JANELA),
     (tema.VERMELHO_TEXTO, tema.FUNDO_JANELA),
     (tema.AZUL_TITULO, tema.BRANCO),
+    (tema.CINZA_TEXTO, tema.CINZA_HOVER),     # botão primário desabilitado (ui/botoes.py)
     *[(texto, fundo) for fundo, texto in tema.SELO.values()],  # SELO guarda (fundo, texto)
 ]
 

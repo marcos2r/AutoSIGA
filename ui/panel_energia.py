@@ -11,6 +11,7 @@ import customtkinter as ctk
 
 from models.faturas_pendentes import FaturasPendentes
 from ui import tema
+from ui.botoes import BotaoPrimario
 from ui.modais_energia import ModalLocalidades, ModalMapeamentoUC, abrir_pdf
 
 
@@ -68,7 +69,7 @@ class PanelEnergia(ctk.CTkFrame):
         self.btn_ucs.pack(side="right", fill="x", expand=True, padx=5)
 
         # Botão Importar Faturas (ancorado embaixo para continuar visível mesmo com pendências em telas menores)
-        self.btn_importar = ctk.CTkButton(
+        self.btn_importar = BotaoPrimario(
             self, text="Buscar e lançar contas de energia", font=("Open Sans", 14, "bold"),
             fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, height=40, command=self.iniciar_importacao_energia
         )

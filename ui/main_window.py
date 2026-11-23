@@ -15,6 +15,7 @@ import customtkinter as ctk
 from models.config_manager import ConfigManager
 from ui import tema
 from ui.acoes_siga import AcoesSigaMixin
+from ui.botoes import BotaoPrimario
 from ui.catalogo_siga import CatalogoSigaMixin
 from ui.credenciais import CredenciaisMixin
 from ui.dashboard import DashboardMixin
@@ -240,7 +241,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
 
         frame_arquivos = ctk.CTkFrame(self.frame_card, fg_color="transparent")
         frame_arquivos.pack(fill="x", padx=15, pady=(2, 4))
-        self.botao_carregar = ctk.CTkButton(
+        self.botao_carregar = BotaoPrimario(
             frame_arquivos, text="Selecionar extratos (OFX / XLS)   Ctrl+O", font=("Open Sans", 13, "bold"),
             fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, text_color=tema.BRANCO,
             corner_radius=4, height=34, command=self.selecionar_arquivo
@@ -268,7 +269,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.lbl_no_data.pack(pady=30)
 
         # Um só primário (cheio); os outros dois são secundários (contorno), sem cor que sugira perigo
-        self.botao_conectar = ctk.CTkButton(
+        self.botao_conectar = BotaoPrimario(
             self.frame_botoes, text="Conciliar no SIGA   Ctrl+I", font=("Open Sans", 13, "bold"),
             fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, text_color=tema.BRANCO,
             text_color_disabled=tema.CINZA_TEXTO,

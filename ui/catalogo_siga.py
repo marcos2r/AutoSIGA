@@ -15,6 +15,7 @@ import customtkinter as ctk
 from bot.siga_bot import SigaBot
 from controllers.estado_card import EDITADO, NAO_ENCONTRADO, PENDENTE, SUGERIDO
 from ui import tema
+from ui.botoes import BotaoPrimario
 
 _NOME_FONTE = {"CTB00301": "Plano de Contas", "TES01701": "Caixas e Bancos"}
 
@@ -29,7 +30,7 @@ class CatalogoSigaMixin:
         self.lbl_faixa = ctk.CTkLabel(self.frame_faixa, text="", font=(tema.FONTE, 12), justify="left",
                                       anchor="w", wraplength=480)
         self.lbl_faixa.pack(side="left", fill="x", expand=True, padx=10, pady=6)
-        self.btn_confirmar_sugestoes = ctk.CTkButton(
+        self.btn_confirmar_sugestoes = BotaoPrimario(
             self.frame_faixa, text="Confirmar sugestões", height=30, font=(tema.FONTE, 12, "bold"),
             fg_color=tema.AZUL_NAVBAR, hover_color=tema.AZUL_NAVBAR_HOVER, text_color=tema.BRANCO,
             command=self.confirmar_sugestoes)

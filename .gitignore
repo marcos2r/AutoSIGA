@@ -24,3 +24,6 @@ ofertas_importadas/
 
 # Estado da tarefa em andamento entre Claude Code e Antigravity
 .agents/handoff.md
+
+# Permissões locais do Claude Code
+.claude/settings.local.json

@@ -13,6 +13,8 @@ from datetime import datetime
 from controllers.baixa_contas_pagar import resumo_resultado as resumo_resultado_cp
 from controllers.baixa_energia import resumo_baixa
 from controllers.classificador_extrato import OFERTA, classificar
+from controllers.conciliacao_bancaria import escrever_aba as escrever_conciliacao
+from controllers.conciliacao_bancaria import montar as montar_conciliacao
 from controllers.diferenca_extrato import itens_da_diferenca, tipo_legivel
 from controllers.prova_real import DIVERGE, resumo_resultado
 
@@ -237,6 +239,10 @@ class Exportador:
         abas = [ws_resumo, ws_detalhe]
         if telemetria.get("extratos"):
             abas.append(Exportador._aba_prova_real(wb, telemetria["extratos"], cor_header, fonte_header, fonte_normal))
+            # Formulário de conciliação (FOR.TES.02) das contas com saldo conferido
+            conciliacoes = [c for c in map(montar_conciliacao, telemetria["extratos"]) if c is not None]
+            if conciliacoes:
+                abas.append(escrever_conciliacao(wb, conciliacoes, cor_header, fonte_header, fonte_normal))
             if any(r.baixas for r in telemetria["extratos"]):
                 abas.append(Exportador._aba_baixas_energia(wb, telemetria["extratos"], cor_header, fonte_header,
                                                            fonte_normal))

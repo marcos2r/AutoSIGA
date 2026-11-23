@@ -157,6 +157,16 @@ class HelpersMixin:
         except Exception as e:
             logging.debug(f"Falha ao fechar notificações: {e}")
 
+    def _esperar_sem_overlay(self, page, timeout=15000):
+        """Espera o blockUI sumir, sem a pausa fixa do `esperar_loading` (custo zero sem overlay)."""
+        try:
+            page.wait_for_function(
+                "() => !Array.from(document.querySelectorAll('.blockUI')).some(e => e.getClientRects().length > 0"
+                " && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none')",
+                timeout=timeout)
+        except Exception as e:
+            logging.debug(f"[Select2] Overlay do SIGA não sumiu ou não pôde ser checado: {e}")
+
     def esperar_loading(self, page):
         """
         Aguarda os overlays de loading/blockUI do SIGA desaparecerem.
@@ -229,6 +239,10 @@ class HelpersMixin:
 
         for tentativa in range(1, tentativas + 1):
             try:
+                # O blockUI do SIGA (ex.: depois de trocar o tipo de documento) intercepta o clique:
+                # em 23/11/2026 a fatura da ADM falhou com o clique caindo no overlay. Sem overlay,
+                # a checagem volta na hora.
+                self._esperar_sem_overlay(page)
                 container = page.locator(f'#s2id_{select_id}')
                 container.wait_for(state="visible", timeout=3000)
 

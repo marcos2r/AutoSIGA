@@ -1,7 +1,7 @@
 """Planejamento das tarifas do extrato (Fase 2, parte pura)."""
 
 from controllers.prova_real import MovimentoBanco
-from controllers.tarifas import PADRAO, RegraTarifa, planejar
+from controllers.tarifas import PADRAO, RegraTarifa, fornecedor_do_banco, planejar
 
 FALTAS = [
     MovimentoBanco("05/11/2026", -45.0, "CESTA DE RELACIONAMENTO"),
@@ -31,3 +31,9 @@ def test_config_do_usuario_sobrepoe_padrao_e_ignora_chave_estranha():
 
 def test_sem_faltas():
     assert planejar(None, RegraTarifa.da_config({"ativo": True})) == []
+
+
+def test_fornecedor_por_banco():
+    assert fornecedor_do_banco("748") == "SICREDI CENTRO-SUL"
+    assert fornecedor_do_banco("0756") == "SICOOB"
+    assert fornecedor_do_banco(None) == "SICREDI CENTRO-SUL"

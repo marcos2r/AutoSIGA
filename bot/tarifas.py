@@ -10,7 +10,7 @@ import logging
 import time
 
 from bot.extratos import MesFechadoError
-from controllers.tarifas import RegraTarifa, planejar
+from controllers.tarifas import RegraTarifa, fornecedor_do_banco, planejar
 
 _JS_DATA = '''([campo, data]) => {
     const inp = document.getElementById(campo);
@@ -54,7 +54,8 @@ class TarifasMixin:
             self.update_status(f"⏭️ {len(plano)} tarifa(s) não autorizada(s) ficaram pendentes.", "#F89406")
             return False
 
-        gravadas = self.inserir_tarifas_siga(page, plano, conta_alvo, regra)
+        gravadas = self.inserir_tarifas_siga(page, plano, conta_alvo, regra,
+                                             fornecedor_do_banco(dados.get("banco")))
         telemetria_lote["injecoes"] += gravadas
         if not gravadas:
             return False
@@ -68,7 +69,7 @@ class TarifasMixin:
         dados["extrato_siga"] = extrato
         return True
 
-    def inserir_tarifas_siga(self, page, plano, conta_alvo, regra):
+    def inserir_tarifas_siga(self, page, plano, conta_alvo, regra, fornecedor="SICREDI"):
         """Preenche e grava uma despesa por tarifa na TES01702 ("Salvar e Novo" entre elas).
 
         Returns:
@@ -104,6 +105,8 @@ class TarifasMixin:
                 if not (page.locator('#f_valorRateio').input_value() or "").strip():
                     page.evaluate(_JS_VALOR, ["f_percentualRateio", 100])
                 self.selecionar_select2(page, "f_historico_debito", regra.historico, dropdown_is_ajax=False)
+                # Fornecedor obrigatório: o próprio banco (Select2 por AJAX, como na provisão de energia)
+                self.selecionar_select2(page, "f_fornecedor", fornecedor)
                 complemento = f"TARIFA - {self.sanitizar_descricao(lc.descricao)}"
                 self._preencher_campos(page, {"f_complemento2": complemento})
 
@@ -127,6 +130,7 @@ class TarifasMixin:
                 time.sleep(1)
                 if self._mes_fechado_na_tela(page):
                     raise MesFechadoError(lc.data)
+                self._recusar_se_invalido(page)
                 self._confirmar_gravacao(page, timeout_ms=25000)
                 gravadas += 1
             if gravadas:
@@ -138,6 +142,24 @@ class TarifasMixin:
             self._capturar_tela_e_log(page, "erro_inserir_tarifas")
             self.update_status(f"Falha ao lançar tarifa: {e}", "#D9534F")
         return gravadas
+
+    def _recusar_se_invalido(self, page):
+        """Para se o SIGA recusou a gravação ("Formulário Incompleto", campo obrigatório).
+
+        Sem isso, a modal de erro era fechada como se fosse a de sucesso e o robô contava a
+        tarifa como gravada (teste de 23/11/2026, faltava o fornecedor).
+
+        Raises:
+            RuntimeError: com o texto da mensagem do SIGA.
+        """
+        try:
+            texto = page.evaluate("""() => Array.from(document.querySelectorAll('.modal.in, .bootbox'))
+                .filter(m => m.offsetParent !== null).map(m => m.innerText).join(' | ')""") or ""
+        except Exception:
+            return
+        if any(p in texto.upper() for p in ("INCOMPLETO", "OBRIGAT", "PREENCHA", "INVÁLID", "INVALID")):
+            self._capturar_tela_e_log(page, "gravacao_recusada")
+            raise RuntimeError(f"o SIGA recusou a gravação: {' '.join(texto.split())[:200]}")
 
     def _tratar_competencia(self, page, data):
         """Responde "Sim" ao pop-up de competência e para se o mês estiver fechado (como no rendimento)."""

@@ -27,6 +27,16 @@ PADRAO = {
     "centro_custo": "ADM",
 }
 
+# Fornecedor obrigatório na TES01702 (visto no teste de 23/11/2026): o próprio banco do extrato.
+# Código do banco (FEBRABAN) -> termo de busca no cadastro de fornecedores do SIGA
+FORNECEDOR_POR_BANCO = {"748": "SICREDI CENTRO-SUL", "756": "SICOOB"}  # Sicredi: a cooperativa da agência 0903
+
+
+def fornecedor_do_banco(banco: str | None) -> str:
+    """Termo para achar o fornecedor da tarifa; banco desconhecido cai no Sicredi, o mais comum."""
+    codigo = "".join(c for c in str(banco or "") if c.isdigit()).lstrip("0")
+    return FORNECEDOR_POR_BANCO.get(codigo, "SICREDI CENTRO-SUL")
+
 
 @dataclass(frozen=True)
 class RegraTarifa:

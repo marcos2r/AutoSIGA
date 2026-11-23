@@ -18,8 +18,8 @@ class RoboFalso(TarifasMixin):
         self.previa = (itens, conta, tipo)
         return self._autoriza
 
-    def inserir_tarifas_siga(self, page, plano, conta, regra):
-        self.gravou = plano
+    def inserir_tarifas_siga(self, page, plano, conta, regra, fornecedor="SICREDI"):
+        self.gravou, self.fornecedor = plano, fornecedor
         return self._grava
 
     def _abrir_consulta_tes01701(self, page, *consulta):
@@ -66,3 +66,26 @@ def test_nada_gravado_nao_refaz_prova_real():
 
 def test_conta_sumiu_na_releitura():
     assert rodar(RoboFalso(grade=None), [TARIFA])[0] is False
+
+
+def test_fornecedor_e_o_banco_do_extrato():
+    robo = RoboFalso()
+    robo._lancar_tarifas(None, {"banco": "756"}, "10130", [TARIFA], ("10130", "", ""), {"injecoes": 0})
+    assert robo.fornecedor == "SICOOB"
+
+
+class PaginaComErro:
+    def __init__(self, texto):
+        self.texto = texto
+
+    def evaluate(self, js):
+        return self.texto
+
+
+def test_gravacao_recusada_pelo_siga_vira_erro():
+    import pytest
+    robo = RoboFalso()
+    robo._capturar_tela_e_log = lambda page, nome: None
+    with pytest.raises(RuntimeError, match="recusou"):
+        robo._recusar_se_invalido(PaginaComErro("Formulário Incompleto: Fornecedor é obrigatório"))
+    robo._recusar_se_invalido(PaginaComErro("Registro salvo com sucesso!"))  # sucesso não para

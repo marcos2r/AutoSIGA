@@ -125,6 +125,7 @@ class TransferenciasInternasMixin:
                 time.sleep(1)
                 if self._mes_fechado_na_tela(page):
                     raise MesFechadoError(t.data)
+                self._recusar_se_invalido(page)
                 self._confirmar_gravacao(page, timeout_ms=25000)
                 gravadas += 1
             if gravadas:

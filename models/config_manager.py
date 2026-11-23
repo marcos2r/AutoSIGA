@@ -389,6 +389,11 @@ class ConfigManager(ConfigEnergiaMixin, ConfigCatalogoMixin):
         """
         return bool(self.get_config_data().get("revisar_antes_de_gravar", False))
 
+    def get_tarifas(self):
+        """Como lançar as tarifas do extrato (chave "tarifas"); vazio = padrões de controllers/tarifas.py."""
+        dados = self.get_config_data().get("tarifas")
+        return dados if isinstance(dados, dict) else {}
+
     def salvar_revisar_antes_de_gravar(self, ativo):
         """
         Persiste a preferência da revisão antes de gravar.

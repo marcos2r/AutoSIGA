@@ -72,6 +72,14 @@ Transferência entre contas (aplicações e resgates do extrato).
 - **Destino**: Conta * `select#f_conta`, Histórico `select#f_historico` (**bloqueado**, fixo em "032 - TRANSFER..."), Complemento `#f_complemento`.
 - **As contas nascem vazias** (só "* Selecione *"). O `change` de `#f_formapagamento` chama `Siga.CTB.Conta.SelecionarFormaPagamentoTesouraria` (origem) e `...DestinoParaTesouraria` (destino) e monta as opções (`"  10313 - SICREDI ..."`, as sintéticas 101/103 vêm `disabled`). Para TRANSF. BANCÁRIA (5) vêm as contas 101 e 103 da localidade. Pesquisar no Select2 antes disso falha (visto em 23/10/2026): o bot espera as opções, dispara a forma de novo se não vierem e escolhe pelo `value` do código exato. `#f_data` tem máscara `__/__/____`; a injeção com `datepicker('update')` funciona.
 
+## TES01702 — Despesa (novo, levantado só em leitura em 23/11/2026)
+
+Despesa paga direto em Caixas e Bancos (sem provisão): é onde entram as tarifas do extrato (IT.TES.05/16).
+- Documento: Data Documento * `#f_data`, Tipo Documento * `select#f_tipodocumento` (AVISO DE DÉBITO, CONHECIMENTO DE TRANSPORTE, CONTRATO, DECLARAÇÃO DE TRÂNSITO, GUIA, NOTA FISCAL, NOTA SERVIÇO, PEDIDO DE COMPRA, RECIBO), Nº Documento * `#f_documento`, Valor Documento * `#f_valor`.
+- Rateio: `select#f_despesa_rateio` (164 contas; para tarifa, **3030 - DESPESAS BANCARIAS**; existe também 3031 - DESPESA TARIFA CARTÃO COLETA), `select#f_centrocusto_rateio` (46: ADM, DR e as casas `BR 10-XXXX`), `#f_percentualRateio`, `#f_valorRateio`, Histórico * `select#f_historico_debito` (113; **012 - DESP.BANCÁRIAS**), Complemento `#f_complemento2`. Não há campo de fornecedor.
+- Pagamento: Data Pagamento * `#f_datapagamento`, Forma Pagamento * `select#f_formapagamento` (DINHEIRO, CHEQUE, TRANSF. BANCÁRIA, TRANSF. TED, TRANSF. DOC, PGTO. ELETRÔNICO, **DÉBITO AUTOMÁTICO**, PIX, VALORES CONSIGNADOS A OUTRAS ADMS, BOLETO), Nº Documento * `#f_documento2`, Nº Cheque `#f_numerocheque`, Favorecido `#f_nomefavorecido`, Conta * `select#f_conta` (nasce vazia, como na TES01704: carrega depois da forma), Histórico * `select#f_historico`, Complemento `#f_complemento`, Multa `#f_multa`, Juros `#f_juros`, Desconto `#f_desconto`, Total `#f_total`, anexo `#f_anexos`.
+- Botões: Confirmar, Salvar, Salvar e Novo. Ainda não foi gravada nenhuma despesa pelo robô.
+
 ## TES01502 — Contas a Pagar › Provisão (novo)
 
 Usada para as faturas de energia.

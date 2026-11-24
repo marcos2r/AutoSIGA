@@ -57,6 +57,10 @@ class RemessasMixin:
         except Exception as e:
             logging.error(f"Reconhecimento das remessas falhou: {e}", exc_info=True)
             self._remessas = []
+        recebidas = [r for r in self._remessas if r.sentido == RECEBIDA]
+        contas = sorted({r.conta_siga for r in recebidas})
+        logging.info(f"{len(recebidas)} recebimento(s) de outras administrações no lote"
+                     + (f" (contas {', '.join(contas)})" if contas else "") + ".")
 
     def _ler_recebimentos_pendentes(self, page):
         """Abre a TES01301 e lê as linhas "Pendente Recebimento" da aba Recebimentos."""
@@ -90,6 +94,8 @@ class RemessasMixin:
             logging.error(f"Leitura dos recebimentos pendentes falhou: {e}")
             return False
         pares = parear_recebimentos(recebidas, pendentes, conta_alvo)
+        logging.info(f"Conta {conta_alvo}: {len(recebidas)} recebimento(s) no extrato, {len(pendentes)} pendente(s) "
+                     f"no SIGA, {len(pares)} casado(s).")
         if not pares:
             return False
         previa = [{"data": r.data, "valor": r.valor,

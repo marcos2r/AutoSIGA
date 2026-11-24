@@ -74,8 +74,10 @@ class TarifasMixin:
         dados["extrato_siga"] = extrato
         return True
 
-    def inserir_tarifas_siga(self, page, plano, conta_alvo, regra, fornecedor=(("SICREDI",), "")):
+    def inserir_tarifas_siga(self, page, plano, conta_alvo, regra, fornecedor=(("SICREDI",), ""), simular=False):
         """Preenche e grava uma despesa por tarifa na TES01702 ("Salvar e Novo" entre elas).
+
+        Com `simular=True` preenche a primeira e para antes de salvar (conferência na tela real).
 
         Returns:
             int: Quantas foram gravadas antes de terminar ou de uma falha.
@@ -124,6 +126,10 @@ class TarifasMixin:
                 self.selecionar_select2(page, "f_historico", regra.historico, dropdown_is_ajax=True)
                 self._preencher_campos(page, {"f_complemento": complemento})
                 time.sleep(1)
+                # As datas às vezes voltam vazias depois dos Select2 (visto em 23/11/2026): confere e repõe
+                self._garantir_datas(page, lc.data)
+                if simular:
+                    return 0
 
                 ultimo = i == len(plano) - 1
                 botao = page.locator(f'button.btn-salvar[data-comando="{"F" if ultimo else "N"}"]')
@@ -178,9 +184,29 @@ class TarifasMixin:
                 continue
             resultados.nth(escolhido).click()
             time.sleep(0.5)
+            # O Select2 de fornecedor ficava aberto depois do clique e o próximo campo digitava na
+            # busca dele (teste de 23/11/2026): fecha e confere antes de seguir
+            page.evaluate("() => window.jQuery && window.jQuery('#f_fornecedor').select2('close')")
+            if page.locator('#select2-drop:visible').count() > 0:
+                page.keyboard.press("Escape")
+            time.sleep(0.3)
             logging.info(f"Fornecedor da tarifa: {' '.join(textos[escolhido].split())[:80]}")
             return
         raise RuntimeError(f"fornecedor do banco não encontrado no SIGA (buscou: {', '.join(termos)})")
+
+    def _garantir_datas(self, page, data):
+        """Repõe Data Documento e Data Pagamento se algum Select2 as limpou."""
+        for campo in ("f_data", "f_datapagamento"):
+            try:
+                if (page.locator(f"#{campo}").input_value() or "").strip() != data:
+                    logging.info(f"{campo} estava vazio ou diferente; repondo {data}.")
+                    page.evaluate(_JS_DATA, [campo, data])
+                    time.sleep(0.5)
+                    self._tratar_competencia(page, data)
+            except MesFechadoError:
+                raise
+            except Exception as e:
+                logging.warning(f"Não foi possível conferir {campo}: {e}")
 
     def _recusar_se_invalido(self, page):
         """Para se o SIGA recusou a gravação ("Formulário Incompleto", campo obrigatório).

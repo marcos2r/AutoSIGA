@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from controllers.classificador_extrato import normalizar
@@ -99,3 +100,55 @@ def motivo_pendente(r: Remessa) -> str:
         return (f"remessa enviada ao CNPJ {r.cnpj}: cadastre o destino desse CNPJ no config.json "
                 "(\"remessas\") para o robô lançar em Transf. Numerários")
     return ""
+
+
+@dataclass(frozen=True)
+class RecebimentoPendente:
+    """Uma linha "Pendente Recebimento" da aba Recebimentos da TES01301."""
+
+    codigo: str        # GUID do link TES01313.aspx?codigo=...
+    emissao: str       # dd/mm/aaaa
+    valor: float
+    remetente: str
+    complemento: str = ""
+
+
+def _data(texto: str) -> datetime | None:
+    try:
+        return datetime.strptime(texto.strip(), "%d/%m/%Y")
+    except (ValueError, AttributeError):
+        return None
+
+
+# A remessa cai no banco no dia da emissão ou poucos dias depois (fim de semana, conferência)
+DIAS_ANTES_DA_EMISSAO = 3
+DIAS_DEPOIS_DA_EMISSAO = 30
+
+
+def parear_recebimentos(recebidas: list[Remessa], pendentes: list[RecebimentoPendente],
+                        conta_siga: str) -> list[tuple[Remessa, RecebimentoPendente]]:
+    """Casa cada crédito do extrato com um recebimento pendente no SIGA.
+
+    Mesmo valor (1 centavo de tolerância) e data do extrato perto da emissão; com mais de um
+    candidato, fica o de emissão mais próxima. Cada pendente casa uma vez só.
+    """
+    livres = list(pendentes)
+    pares = []
+    for r in sorted((r for r in recebidas if r.sentido == RECEBIDA and r.conta_siga == conta_siga),
+                    key=lambda x: (_data(x.data) or datetime.min)):
+        dia = _data(r.data)
+        if dia is None:
+            continue
+        candidatos = []
+        for p in livres:
+            emissao = _data(p.emissao)
+            if emissao is None or abs(p.valor - r.valor) > 0.01:
+                continue
+            atraso = (dia - emissao).days
+            if -DIAS_ANTES_DA_EMISSAO <= atraso <= DIAS_DEPOIS_DA_EMISSAO:
+                candidatos.append((abs(atraso), p))
+        if candidatos:
+            escolhido = min(candidatos, key=lambda c: c[0])[1]
+            livres.remove(escolhido)
+            pares.append((r, escolhido))
+    return pares

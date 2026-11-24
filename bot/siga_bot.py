@@ -22,6 +22,7 @@ from bot.extratos import ExtratosMixin
 from bot.fluxo_extratos import FluxoExtratosMixin
 from bot.ofertas import OfertasMixin
 from bot.provisoes_energia import ProvisoesEnergiaMixin
+from bot.remessas import RemessasMixin
 from bot.sessao import SessaoMixin
 from bot.siga_helpers import HelpersMixin
 from bot.tarifas import TarifasMixin
@@ -31,7 +32,7 @@ from controllers.exportador import Exportador
 
 class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, AuditoriaEnergiaMixin, EnergiaMixin,
              OfertasMixin, DescobertaContasMixin, BaixaProvisoesMixin, BaixaContasPagarMixin, ProvisoesEnergiaMixin,
-             TarifasMixin, TransferenciasInternasMixin):
+             TarifasMixin, TransferenciasInternasMixin, RemessasMixin):
     """
     Controlador do Navegador Playwright.
 

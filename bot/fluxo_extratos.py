@@ -82,6 +82,7 @@ class FluxoExtratosMixin:
         """Processa todos os extratos do lote e mostra o status final."""
         contexto = {"localidade": None, "competencia": None}
         self._preparar_transferencias()
+        self._preparar_remessas()
 
         # As provisões de energia esperam o e-mail só quando o primeiro débito de energia precisa delas
         provisionado = False
@@ -236,6 +237,9 @@ class FluxoExtratosMixin:
             if not is_aplicacao:
                 consulta = (conta_alvo, dados.get("data_inicial", ""), data_final)
                 try:
+                    # Remessas de outras administrações que já caíram no banco: confirma o recebimento
+                    if self._confirmar_recebimentos(page, dados, conta_alvo, consulta, telemetria_lote):
+                        saldo, sobras, faltas = self._prova_real(page, dados, True)
                     transf = a_lancar_transferencias(getattr(self, "_pares_transf", []), conta_alvo,
                                                      dados.get("extrato_siga"))
                     regravou = self._lancar_transferencias(page, transf, conta_alvo, consulta, dados, telemetria_lote)

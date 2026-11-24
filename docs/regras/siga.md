@@ -80,6 +80,18 @@ Despesa paga direto em Caixas e Bancos (sem provisão): é onde entram as tarifa
 - Pagamento: Data Pagamento * `#f_datapagamento`, Forma Pagamento * `select#f_formapagamento` (DINHEIRO, CHEQUE, TRANSF. BANCÁRIA, TRANSF. TED, TRANSF. DOC, PGTO. ELETRÔNICO, **DÉBITO AUTOMÁTICO**, PIX, VALORES CONSIGNADOS A OUTRAS ADMS, BOLETO), Nº Documento * `#f_documento2`, Nº Cheque `#f_numerocheque`, Favorecido `#f_nomefavorecido`, Conta * `select#f_conta` (nasce vazia, como na TES01704: carrega depois da forma), Histórico * `select#f_historico`, Complemento `#f_complemento`, Multa `#f_multa`, Juros `#f_juros`, Desconto `#f_desconto`, Total `#f_total`, anexo `#f_anexos`.
 - Botões: Confirmar, Salvar, Salvar e Novo. Erro de validação abre um bootbox ("Formulário Incompleto") que não pode ser tratado como sucesso.
 
+## TES01301 — Transf. Numerários (consulta, levantada em leitura em 24/11/2026)
+
+- Novo: Entre Departamentos (`TES01302.aspx`) e Entre Administrações (`TES01303.aspx`).
+- Aba Remessas: Dt. Emissão, Dt. Baixa, Destinatário, Tipo Transferência, Complemento, Valor, Status Origem, Status Destino.
+- Aba Recebimentos: Dt. Emissão, Dt. Recebim., Remetente ("RIO BRILHANTE » ADM - RIO BRILHANTE - MS"), Tipo (OUTRAS REMESSAS), Complemento, Valor, Status ("Pendente Recebimento"). Opções de cada linha: Visualizar, **Confirmar Recebimento** (`TES01313.aspx?codigo=<GUID>`), Recusar (`TES01321.aspx?codigo=<GUID>`), Comprovante, Anexos.
+
+## TES01313 — Confirmar Recebimento (levantada em leitura em 24/11/2026)
+
+- Só leitura: Lote `#f_lote`, Data Emissão `#f_emissao`, Tipo `#f_opcao`, Valor `#f_valor`, Origem `#f_origem`, Finalidade `#f_contadestino` (4203 - TRANSF.RECEBIDAS ADMINISTRATIVAS), Forma `select#f_codigoformapgto` (bloqueada), Histórico `#f_historico` (032 - TRANSF.VLR).
+- Editáveis: Data Recebimento `#f_recebimento` (máscara, datepicker), Documento * `#f_documento`, Conta de Recebimento * `select#f_conta` (101 e 103 da localidade; vem sugerida pelo remetente), anexo `#f_anexos`.
+- Botão do formulário: `button[type=submit].btn-success` "Confirmar" (o outro "Confirmar" é o do modal de competência, `#btn-adicionar-competencia`).
+
 ## TES01502 — Contas a Pagar › Provisão (novo)
 
 Usada para as faturas de energia.

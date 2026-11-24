@@ -2,6 +2,17 @@
 
 Histórico das versões, da mais recente para a mais antiga. A versão atual é definida em `version.py`.
 
+## v1.14.0
+
+- **Tarifas Bancárias Lançadas pelo Robô**: Cada tarifa do extrato sem lançamento no SIGA (ex.: `CESTA DE RELACIONAMENTO`) vira uma despesa na `TES01702` com despesa `3030 - DESPESAS BANCARIAS`, histórico `012 - DESP.BANCÁRIAS`, aviso de débito, débito automático e centro de custo ADM. O fornecedor é pesquisado pelo banco da conta (código do extrato) e, entre os resultados, fica o da cidade da administração; banco sem fornecedor fica pendente. Depois o robô relê o extrato do SIGA e refaz a prova real.
+- **Transferências entre Contas como Movimentação Interna**: As duas pontas de cada `TRANSF ENTRE CONTAS` do lote são juntadas pelo código da operação (`SI…`), pela data e pelo valor, e a transferência é gravada uma vez só, pela conta de origem, na `TES01704` (histórico `032 - TRANSF.VLR`). Ponta sem par no lote ou de outra localidade vira aviso no painel com o motivo.
+- **Recebimentos de Outras Administrações Confirmados**: Crédito de outra administração no extrato é casado com o `Pendente Recebimento` da `TES01301` (mesmo valor, data perto da emissão), e o robô confirma na `TES01313` com a data do extrato, o código da operação e a conta onde o dinheiro entrou. Remessas enviadas continuam com a tesouraria.
+- **Conciliação no Modelo do FOR.TES.02**: Nova aba `Conciliação FOR.TES.02` no Excel do painel final, com as 10 linhas do formulário por conta (saldo do extrato, depósitos e débitos não contabilizados, saldo do SIGA e o que ficou sem explicação).
+- **Avisos no Painel Final**: Aplicação com saldo e sem rendimento no mês, e tarifa do banco sem lançamento no SIGA, aparecem como aviso no cartão da conta. O cabeçalho de cada conta passa a mostrar o nome dela no SIGA e banco, agência e conta (`10123 · MANUTENCAO · SICREDI ag. 0903 c/c 58414-1`).
+- **Classificador Único das Linhas do Extrato**: Um só módulo decide o que cada linha é (oferta, aplicação, tarifa, boleto, guia, cota capital, transferência…), com as regras em `regras_extrato.json`. Comparado em 1.318 linhas de extratos reais, o TXT de ofertas saiu idêntico ao anterior.
+- **Interface Mais Simples e Acessível**: Um único botão principal (`Conciliar no SIGA`), confirmação antes de apagar (tecla Esc e `Limpar`), contraste WCAG AA em todas as cores (com teste automático), avisos de sucesso na barra de status em vez de janelas com OK, cards confirmados recolhidos numa linha, etapas 1-2-3 numa linha só e atalhos visíveis nos botões. Tudo cabe na janela mínima de 880x520.
+- **Correções**: O Select2 espera a tela de "Aguarde" do SIGA sumir antes de cada tentativa (uma fatura de energia da ADM falhava por isso), e a gravação recusada pelo SIGA ("Formulário Incompleto") passa a parar com print e mensagem, em vez de contar como gravada.
+
 ## v1.13.1
 
 - **Provisão e Auditoria de Energia Sempre na ADM**: Quando a etapa de provisão de energia roda ao final de um lote que terminou em outra localidade (como `DR` ou `PIA`), o robô agora abre o modal **Outros Meses** para trocar efetivamente a localidade de volta para a `ADM` antes de consultar a Contas a Pagar (`TES01501`) ou lançar faturas (`TES01502`). Se o cabeçalho do SIGA não confirmar a `ADM`, nenhuma fatura é consultada ou lançada na localidade errada.

@@ -7,9 +7,9 @@ Ex. real (Dourados, 10/2026): "TRANSF ENTRE CONTAS-SI00074 03794799000123 CONGRE
 
 O que o robô faz com cada uma (bot, quando a tela estiver mapeada):
 - recebida: confirma o recebimento pendente no SIGA com a mesma data e valor;
-- enviada: lança, aprova e envia, mas só se o CNPJ de destino estiver cadastrado no
-  config.json ("remessas": {"<cnpj>": {"destino": "ADM - ...", "finalidade": "3403"}});
-  sem cadastro vira pendência pedindo o destino.
+- enviada: fica com a tesouraria (decisão do usuário em 24/11/2026: o extrato não diz para
+  qual administração foi nem do que se trata). Aparece só como item sem lançamento na
+  conciliação.
 
 Decisão pura, sem navegador.
 """

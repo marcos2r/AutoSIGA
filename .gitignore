@@ -27,3 +27,6 @@ ofertas_importadas/
 
 # Permissões locais do Claude Code
 .claude/settings.local.json
+
+# Resumos dos manuais internos da Tesouraria CCB: só locais, nunca no repositório público
+docs/tesouraria/

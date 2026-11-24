@@ -59,7 +59,7 @@ def test_centavo_de_arredondamento_nao_vira_resto():
 
 def test_cabecalho_mostra_tipo_e_periodo():
     r = _resultado(1.0, 1.0, [], [])
-    assert cabecalho_extrato(r) == "10123 · ADM - CENTRAL · Conta corrente · 01/10/2026 a 23/10/2026"
+    assert cabecalho_extrato(r) == "10123 · conta 12345-6 · ADM - CENTRAL · Conta corrente · 01/10/2026 a 23/10/2026"
 
 
 def test_painel_lista_cada_origem_da_diferenca():
@@ -109,3 +109,17 @@ def test_itens_do_excel_somam_a_diferenca():
 def test_sem_faltas_conhecidas_o_excel_lista_so_as_sobras():
     r = _resultado(1.0, 43.1, [MovimentoSiga("05/05/2026", 42.1, "DUPLICADO")], None)
     assert itens_da_diferenca(r) == [("05/05/2026", "DUPLICADO", 42.1, ORIGEM_SOBRA, 42.1)]
+
+
+def test_cabecalho_com_a_conta_do_catalogo_mostra_nome_e_banco():
+    from controllers.catalogo_contas import ContaSiga
+    r = ResultadoExtrato(conta_id="9030000000584141", conta_siga="10123", localidade="ADM - DOURADOS - MS",
+                         tipo="CORRENTE", situacao="conciliado", periodo="01/10/2026 a 31/10/2026")
+    conta = ContaSiga("10123", "101", "ADM - DOURADOS - MS", "SICREDI", "0903", "584141", "MANUTENCAO")
+    assert cabecalho_extrato(r, conta) == ("10123 · MANUTENCAO · SICREDI ag. 0903 c/c 58414-1 · ADM - DOURADOS - MS"
+                                           " · Conta corrente · 01/10/2026 a 31/10/2026")
+
+
+def test_cabecalho_sem_catalogo_mostra_o_numero_da_conta_do_extrato():
+    r = ResultadoExtrato(conta_id="584141", conta_siga="10123", localidade="ADM", tipo="", situacao="conciliado")
+    assert cabecalho_extrato(r) == "10123 · conta 584141 · ADM · Conta corrente"

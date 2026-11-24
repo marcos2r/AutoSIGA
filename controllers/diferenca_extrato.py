@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from controllers.baixa_contas_pagar import linhas_do_painel as linhas_dos_pagamentos
 from controllers.baixa_energia import linhas_do_painel
+from controllers.catalogo_contas import ContaSiga
 from controllers.prova_real import DIVERGE, TOLERANCIA, MovimentoBanco, MovimentoSiga, ResultadoExtrato, moeda
 
 _RE_ENERGIA = re.compile(r"DEBITO\s+CONVENIOS-ENERGI", re.IGNORECASE)
@@ -55,9 +56,18 @@ def tipo_legivel(tipo: str) -> str:
     return "Aplicação" if tipo == "APLICACAO" else "Conta corrente"
 
 
-def cabecalho_extrato(r: ResultadoExtrato) -> str:
-    """Conta, localidade, tipo e período do extrato, na ordem em que o usuário procura."""
-    partes = [r.conta_siga or r.conta_id, r.localidade, tipo_legivel(r.tipo), r.periodo]
+def cabecalho_extrato(r: ResultadoExtrato, conta: ContaSiga | None = None) -> str:
+    """Conta, localidade, tipo e período do extrato, na ordem em que o usuário procura.
+
+    Com a conta do catálogo, entram também o nome dela no SIGA e banco, agência e conta: só o
+    código contábil ("10123") não diz ao usuário qual conta corrente é.
+    """
+    if conta is not None:
+        nome = f"{conta.codigo} · {conta.finalidade}" if conta.finalidade else conta.codigo
+        banco = conta.rotulo_banco
+    else:
+        nome, banco = r.conta_siga or r.conta_id, f"conta {r.conta_id}" if r.conta_siga and r.conta_id else ""
+    partes = [nome, banco, r.localidade, tipo_legivel(r.tipo), r.periodo]
     return " · ".join(p for p in partes if p)
 
 

@@ -130,10 +130,14 @@ class DashboardMixin:
         atencao = niveis.count("alerta")
         resumo = f"{len(resultados)} extrato(s) · {conferem} conferem" + (f" · {atencao} pedem atenção" if atencao else "")
         self._titulo_secao(container, "PROVA REAL (SALDO DO SIGA × BANCO)", resumo)
+        try:
+            contas = {c.codigo: c for c in self.config_manager.get_catalogo().contas}
+        except Exception:
+            contas = {}  # sem catálogo, o cabeçalho mostra o código e o número da conta do extrato
         for r, nivel in zip(resultados, niveis, strict=True):
             cartao = self._cartao(container, alerta=nivel == "alerta")
-            ctk.CTkLabel(cartao, text=cabecalho_extrato(r), font=(tema.FONTE, 12, "bold"), text_color=tema.TEXTO,
-                         anchor="w").pack(fill="x", padx=12, pady=(8, 2))
+            ctk.CTkLabel(cartao, text=cabecalho_extrato(r, contas.get(r.conta_siga)), font=(tema.FONTE, 12, "bold"), text_color=tema.TEXTO,
+                         anchor="w", justify="left", wraplength=max(300, largura - 60)).pack(fill="x", padx=12, pady=(8, 2))
             # O resumo do saldo e, abaixo, de onde vem a diferença e as baixas de energia com o motivo
             self._linhas_no_cartao(cartao, [resumo_resultado(r)] + linhas_do_extrato(r), largura)
 

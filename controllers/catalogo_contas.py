@@ -55,6 +55,13 @@ class ContaSiga:
         """Texto do combo do card: "10130 · CAPTAÇÃO"."""
         return f"{self.codigo} · {self.finalidade}" if self.finalidade else self.codigo
 
+    @property
+    def rotulo_banco(self) -> str:
+        """Banco, agência e conta para o usuário reconhecer a conta: "SICREDI ag. 0903 c/c 58414-1"."""
+        cc = f"{self.cc[:-1]}-{self.cc[-1]}" if len(self.cc) > 1 else self.cc
+        partes = [self.banco, f"ag. {self.agencia}" if self.agencia else "", f"c/c {cc}" if cc else ""]
+        return " ".join(p for p in partes if p)
+
     def para_dict(self) -> dict[str, Any]:
         """Formato gravado no config.json."""
         return asdict(self)

@@ -72,10 +72,15 @@ jobs:
           # pasta _internal ao lado dele, então a pasta inteira precisa ir no .zip.
           Compress-Archive -Path dist/AutoSiga -DestinationPath AutoSiga_Windows.zip -ErrorAction Stop
 
+      - name: Montar a Descrição da Release a partir do CHANGELOG
+        run: python scripts/notas_da_release.py "${{ github.ref_name }}" notas_release.md
+
       - name: Criar Release e Fazer Upload do Artefato
         uses: softprops/action-gh-release@v2
         with:
           files: AutoSiga_Windows.zip
+          # Tudo o que foi implementado (seção da versão no docs/CHANGELOG.md) e, abaixo, os PRs
+          body_path: notas_release.md
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

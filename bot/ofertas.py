@@ -48,7 +48,7 @@ class OfertasMixin:
         frame = self._abrir_importacao_extrato(page)
 
         linhas_antes = self._ler_grade_importacoes(frame)
-        if any(data_importacao in l and valor_fmt in l for l in linhas_antes):
+        if self._ja_importado(linhas_antes, competencia, valor_fmt):
             self.update_status(f"⚠️ Ofertas de {data_importacao} ({valor_fmt}) já importadas na conta {conta_siga}. Pulando.", "#F89406")
             return "duplicado"
 
@@ -91,6 +91,32 @@ class OfertasMixin:
         self.update_status(f"⚠️ Ofertas da conta {conta_siga} enviadas, mas não apareceram na grade. Confira no SIGA.", "#D9534F")
         self._capturar_tela_e_log(page, f"ofertas_auditoria_{conta_siga}")
         return "falha"
+
+    @staticmethod
+    def _ja_importado(linhas, competencia, valor_fmt):
+        """
+        Diz se a grade já tem a importação destas ofertas.
+
+        A coluna Data da grade não traz a data digitada no modal: em 25/11/2026 as
+        ofertas de novembro foram gravadas com 30/11/2026 e a grade mostrou 25/11/2026
+        (o dia da importação). Por isso vale o valor total numa linha datada a partir
+        do 1º dia da competência, e não a data exata.
+
+        Args:
+            linhas (list[str]): Texto das linhas da grade (Número, Data, Arquivo, Valor).
+            competencia (str): Competência das ofertas, "mm/aaaa".
+            valor_fmt (str): Total no formato do SIGA (ex: "R$ 1.600,50").
+
+        Returns:
+            bool: True se alguma linha tem o mesmo valor e data na competência ou depois.
+        """
+        mes, ano = competencia.split("/")
+        inicio = datetime(int(ano), int(mes), 1)
+        for linha in linhas:
+            m = re.search(r"\b(\d{2}/\d{2}/\d{4})\b", linha)
+            if valor_fmt in linha and m and datetime.strptime(m.group(1), "%d/%m/%Y") >= inicio:
+                return True
+        return False
 
     def _gravar_txt_ofertas(self, dados, competencia):
         """Grava o TXT da conta em `ofertas_importadas/` ao lado do executável e retorna o caminho."""

@@ -41,6 +41,18 @@ def test_importar_ofertas_pula_quando_ja_existe_na_grade(tmp_path, monkeypatch):
     ]
 
 
+def test_ja_importado_aceita_data_do_dia_da_importacao():
+    # Grade real de 25/11/2026: ofertas de novembro gravadas com 30/11, mas a grade mostra o dia da importação
+    linhas = ["100180\n25/11/2026\n2026/10 - 20261125_115915\nR$ 82.979,97"]
+    assert ofertas.OfertasMixin._ja_importado(linhas, "11/2026", "R$ 82.979,97")
+
+
+def test_ja_importado_ignora_valor_igual_de_mes_anterior_ou_valor_diferente():
+    linhas = ["100150\n31/10/2026\n2026/9 - 20261031_100000\nR$ 82.979,97",
+              "100180\n25/11/2026\n2026/10 - 20261125_115915\nR$ 14.308,76"]
+    assert not ofertas.OfertasMixin._ja_importado(linhas, "11/2026", "R$ 82.979,97")
+
+
 def test_fluxo_ofertas_importa_so_as_contas_da_adm(monkeypatch):
     adm = dict(_dados(), tipo_adm="ADM", nome_adm="DOURADOS - MS", tipo_extrato="CORRENTE")
     dr = dict(_dados(), conta_id="00000-6", conta_siga_corrente="10127", tipo_adm="DR", nome_adm="DOURADOS",

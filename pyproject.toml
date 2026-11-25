@@ -2,6 +2,8 @@
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Saída curta: menos linhas no terminal (e menos tokens ao ler o resultado).
+addopts = "-q --tb=short"
 filterwarnings = [
     # O ofxparse 0.21 (sem manutenção) chama findAll, obsoleto no BeautifulSoup 4.
     # O beautifulsoup4 está fixado no requirements.txt; revisar ao atualizá-lo.

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./dist/**)",
+      "Read(./build/**)",
+      "Read(./logs/**)",
+      "Read(./venv/**)",
+      "Read(./siga_browser_data/**)",
+      "Read(./faturas_energisa/**)",
+      "Read(./faturas_temporarias/**)",
+      "Read(./ofertas_importadas/**)",
+      "Read(./.mypy_cache/**)",
+      "Read(./.ruff_cache/**)",
+      "Read(./.pytest_cache/**)",
+      "Read(./config.json)",
+      "Read(./token.json)",
+      "Read(./credentials.json)",
+      "Read(./.env)"
+    ]
+  }
+}

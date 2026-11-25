@@ -16,6 +16,7 @@ from controllers.classificador_extrato import OFERTA, classificar
 from controllers.conciliacao_bancaria import escrever_aba as escrever_conciliacao
 from controllers.conciliacao_bancaria import montar as montar_conciliacao
 from controllers.diferenca_extrato import itens_da_diferenca, itens_para_excluir, tipo_legivel
+from controllers.duracao import formatar_duracao
 from controllers.prova_real import DIVERGE, resumo_resultado
 
 
@@ -334,8 +335,9 @@ class Exportador:
     @staticmethod
     def _aba_tempos(wb, tempos, cor_header, fonte_header, fonte_normal):
         """Aba "Tempos por Etapa": quanto o lote gastou em cada etapa, da mais demorada para a mais rápida."""
-        linhas = [(etapa, vezes, total, round(total / vezes, 1) if vezes else None) for etapa, vezes, total in tempos]
-        return Exportador._tabela(wb, "Tempos por Etapa", ["Etapa", "Vezes", "Total (s)", "Média (s)"], linhas,
+        linhas = [(etapa, vezes, formatar_duracao(total), formatar_duracao(total / vezes) if vezes else None)
+                  for etapa, vezes, total in tempos]
+        return Exportador._tabela(wb, "Tempos por Etapa", ["Etapa", "Vezes", "Total", "Média"], linhas,
                                   cor_header, fonte_header, fonte_normal)
 
     @staticmethod

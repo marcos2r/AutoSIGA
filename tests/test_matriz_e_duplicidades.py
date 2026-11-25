@@ -107,7 +107,7 @@ def test_excel_tem_as_abas_excluir_no_siga_e_tempos(tmp_path):
     wb = openpyxl.load_workbook(caminho)
     excluir = list(wb["Excluir no SIGA"].iter_rows(values_only=True))
     assert excluir[1] == ("DR - CENTRAL", "10130", "102", "05/05/2026", "APLICACAO", -200.0, "101", "05/05/2026")
-    assert list(wb["Tempos por Etapa"].iter_rows(values_only=True))[1] == ("Consulta da TES01701", 4, 40, 10)
+    assert list(wb["Tempos por Etapa"].iter_rows(values_only=True))[1] == ("Consulta da TES01701", 4, "40s", "10s")
 
 
 def test_excel_sem_duplicidade_nem_tempos_nao_cria_as_abas(tmp_path):

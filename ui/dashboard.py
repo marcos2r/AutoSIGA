@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 from controllers.diferenca_extrato import cabecalho_extrato, linhas_do_extrato
+from controllers.duracao import formatar_duracao
 from controllers.exportador import Exportador
 from controllers.prova_real import resumo_resultado
 from ui import tema
@@ -156,8 +157,6 @@ class DashboardMixin:
         tipo_lote = telemetria.get("tipo_lote", "extrato")
 
         tempo_total = time.time() - tempo_inicio
-        minutos = int(tempo_total // 60)
-        segundos = int(tempo_total % 60)
 
         ofx_itens = telemetria.get("ofx_itens", 0)
         injecoes = telemetria.get("injecoes", 0)
@@ -177,12 +176,7 @@ class DashboardMixin:
         if tempo_humano_segundos < 60:
             tempo_humano_segundos = 60
 
-        h_minutos = int(tempo_humano_segundos // 60)
-        h_segundos = int(tempo_humano_segundos % 60)
-
         economia_segundos = max(0, tempo_humano_segundos - tempo_total)
-        e_minutos = int(economia_segundos // 60)
-        e_segundos = int(economia_segundos % 60)
 
         # ROI Financeiro (Tarifa de R$ 30,00/hora de trabalho administrativo)
         roi_financeiro = (economia_segundos / 3600.0) * 30.0
@@ -260,9 +254,9 @@ class DashboardMixin:
         lbl_secao2.pack(anchor="w", padx=12, pady=(2, 4))
 
         add_linha(frame_tabela, "Volume financeiro total processado:", volume_fmt, cor_valor=tema.TEXTO, negrito=True)
-        add_linha(frame_tabela, "Tempo gasto pelo AutoSIGA:", f"{minutos}m {segundos}s", cor_valor=tema.AZUL_INFO_TEXTO, negrito=True)
-        add_linha(frame_tabela, "Tempo estimado (Manual):", f"{h_minutos}m {h_segundos}s", cor_valor=tema.VERMELHO_TEXTO)
-        add_linha(frame_tabela, "Tempo economizado:", f"{e_minutos}m {e_segundos}s", cor_valor=tema.VERDE_TEXTO, negrito=True)
+        add_linha(frame_tabela, "Tempo gasto pelo AutoSIGA:", formatar_duracao(tempo_total), cor_valor=tema.AZUL_INFO_TEXTO, negrito=True)
+        add_linha(frame_tabela, "Tempo estimado (Manual):", formatar_duracao(tempo_humano_segundos), cor_valor=tema.VERMELHO_TEXTO)
+        add_linha(frame_tabela, "Tempo economizado:", formatar_duracao(economia_segundos), cor_valor=tema.VERDE_TEXTO, negrito=True)
         add_linha(frame_tabela, "Retorno financeiro estimado (ROI):", roi_fmt, cor_valor=tema.VERDE_TEXTO, negrito=True)
 
         if painel is not None:

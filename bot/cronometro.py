@@ -10,6 +10,8 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from controllers.duracao import formatar_duracao
+
 
 class Cronometro:
     """Soma a duração e a quantidade de execuções de cada etapa."""
@@ -36,7 +38,8 @@ class Cronometro:
     def registrar_no_log(self) -> None:
         """Uma linha de log por etapa, com o total e a média."""
         for etapa, vezes, total in self.resumo():
-            logging.info(f"[Tempo] {etapa}: {total:.1f} s em {vezes} vez(es) (média {total / vezes:.1f} s)")
+            logging.info(f"[Tempo] {etapa}: {formatar_duracao(total)} em {vezes} vez(es) "
+                         f"(média {formatar_duracao(total / vezes)})")
 
 
 class CronometroMixin:

@@ -37,6 +37,11 @@ TOLERANCIA = 0.01
 DIAS_ANTES_DA_COMPRA = 5
 DIAS_DEPOIS_DO_VENCIMENTO = 15
 DIAS_DEBITO_VENCIMENTO = 5  # o débito sai no vencimento ou poucos dias depois (fim de semana)
+# Desconto dado na hora da compra: o cartão cobra até 10% a menos que a nota provisionada
+DESCONTO_MAXIMO = 0.10
+# Fatura com compra paga com desconto: identificada, mas fica para a tesouraria até a baixa com
+# desconto ser levantada na tela (TES01519 agrupada ou individual)
+COM_DESCONTO = "com_desconto"
 
 
 def _data(texto: str) -> datetime | None:
@@ -75,6 +80,7 @@ def decidir_fatura(debito: PagamentoExtrato, fatura: dict[str, Any] | None,
     venc = _data(fatura["vencimento"])
     escolhidas: list[ParcelaSiga] = []
     faltam, empates = [], []
+    descontos: list[tuple[dict[str, Any], ParcelaSiga]] = []
     for compra in fatura["compras"]:
         dia = _data(compra["data"])
         if dia is None or venc is None:
@@ -88,10 +94,13 @@ def decidir_fatura(debito: PagamentoExtrato, fatura: dict[str, Any] | None,
         lista = do_mesmo or candidatas
         if len(lista) == 1:
             escolhidas.append(lista[0])
-        elif not lista:
-            faltam.append(compra)
-        else:
+        elif lista:
             empates.append(compra)
+        elif (com_desconto := _com_desconto(compra, parcelas, usadas, escolhidas, ini, fim)) is not None:
+            escolhidas.append(com_desconto)
+            descontos.append((compra, com_desconto))
+        else:
+            faltam.append(compra)
     if faltam or empates:
         partes = []
         if faltam:
@@ -102,6 +111,12 @@ def decidir_fatura(debito: PagamentoExtrato, fatura: dict[str, Any] | None,
                                                                for c in empates))
         acao = EMPATE if empates and not faltam else SEM_PROVISAO
         return DecisaoPagamento(debito, acao, f"fatura do cartão (vence {fatura['vencimento']}): " + " | ".join(partes))
+    if descontos:
+        detalhes = "; ".join(f"{c['descricao']}: provisão {p.numero} de {moeda(p.valor)}, pago {moeda(c['valor'])}, "
+                             f"desconto {moeda(p.valor - c['valor'])}" for c, p in descontos)
+        return DecisaoPagamento(debito, COM_DESCONTO, f"fatura do cartão (vence {fatura['vencimento']}) com desconto "
+                                                      f"na compra: {detalhes}. Baixe à mão lançando o desconto",
+                                tuple(escolhidas))
     status = {p.status for p in escolhidas}
     descricao = f"fatura do cartão (vence {fatura['vencimento']}): {len(escolhidas)} compra(s)"
     usadas.update(p.guid for p in escolhidas)
@@ -110,3 +125,14 @@ def decidir_fatura(debito: PagamentoExtrato, fatura: dict[str, Any] | None,
     if status <= {LANCADO, APROVADO}:
         return DecisaoPagamento(debito, BAIXAR, descricao, tuple(escolhidas))
     return DecisaoPagamento(debito, EMPATE, f"{descricao} com situações misturadas no SIGA ({', '.join(sorted(status))})")
+
+
+def _com_desconto(compra: dict[str, Any], parcelas: list[ParcelaSiga], usadas: set[str],
+                  escolhidas: list[ParcelaSiga], ini: datetime, fim: datetime) -> ParcelaSiga | None:
+    """A provisão que a compra pagou com desconto: mesmo fornecedor pelo nome, valor até 10% maior, única."""
+    candidatas = [p for p in parcelas
+                  if p.guid not in usadas and p not in escolhidas
+                  and compra["valor"] < p.valor <= compra["valor"] / (1 - DESCONTO_MAXIMO) + TOLERANCIA
+                  and (pv := _data(p.vencimento)) is not None and ini <= pv <= fim
+                  and mesmo_fornecedor(compra["descricao"], p.fornecedor)]
+    return candidatas[0] if len(candidatas) == 1 else None

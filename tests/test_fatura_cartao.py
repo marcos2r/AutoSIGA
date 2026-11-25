@@ -90,3 +90,19 @@ def test_compra_sem_provisao_ou_empate_vira_pendencia():
 def test_sem_xls_da_fatura_avisa():
     d = bc.decidir_fatura(DEBITO, None, [])
     assert d.acao == SEM_PROVISAO and "XLS" in d.motivo
+
+
+def test_compra_com_desconto_e_identificada_e_fica_para_a_tesouraria():
+    parcelas = [parcela("101", "DELICATESSEN PANIFICADORA LTDA", 182.12),
+                parcela("102", "PAIVINHA COMERCIO DE MOVEIS", 1000.0)]   # nota de 1.000, cartão cobrou 990
+    d = bc.decidir_fatura(DEBITO, fatura(), parcelas)
+    assert d.acao == bc.COM_DESCONTO and "desconto R$ 10,00" in d.motivo
+    assert [p.numero for p in d.parcelas] == ["101", "102"]
+
+
+def test_desconto_so_com_fornecedor_parecido_e_ate_10_por_cento():
+    outro_nome = [parcela("101", "DELICATESSEN PANIFICADORA LTDA", 182.12), parcela("102", "LOJA X", 1000.0)]
+    assert bc.decidir_fatura(DEBITO, fatura(), outro_nome).acao == SEM_PROVISAO
+    grande = [parcela("101", "DELICATESSEN PANIFICADORA LTDA", 182.12),
+              parcela("102", "PAIVINHA COMERCIO DE MOVEIS", 1200.0)]
+    assert bc.decidir_fatura(DEBITO, fatura(), grande).acao == SEM_PROVISAO

@@ -35,6 +35,7 @@ class LoteExtratosMixin:
     def processar_multiplos_arquivos(self, caminhos):
         """Processa uma lista de caminhos de arquivos e atualiza a UI com o lote de cards."""
         self.dados_processados_lote = []
+        self.faturas_cartao = []  # XLS do cartão: não vira card, vai junto para a baixa das compras
         erros = []
 
         # Remove os cards anteriores da interface
@@ -55,6 +56,9 @@ class LoteExtratosMixin:
                     dados = OfxReader.parse_file(caminho)
 
                 dados["caminho_arquivo"] = caminho
+                if dados.get("tipo_extrato") == "FATURA_CARTAO":
+                    self.faturas_cartao.append(dados)
+                    continue
                 mantido = next((d for d in self.dados_processados_lote if mesmo_extrato(dados, d)), None)
                 if mantido is not None:
                     if _prioridade_extrato(dados) < _prioridade_extrato(mantido):
@@ -100,6 +104,8 @@ class LoteExtratosMixin:
                 texto_arquivos = f"{qtd} arquivo(s) selecionado(s):\n" + ", ".join(nomes_arquivos[:3]) + f" ... (+ {qtd - 3} outros)"
             else:
                 texto_arquivos = f"{qtd} arquivo(s) selecionado(s):\n" + ", ".join(nomes_arquivos)
+            if self.faturas_cartao:
+                texto_arquivos += f" + {len(self.faturas_cartao)} fatura(s) do cartão"
             self.label_arquivo.configure(text=texto_arquivos, text_color=tema.VERDE_TEXTO)
 
             self.validar_lote_e_atualizar_botoes()
@@ -133,6 +139,7 @@ class LoteExtratosMixin:
                 "Os mapeamentos já confirmados continuam salvos.", parent=self):
             return
         self.dados_processados_lote = []
+        self.faturas_cartao = []
         for card in self.cards_lote:
             card.destroy()
         self.cards_lote = []

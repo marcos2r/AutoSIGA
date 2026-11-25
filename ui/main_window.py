@@ -46,6 +46,7 @@ class MainWindow(CredenciaisMixin, LoteExtratosMixin, AcoesSigaMixin, CatalogoSi
         self.dados_processados = None
         self.dados_processados_lote = []
         self.cards_lote = []
+        self.faturas_cartao = []
         self.bot_instance = None
         self.config_manager = ConfigManager()
 

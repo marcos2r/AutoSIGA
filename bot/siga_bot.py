@@ -42,7 +42,7 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
     """
 
     def __init__(self, lote_processados, callbacks, tipo_lote="extrato", revisar_antes_de_gravar=False,
-                 baixar_energia=False, regra_tarifas=None):
+                 baixar_energia=False, regra_tarifas=None, faturas_cartao=None):
         """
         Inicializa a configuração do bot de automação em lote.
 
@@ -78,6 +78,8 @@ class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, Audi
         self.revisar_antes_de_gravar = revisar_antes_de_gravar
         self.baixar_energia = baixar_energia
         self.regra_tarifas = regra_tarifas
+        # XLS das faturas do cartão do lote: dizem quais compras cada débito de fatura pagou
+        self.faturas_cartao = faturas_cartao or []
         # Índice das faturas de energia (PDFs), montado na primeira baixa e reaproveitado no lote
         self._indice_energia = None
         # Prévia: a UI responde por responder_autorizacao(), que libera a thread do bot

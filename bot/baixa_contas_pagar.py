@@ -16,6 +16,7 @@ import time
 from bot.baixa_provisoes import _JS_AVISOS_ABERTOS, _JS_LER_DATA, BaixaNaoConferidaError
 from bot.descoberta_contas import _JS_LER_CONTAS_TES
 from bot.extratos import MesFechadoError
+from controllers.baixa_cartao import CARTAO, debitos_de_fatura, decidir_fatura, fatura_do_debito
 from controllers.baixa_contas_pagar import (
     APROVADA_SEM_BAIXA,
     BAIXADA,
@@ -37,7 +38,8 @@ from controllers.catalogo_contas import escolher_opcao_conta
 from controllers.prova_real import valor_br
 
 # Formas da TES01519: 8 Pgto. Eletrônico para boleto, 14 PIX; histórico 021 - NF, como nas baixas manuais
-FORMAS = {BOLETO: "8", PIX: "14"}
+# Fatura do cartão: 9 Débito Automático (a fatura é debitada na conta), como na TES01506
+FORMAS = {BOLETO: "8", PIX: "14", CARTAO: "9"}
 HISTORICO_NF = "021"
 _ESPERA_LOTE_S = 15
 
@@ -66,6 +68,14 @@ _JS_VALOR_HISTORICO = '''(codigo) => {
         .find(o => o.textContent.trim().startsWith(codigo + ' '));
     return opt ? opt.value : null;
 }'''
+
+# Histórico pelo texto do rótulo ("... PGTO FAT. CARTÃO"), usado na baixa das compras do cartão
+_JS_HISTORICO_POR_TEXTO = r"""(trecho) => {
+    const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+    const opt = Array.from(document.querySelectorAll('.modal.in select#f_historico option'))
+        .find(o => norm(o.textContent).includes(norm(trecho)));
+    return opt ? opt.value : null;
+}"""
 
 # Na TES01519 o Select2 abre a lista quando recebe foco (o Tab depois da data cai na forma de
 # pagamento), e a máscara dele cobre o Confirmar. Devolve verdadeiro se nenhuma lista ficou aberta.
@@ -106,7 +116,8 @@ class BaixaContasPagarMixin:
         if not self.baixar_energia or dados.get("tipo_extrato") == "APLICACAO":
             return None, False
         pagamentos = ler_pagamentos(dados.get("transacoes", []))
-        if not pagamentos:
+        debitos_cartao = debitos_de_fatura(dados.get("transacoes", []))
+        if not pagamentos and not debitos_cartao:
             return None, False
         periodo = periodo_de_vencimento(dados.get("data_inicial", ""), dados.get("data_final", ""))
         if periodo is None:
@@ -123,6 +134,10 @@ class BaixaContasPagarMixin:
             return None, False
 
         decisoes = decidir_pagamentos(pagamentos, parcelas)
+        # Fatura do cartão: o débito único quita as provisões das compras listadas no XLS da fatura
+        usadas = {p.guid for d in decisoes for p in d.parcelas}
+        faturas = getattr(self, "faturas_cartao", None) or []
+        decisoes += [decidir_fatura(deb, fatura_do_debito(deb, faturas), parcelas, usadas) for deb in debitos_cartao]
         a_baixar = [d for d in decisoes if d.acao == BAIXAR]
         if not a_baixar:
             return resultados_sem_execucao(decisoes), False
@@ -210,7 +225,8 @@ class BaixaContasPagarMixin:
         if not conta:
             raise BaixaNaoConferidaError(f"conta {conta_codigo} não aparece na baixa")
         self._escolher(page, "f_conta", conta, "conta")
-        historico = page.evaluate(_JS_VALOR_HISTORICO, HISTORICO_NF)
+        historico = page.evaluate(_JS_HISTORICO_POR_TEXTO, "FAT. CART") if pg.tipo == CARTAO else None
+        historico = historico or page.evaluate(_JS_VALOR_HISTORICO, HISTORICO_NF)
         if not historico:
             raise BaixaNaoConferidaError(f"histórico {HISTORICO_NF} não encontrado")
         self._escolher(page, "f_historico", historico, "histórico")

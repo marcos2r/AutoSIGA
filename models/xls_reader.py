@@ -15,6 +15,7 @@ from typing import Any
 import xlrd
 
 from models.xls_conta_corrente import eh_conta_corrente, ler_conta_corrente
+from models.xls_fatura_cartao import eh_fatura_cartao, ler_fatura_cartao
 from models.xls_sicoob import abrir_workbook, eh_planilha_sicoob, ler_planilha_sicoob
 
 # Número de conta Sicredi (ex.: "12345-6"), usado quando o rótulo da conta não é achado
@@ -112,6 +113,8 @@ class XlsReader:
             raise ValueError("A planilha carregada contém poucas linhas para ser um extrato Sicredi válido.")
         if eh_planilha_sicoob(sheet):
             return ler_planilha_sicoob(sheet, caminho)
+        if eh_fatura_cartao(sheet):
+            return ler_fatura_cartao(sheet, caminho)  # não é extrato: tipo_extrato FATURA_CARTAO
         if eh_conta_corrente(sheet):
             return ler_conta_corrente(sheet)  # mesmo extrato do OFX, no formato do OfxReader
 

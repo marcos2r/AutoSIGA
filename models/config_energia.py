@@ -148,14 +148,6 @@ class ConfigEnergiaMixin:
             return True
         return False
 
-    def get_fatura_processada(self, numero_fatura):
-        """
-        Verifica se uma fatura específica já foi processada anteriormente.
-        """
-        config = self.get_config_data()
-        processadas = config.get("faturas_energia_processadas", [])
-        return str(numero_fatura).strip() in processadas
-
     def marcar_fatura_processada(self, numero_fatura):
         """
         Registra o número da fatura processada para evitar duplicidade.

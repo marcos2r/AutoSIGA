@@ -23,7 +23,6 @@ def test_recebida_de_outra_administracao_esta_pronta():
 def test_enviada_sem_cadastro_fica_pendente_com_motivo():
     [r] = rm.reconhecer([extrato([("14/10/2026", -18899.0, desc(OUTRA, "SI01388"))])], {PROPRIO})
     assert r.sentido == rm.ENVIADA and not r.pronta
-    assert OUTRA in rm.motivo_pendente(r)
 
 
 def test_enviada_com_cadastro_leva_destino_e_finalidade():

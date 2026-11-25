@@ -170,10 +170,6 @@ class LoteExtratosMixin:
                                      text_color=tema.CINZA_TEXTO)
         self.validar_lote_e_atualizar_botoes()
 
-    def processar_ofx(self, caminho):
-        """Mantido para compatibilidade, delega para processar_multiplos_arquivos."""
-        self.processar_multiplos_arquivos([caminho])
-
     def atualizar_etapas(self):
         """Marca as etapas 1-2-3 como concluída, atual ou futura, pelo estado do lote."""
         tem_cards = bool(self.cards_lote)

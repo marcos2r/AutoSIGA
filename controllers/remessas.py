@@ -94,14 +94,6 @@ def reconhecer(lote: list[dict[str, Any]], proprios: set[str],
     return remessas
 
 
-def motivo_pendente(r: Remessa) -> str:
-    """Frase para o painel quando a remessa não pôde seguir sozinha."""
-    if r.sentido == ENVIADA and not r.destino:
-        return (f"remessa enviada ao CNPJ {r.cnpj}: cadastre o destino desse CNPJ no config.json "
-                "(\"remessas\") para o robô lançar em Transf. Numerários")
-    return ""
-
-
 @dataclass(frozen=True)
 class RecebimentoPendente:
     """Uma linha "Pendente Recebimento" da aba Recebimentos da TES01301."""

@@ -123,3 +123,11 @@ def test_parse_ofx_saldo_de_enfeite_fica_none(tmp_path, enfeite):
 
     assert dados["saldo_atual"] is None
     assert dados["data_saldo"] is None
+
+
+def test_acento_do_ofx_gravado_em_utf8_com_charset_1252_e_corrigido():
+    from models.ofx_reader import _corrigir_acentos
+
+    assert _corrigir_acentos("Alsidnei AndrÃ© da Silva") == "Alsidnei André da Silva"
+    assert _corrigir_acentos("DEBITO EMISSÃO TED") == "DEBITO EMISSÃO TED"   # já certo, fica como está
+    assert _corrigir_acentos("PAGAMENTO PIX") == "PAGAMENTO PIX"

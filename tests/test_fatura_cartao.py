@@ -82,7 +82,8 @@ def test_todas_as_compras_com_provisao_baixam_juntas():
 def test_compra_sem_provisao_ou_empate_vira_pendencia():
     so_uma = [parcela("101", "DELICATESSEN PANIFICADORA LTDA", 182.12)]
     d = bc.decidir_fatura(DEBITO, fatura(), so_uma)
-    assert d.acao == SEM_PROVISAO and "PAIVINHA" in d.motivo
+    assert d.acao == SEM_PROVISAO and "de 2 compra(s), 1 sem provisão" in d.motivo
+    assert d.pendencias == (("19/09/2026", "PAIVINHA COMERCIO DE", 990.0, "sem provisão"),)
     duas = so_uma + [parcela("201", "LOJA A", 990.0), parcela("202", "LOJA B", 990.0)]
     assert bc.decidir_fatura(DEBITO, fatura(), duas).acao == EMPATE
 
@@ -106,3 +107,25 @@ def test_desconto_so_com_fornecedor_parecido_e_ate_10_por_cento():
     grande = [parcela("101", "DELICATESSEN PANIFICADORA LTDA", 182.12),
               parcela("102", "PAIVINHA COMERCIO DE MOVEIS", 1200.0)]
     assert bc.decidir_fatura(DEBITO, fatura(), grande).acao == SEM_PROVISAO
+
+
+def test_fatura_nao_baixada_vira_alerta_no_painel_e_lista_as_compras_no_excel():
+    from types import SimpleNamespace
+
+    from openpyxl import Workbook
+
+    from controllers.baixa_contas_pagar import ResultadoPagamento, linhas_do_painel
+    from controllers.exportador import Exportador
+
+    d = bc.decidir_fatura(DEBITO, fatura(), [parcela("101", "DELICATESSEN PANIFICADORA LTDA", 182.12)])
+    linhas = linhas_do_painel([ResultadoPagamento(d, d.acao)])
+    assert [n for n, _ in linhas] == ["alerta", "alerta"] and "fatura do cartão" in linhas[0][1]
+    assert linhas[1][1].strip() == "• 19/09/2026 · PAIVINHA COMERCIO DE · R$ 990,00"
+    assert linhas_do_painel([ResultadoPagamento(bc.decidir_fatura(DEBITO, None, []), SEM_PROVISAO)])[0][0] == "alerta"
+
+    extrato = SimpleNamespace(localidade="DR", conta_siga="10125", baixas_cp=[ResultadoPagamento(d, d.acao)])
+    ws = Exportador._aba_baixas_contas_pagar(Workbook(), [extrato], None, None, None)
+    linhas_excel = list(ws.iter_rows(min_row=2, values_only=True))
+    assert len(linhas_excel) == 2
+    assert linhas_excel[1][2:5] == ("19/09/2026", 990.0, "PAIVINHA COMERCIO DE")
+    assert "sem provisão" in linhas_excel[1][7]

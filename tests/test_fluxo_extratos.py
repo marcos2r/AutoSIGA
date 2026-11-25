@@ -94,8 +94,12 @@ def _extrato(tipo_adm, conta, transacoes, aplicacao=False):
 
 
 def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=False, opcoes=None, saldos=None,
-          revisar=False, responder=None, etapa_baixas=None, grava=True, periodo_ignorado=None, precisa=None):
-    """Roda `fluxo_automacao` inteiro sem navegador e devolve o que aconteceu."""
+          revisar=False, responder=None, etapa_baixas=None, grava=True, periodo_ignorado=None, precisa=None,
+          ajustar=None):
+    """Roda `fluxo_automacao` inteiro sem navegador e devolve o que aconteceu.
+
+    `ajustar(bot, pagina, reg)` troca mais etapas do bot antes de rodar.
+    """
     sem_espera = SimpleNamespace(sleep=lambda s: None, time=lambda: 0.0)
     monkeypatch.setattr(siga_bot, "time", sem_espera)
     try:
@@ -145,6 +149,8 @@ def _rodar(monkeypatch, lote, grades, lanca=True, troca_falha=(), mes_fechado=Fa
     monkeypatch.setattr(bot, "_ajustar_localidade_competencia", trocar)
     monkeypatch.setattr(bot, "inserir_lancamentos_siga", lambda page, p: inserir(reg.lancamentos, page, p))
     monkeypatch.setattr(bot, "inserir_rendimentos_siga", lambda page, p: inserir(reg.rendimentos, page, p))
+    if ajustar:
+        ajustar(bot, pagina, reg)
 
     bot.fluxo_automacao()
     reg.pagina = pagina
@@ -429,3 +435,58 @@ def test_provisoes_esperam_so_o_primeiro_extrato_com_debito_de_energia(monkeypat
     # 10130 (consulta e conferência) vem antes; a etapa roda uma vez, antes de consultar a 10127
     assert reg.provisoes == [2]
 
+
+
+TARIFA_TX = {"data": "15/05/2026", "valor": -12.0, "descricao": "CESTA DE RELACIONAMENTO"}
+
+
+def _tarifas_falsas(monkeypatch):
+    """Etapa de tarifas que grava na grade falsa e projeta na matriz, como a de verdade."""
+    from controllers.matriz_extrato import projetar
+
+    def ajustar(bot, pagina, reg):
+        reg.faltas = []
+
+        def lancar(page, dados, conta, faltas, telemetria):
+            reg.faltas.append([(f.data, f.valor) for f in faltas])
+            pagina.grades[conta].extend(_linha(f.data, f.valor) for f in faltas)
+            dados["extrato_siga"] = projetar(dados["extrato_siga"], [(f.data, f.valor, "") for f in faltas])
+            telemetria["injecoes"] += len(faltas)
+            return True
+        monkeypatch.setattr(bot, "_lancar_tarifas", lancar)
+    return ajustar
+
+
+def test_etapas_decidem_pela_matriz_e_o_siga_e_conferido_uma_vez_no_final(monkeypatch):
+    lote = [dict(_extrato("DR", "10130", [RESG, TARIFA_TX]), saldo_atual=288.0, data_saldo="31/05/2026")]
+
+    reg = _rodar(monkeypatch, lote, {"10130": []}, saldos={"10130": "288,00"}, ajustar=_tarifas_falsas(monkeypatch))
+
+    # O resgate gravado entrou na matriz: a etapa de tarifas só viu a tarifa como falta
+    assert reg.lancamentos == [[RESG]]
+    assert reg.faltas == [[("15/05/2026", -12.0)]]
+    # Uma leitura no começo e uma conferência no final, sem releitura entre as etapas
+    assert reg.pagina.programas() == ["TES01701"] * 2
+    r = _resultados(reg)["10130"]
+    assert (r.situacao, r.lancados, r.saldo.status, r.sobras, r.duplicidades) == ("conciliado", 2, "confere", [], [])
+
+
+def test_extrato_sem_gravacao_usa_a_leitura_do_comeco_como_prova_real(monkeypatch):
+    lote = [dict(_extrato("DR", "10130", [APLIC]), saldo_atual=-200.0, data_saldo="31/05/2026")]
+
+    reg = _rodar(monkeypatch, lote, {"10130": [_linha("05/05/2026", -200.0)]}, saldos={"10130": "-200,00"})
+
+    assert reg.pagina.programas() == ["TES01701"]
+    assert _resultados(reg)["10130"].saldo.status == "confere"
+
+
+def test_lancamento_em_dobro_no_siga_vira_pedido_de_exclusao(monkeypatch):
+    lote = [dict(_extrato("DR", "10130", [APLIC]), saldo_atual=-200.0)]
+    grades = {"10130": [dict(_linha("05/05/2026", -200.0), lote="11"), dict(_linha("05/05/2026", -200.0), lote="12")]}
+
+    reg = _rodar(monkeypatch, lote, grades, saldos={"10130": "-400,00"})
+
+    [dup] = _resultados(reg)["10130"].duplicidades
+    assert (dup.excluir.lote, dup.original.lote) == ("12", "11")
+    assert any("provável(is) lançamento(s) em duplicidade" in s for s in reg.status)
+    assert [etapa for etapa, _, _ in reg.telemetria["tempos"]].count("Consulta da TES01701") == 1

@@ -42,6 +42,7 @@ class ExtratosMixin:
             page (Page): Página ativa no navegador.
             lancamentos (list): A lista consolidada final expurgada de pendências.
         """
+        self._qtd_injecoes_efetuadas = 0
         try:
             # Ordenação exigida pela regra de negócio: Resgates primeiro, Aplicações depois.
             lanc_ordenados = sorted(lancamentos, key=lambda tx: tx.get("valor", 0.0), reverse=True)
@@ -168,8 +169,9 @@ class ExtratosMixin:
 
                 # Bypassa a modal de confirmação de gravação bem sucedida
                 self._confirmar_gravacao(page, timeout_ms=25000)
+                # Conta a cada gravação: numa falha no meio, o total diz quantos o SIGA aceitou
+                self._qtd_injecoes_efetuadas = i + 1
 
-            self._qtd_injecoes_efetuadas = len(lanc_ordenados)
             self.update_status(f"✅ Finalizado! {len(lanc_ordenados)} registros injetados no SIGA.", "#3C763D")
 
         except MesFechadoError:
@@ -337,8 +339,9 @@ class ExtratosMixin:
 
                 # Bypassa a modal de confirmação de gravação bem sucedida
                 self._confirmar_gravacao(page, timeout_ms=25000)
+                # Conta a cada gravação: numa falha no meio, o total diz quantos o SIGA aceitou
+                self._qtd_injecoes_efetuadas = i + 1
 
-            self._qtd_injecoes_efetuadas = len(lanc_ordenados)
             # Só na barra de status: um aviso com OK no meio do lote prenderia o robô até alguém clicar
             self.update_status(f"✅ Finalizado! {len(lanc_ordenados)} rendimentos injetados no SIGA.", "#3C763D")
 

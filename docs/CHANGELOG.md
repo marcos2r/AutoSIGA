@@ -2,6 +2,14 @@
 
 Histórico das versões, da mais recente para a mais antiga. A versão atual é definida em `version.py`.
 
+## v1.15.0
+
+- **Extrato do SIGA Lido Uma Vez por Conta**: A grade da `TES01701` é lida no começo de cada extrato e vira uma matriz em memória. Cada aplicação, resgate, recebimento, transferência e tarifa gravada entra nessa matriz, e as etapas seguintes decidem por ela, sem reconsultar o SIGA entre uma e outra. No fim, uma única releitura confere tudo e faz a prova real; só ela pode pedir nova tentativa do que faltou, com a mesma trava contra lançamento em dobro. Eram de 2 a 7 consultas por extrato de conta corrente; agora são no máximo 2 (uma só quando não há nada a gravar).
+- **Prováveis Duplicidades com Pedido de Exclusão**: Na prova real, lançamento do SIGA sem par no banco que repete outro já pareado (mesmo valor, data até 3 dias e histórico igual) aparece como "Excluir no SIGA" no cartão da conta, com o número do lançamento (`Lançto`) a excluir e o que fica, e na nova aba `Excluir no SIGA` do Excel. Valores iguais que também se repetem no banco (duas tarifas no mesmo dia) não são apontados. O robô só aponta: a exclusão fica com o usuário.
+- **Tempo por Etapa**: O lote mede quanto tempo gasta em cada etapa (consulta da TES01701, lançamentos, baixas, troca de localidade, tarifas...) e grava o total e a média no log e na nova aba `Tempos por Etapa` do Excel, para mostrar onde ainda vale otimizar.
+- **Menos Espera Fixa**: A abertura da `TES01701` e do filtro passa a esperar a tela de fato (página nova carregada, modal aberto com as contas) em vez de pausas fixas, que só voltam se a condição não vier. Saíram também a pausa de 2 s entre extratos e a de 2,5 s antes da conferência.
+- **Correção**: O total de lançamentos gravados passa a ser contado a cada gravação confirmada; antes, uma falha no meio contava zero e o navegador fechado no meio contava todos.
+
 ## v1.14.0
 
 - **Tarifas Bancárias Lançadas pelo Robô**: Cada tarifa do extrato sem lançamento no SIGA (ex.: `CESTA DE RELACIONAMENTO`) vira uma despesa na `TES01702` com despesa `3030 - DESPESAS BANCARIAS`, histórico `012 - DESP.BANCÁRIAS`, aviso de débito, débito automático e centro de custo ADM. O fornecedor é pesquisado pelo banco da conta (código do extrato) e, entre os resultados, fica o da cidade da administração; banco sem fornecedor fica pendente. Depois o robô relê o extrato do SIGA e refaz a prova real.

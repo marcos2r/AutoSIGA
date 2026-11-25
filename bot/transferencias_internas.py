@@ -3,14 +3,15 @@ Transferências entre contas da mesma localidade como Movimentação Interna (TE
 
 Quem decide é `controllers/transferencias_internas.py` (pareia as pontas pelo código SI do
 extrato). Aqui só se preenche a tela, que já é usada para aplicação e resgate (bot/extratos.py).
-Cada transferência é gravada pela conta de origem; depois a grade é relida e a prova real
-roda de novo.
+Cada transferência é gravada pela conta de origem e entra na matriz do extrato; a
+conferência final do extrato relê o SIGA uma vez e roda a prova real.
 """
 
 import logging
 import time
 
 from bot.extratos import MesFechadoError
+from controllers.matriz_extrato import projetar
 from controllers.prova_real import moeda
 from controllers.transferencias_internas import parear
 
@@ -36,11 +37,11 @@ class TransferenciasInternasMixin:
         return [f"Transferência de {s.data} ({moeda(s.valor)}) não lançada: {s.motivo}."
                 for s in getattr(self, "_soltas_transf", []) if s.conta_siga == conta_siga]
 
-    def _lancar_transferencias(self, page, transferencias, conta_alvo, consulta, dados, telemetria_lote):
-        """Pede a prévia (se ligada), grava e relê a grade da conta.
+    def _lancar_transferencias(self, page, transferencias, conta_alvo, dados, telemetria_lote):
+        """Pede a prévia (se ligada), grava e acrescenta à matriz do extrato o que foi gravado.
 
         Returns:
-            bool: True se gravou e a grade na tela é a relida.
+            bool: True se gravou alguma (a matriz em `dados["extrato_siga"]` já as inclui).
         """
         if not transferencias:
             return False
@@ -55,14 +56,10 @@ class TransferenciasInternasMixin:
         telemetria_lote["injecoes"] += gravadas
         if not gravadas:
             return False
-        try:
-            extrato = self._abrir_consulta_tes01701(page, *consulta)
-        except Exception as e:
-            logging.error(f"Releitura da TES01701 depois das transferências falhou: {e}")
-            return False
-        if extrato is None:
-            return False
-        dados["extrato_siga"] = extrato
+        # A gravação para na primeira falha: as gravadas são as primeiras da lista, saindo desta conta
+        dados["extrato_siga"] = projetar(dados.get("extrato_siga"),
+                                         [(t.data, -t.valor, f"TRANSFERENCIA {t.codigo}")
+                                          for t in transferencias[:gravadas]])
         return True
 
     def inserir_transferencias_siga(self, page, transferencias):

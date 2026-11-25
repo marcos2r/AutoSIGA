@@ -12,6 +12,7 @@ import logging
 import time
 
 from bot.extratos import MesFechadoError
+from controllers.matriz_extrato import projetar
 from controllers.prova_real import valor_br
 from controllers.remessas import RECEBIDA, RecebimentoPendente, cnpjs_da_linha, parear_recebimentos, reconhecer
 
@@ -79,11 +80,13 @@ class RemessasMixin:
             pendentes.append(RecebimentoPendente(linha["codigo"], tds[0], valor, tds[2], tds[4]))
         return pendentes
 
-    def _confirmar_recebimentos(self, page, dados, conta_alvo, consulta, telemetria_lote):
-        """Confirma os recebimentos desta conta e relê a grade.
+    def _confirmar_recebimentos(self, page, dados, conta_alvo, telemetria_lote):
+        """Confirma os recebimentos desta conta e os acrescenta à matriz do extrato.
+
+        A grade não é relida aqui: a conferência final do extrato confere tudo de uma vez.
 
         Returns:
-            bool: True se confirmou algum e a grade na tela é a relida.
+            bool: True se confirmou algum (a matriz em `dados["extrato_siga"]` já os inclui).
         """
         recebidas = [r for r in getattr(self, "_remessas", []) if r.sentido == RECEBIDA and r.conta_siga == conta_alvo]
         if not recebidas:
@@ -104,7 +107,7 @@ class RemessasMixin:
             self.update_status(f"⏭️ {len(pares)} recebimento(s) não autorizado(s) ficaram pendentes.", "#F89406")
             return False
 
-        confirmados = 0
+        confirmados = []
         for i, (r, p) in enumerate(pares):
             if not self.browser_aberto:
                 break
@@ -129,23 +132,16 @@ class RemessasMixin:
                     raise MesFechadoError(r.data)
                 self._recusar_se_invalido(page)
                 self._confirmar_gravacao(page, timeout_ms=25000)
-                confirmados += 1
+                confirmados.append((r.data, r.valor, f"RECEBIMENTO de {p.remetente}"))
             except MesFechadoError:
                 raise
             except Exception as e:
                 logging.error(f"Erro confirmando o recebimento {p.codigo}: {e}", exc_info=True)
                 self._capturar_tela_e_log(page, "erro_confirmar_recebimento")
                 self.update_status(f"Falha ao confirmar o recebimento de {p.remetente}: {e}", "#D9534F")
-        telemetria_lote["injecoes"] += confirmados
+        telemetria_lote["injecoes"] += len(confirmados)
         if not confirmados:
             return False
-        self.update_status(f"✅ {confirmados} recebimento(s) de outras administrações confirmado(s).", "#3C763D")
-        try:
-            extrato = self._abrir_consulta_tes01701(page, *consulta)
-        except Exception as e:
-            logging.error(f"Releitura da TES01701 depois dos recebimentos falhou: {e}")
-            return False
-        if extrato is None:
-            return False
-        dados["extrato_siga"] = extrato
+        self.update_status(f"✅ {len(confirmados)} recebimento(s) de outras administrações confirmado(s).", "#3C763D")
+        dados["extrato_siga"] = projetar(dados.get("extrato_siga"), confirmados)
         return True

@@ -14,6 +14,19 @@ from ofxparse import OfxParser
 _SALDOS_DE_ENFEITE = (0.0, 1.0)
 
 
+def _corrigir_acentos(texto: str) -> str:
+    """Desfaz o acento quebrado do OFX que declara CHARSET:1252 mas grava em UTF-8.
+
+    O Sicredi faz isso: "André" chega como "AndrÃ©". Recodificar em cp1252 devolve os bytes
+    originais; se eles formam UTF-8 válido, era esse o texto. Um texto já certo ("André" em
+    cp1252) não forma UTF-8 válido e volta como está.
+    """
+    try:
+        return texto.encode("cp1252").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return texto
+
+
 class OfxReader:
     """
     Responsável por processar arquivos físicos OFX em dicionários padronizados.
@@ -97,8 +110,8 @@ class OfxReader:
 
         # Converte as transações encapsuladas em objetos ofxtransaction para dicionários
         for tx in extrato.transactions:
-            memo = (getattr(tx, 'memo', '') or '').strip()
-            nome = (getattr(tx, 'payee', '') or '').strip()
+            memo = _corrigir_acentos((getattr(tx, 'memo', '') or '').strip())
+            nome = _corrigir_acentos((getattr(tx, 'payee', '') or '').strip())
             descricao = memo or nome
 
             dados_ofx["transacoes"].append({

@@ -346,4 +346,12 @@ class Exportador:
                     ws.cell(row=linha, column=col, value=valor).font = fonte_normal
                 ws.cell(row=linha, column=4).number_format = 'R$ #,##0.00'
                 linha += 1
+                # Fatura do cartão não baixada: uma linha por compra, para a tesouraria provisionar
+                for data, estabelecimento, valor, motivo in b.decisao.pendencias:
+                    valores = [r.localidade, r.conta_siga, data, valor, estabelecimento, "", "",
+                               f"compra da fatura do cartão de {pg.data}: {motivo}"]
+                    for col, valor_celula in enumerate(valores, start=1):
+                        ws.cell(row=linha, column=col, value=valor_celula).font = fonte_normal
+                    ws.cell(row=linha, column=4).number_format = 'R$ #,##0.00'
+                    linha += 1
         return ws

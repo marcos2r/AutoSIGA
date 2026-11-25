@@ -160,6 +160,8 @@ class BaixaContasPagarMixin:
         for d in decisoes_cartao:
             logging.info("Cartão de crédito [%s] %s R$ %.2f -> %s (%s)",
                          conta_codigo, d.pagamento.data, d.pagamento.valor, d.acao, d.motivo or "ok")
+            for data, estabelecimento, valor, motivo in d.pendencias:
+                logging.info("  compra %s %s R$ %.2f: %s", data, estabelecimento, valor, motivo)
         decisoes += decisoes_cartao
         a_baixar = [d for d in decisoes if d.acao == BAIXAR]
         if not a_baixar:

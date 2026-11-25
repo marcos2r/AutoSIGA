@@ -36,6 +36,7 @@ NAO_AUTORIZADA = "nao_autorizada"
 
 BOLETO = "boleto"
 PIX = "pix"
+CARTAO = "cartao"  # débito da fatura do cartão (controllers/baixa_cartao.py)
 
 TOLERANCIA = 0.01
 # Vencimento a até 10 dias do pagamento; dois candidatos a menos de 3 dias um do outro empatam
@@ -89,6 +90,8 @@ class DecisaoPagamento:
     acao: str
     motivo: str = ""
     parcelas: tuple[ParcelaSiga, ...] = ()
+    # Fatura do cartão não baixada: cada compra que travou, como (data, estabelecimento, valor, motivo)
+    pendencias: tuple[tuple[str, str, float, str], ...] = ()
 
     @property
     def a_aprovar(self) -> list[ParcelaSiga]:
@@ -359,7 +362,9 @@ def linhas_do_painel(resultados: list[ResultadoPagamento] | None) -> list[tuple[
     do banco sem lançamento no SIGA.
     """
     resultados = resultados or []
-    contagem = {s: sum(1 for r in resultados if r.situacao == s) for s in (BAIXADA, JA_BAIXADA, SEM_PROVISAO)}
+    # A fatura do cartão nunca entra só na contagem: não baixada, ela some do painel sem destaque
+    contagem = {s: sum(1 for r in resultados if r.situacao == s and r.decisao.pagamento.tipo != CARTAO)
+                for s in (BAIXADA, JA_BAIXADA, SEM_PROVISAO)}
     linhas = []
     if contagem[BAIXADA]:
         linhas.append(("ok", f"💳 {contagem[BAIXADA]} boleto(s)/PIX baixado(s) na Contas a Pagar"))
@@ -367,5 +372,12 @@ def linhas_do_painel(resultados: list[ResultadoPagamento] | None) -> list[tuple[
         linhas.append(("neutro", f"✔ {contagem[JA_BAIXADA]} boleto(s)/PIX já estavam baixados no SIGA"))
     if contagem[SEM_PROVISAO]:
         linhas.append(("neutro", f"— {contagem[SEM_PROVISAO]} boleto(s)/PIX sem provisão na Contas a Pagar"))
-    linhas += [resumo_resultado(r) for r in resultados if r.situacao not in contagem]
+    for r in resultados:
+        if r.situacao in contagem and r.decisao.pagamento.tipo != CARTAO:
+            continue
+        linhas.append(resumo_resultado(r))
+        # Fatura do cartão não baixada: o estabelecimento e o valor de cada compra que falta provisionar
+        linhas += [("alerta", f"      • {data} · {estabelecimento} · {moeda(valor)}"
+                              + ("" if motivo == "sem provisão" else f" ({motivo})"))
+                   for data, estabelecimento, valor, motivo in r.decisao.pendencias]
     return linhas

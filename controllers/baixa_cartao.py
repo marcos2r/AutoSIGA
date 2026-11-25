@@ -20,6 +20,7 @@ from typing import Any
 
 from controllers.baixa_contas_pagar import (
     BAIXAR,
+    CARTAO,
     EMPATE,
     JA_BAIXADA,
     SEM_PROVISAO,
@@ -32,7 +33,6 @@ from controllers.baixa_energia import APROVADO, LANCADO, PAGO
 from controllers.classificador_extrato import FATURA_CARTAO, classificar
 from controllers.prova_real import moeda
 
-CARTAO = "cartao"
 TOLERANCIA = 0.01
 DIAS_ANTES_DA_COMPRA = 5
 DIAS_DEPOIS_DO_VENCIMENTO = 15
@@ -102,15 +102,16 @@ def decidir_fatura(debito: PagamentoExtrato, fatura: dict[str, Any] | None,
         else:
             faltam.append(compra)
     if faltam or empates:
-        partes = []
-        if faltam:
-            partes.append("sem provisão: " + "; ".join(f"{c['data']} {c['descricao']} {moeda(c['valor'])}"
-                                                       for c in faltam))
+        pendencias = tuple((c["data"], c["descricao"], c["valor"], "sem provisão") for c in faltam) + tuple(
+            (c["data"], c["descricao"], c["valor"], "mais de uma provisão") for c in empates)
+        partes = [f"{len(faltam)} sem provisão"] if faltam else []
         if empates:
-            partes.append("mais de uma provisão: " + "; ".join(f"{c['data']} {c['descricao']} {moeda(c['valor'])}"
-                                                               for c in empates))
+            partes.append(f"{len(empates)} com mais de uma provisão")
         acao = EMPATE if empates and not faltam else SEM_PROVISAO
-        return DecisaoPagamento(debito, acao, f"fatura do cartão (vence {fatura['vencimento']}): " + " | ".join(partes))
+        total = len(fatura["compras"])
+        return DecisaoPagamento(debito, acao, f"fatura do cartão (vence {fatura['vencimento']}): de "
+                                              f"{total} compra(s), {' e '.join(partes)}; provisione as compras abaixo",
+                                pendencias=pendencias)
     if descontos:
         detalhes = "; ".join(f"{c['descricao']}: provisão {p.numero} de {moeda(p.valor)}, pago {moeda(c['valor'])}, "
                              f"desconto {moeda(p.valor - c['valor'])}" for c, p in descontos)

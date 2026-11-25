@@ -1,6 +1,7 @@
 """Etapa de tarifas do robô (bot/tarifas.py), sem navegador: só a orquestração."""
 
 from bot.tarifas import TarifasMixin
+from controllers.matriz_extrato import ORIGEM_PROJETADA
 from controllers.prova_real import MovimentoBanco
 from controllers.tarifas import RegraTarifa
 
@@ -9,9 +10,9 @@ BOLETO = MovimentoBanco("06/11/2026", -300.0, "LIQUIDACAO BOLETO- 12345678000199
 
 
 class RoboFalso(TarifasMixin):
-    def __init__(self, ativo=True, autoriza=True, grava=1, grade=("linha",)):
+    def __init__(self, ativo=True, autoriza=True, grava=1):
         self.regra_tarifas = RegraTarifa.da_config({"ativo": ativo})
-        self._autoriza, self._grava, self._grade = autoriza, grava, grade
+        self._autoriza, self._grava = autoriza, grava
         self.gravou, self.status = [], []
 
     def _pedir_autorizacao(self, itens, conta, tipo="lancamentos"):
@@ -23,7 +24,7 @@ class RoboFalso(TarifasMixin):
         return self._grava
 
     def _abrir_consulta_tes01701(self, page, *consulta):
-        return list(self._grade) if self._grade is not None else None
+        raise AssertionError("a etapa não relê a grade: a conferência final do extrato relê")
 
     def update_status(self, texto, cor=None):
         self.status.append(texto)
@@ -31,16 +32,19 @@ class RoboFalso(TarifasMixin):
 
 def rodar(robo, faltas):
     telemetria, dados = {"injecoes": 0}, {"banco": "748", "nome_adm": "DOURADOS - MS"}
-    resultado = robo._lancar_tarifas(None, dados, "10130", faltas, ("10130", "01/11/2026", "30/11/2026"), telemetria)
+    resultado = robo._lancar_tarifas(None, dados, "10130", faltas, telemetria)
     return resultado, telemetria, dados
 
 
-def test_grava_so_as_tarifas_e_rele_a_grade():
+def test_grava_so_as_tarifas_e_projeta_na_matriz():
     robo = RoboFalso()
     resultado, telemetria, dados = rodar(robo, [TARIFA, BOLETO])
     assert resultado is True and telemetria["injecoes"] == 1
     assert [lc.valor for lc in robo.gravou] == [45.0]
-    assert robo.previa[2] == "tarifas" and dados["extrato_siga"] == ["linha"]
+    assert robo.previa[2] == "tarifas"
+    [linha] = dados["extrato_siga"]
+    assert (linha["data"], linha["saida"], linha["entrada"], linha["origem"]) == (
+        "05/11/2026", "45,00", "", ORIGEM_PROJETADA)
     assert robo.fornecedor == (["SICREDI"], "DOURADOS")
 
 
@@ -65,20 +69,21 @@ def test_nada_gravado_nao_refaz_prova_real():
     assert resultado is False and telemetria["injecoes"] == 0
 
 
-def test_conta_sumiu_na_releitura():
-    assert rodar(RoboFalso(grade=None), [TARIFA])[0] is False
+def test_nada_gravado_nao_mexe_na_matriz():
+    _, _, dados = rodar(RoboFalso(grava=0), [TARIFA])
+    assert "extrato_siga" not in dados
 
 
 def test_fornecedor_e_pesquisado_pelo_banco_e_cidade_da_conta():
     robo = RoboFalso()
     dados = {"banco": "756", "nome_adm": "DOURADOS - MS"}
-    robo._lancar_tarifas(None, dados, "10130", [TARIFA], ("10130", "", ""), {"injecoes": 0})
+    robo._lancar_tarifas(None, dados, "10130", [TARIFA], {"injecoes": 0})
     assert robo.fornecedor == (["SICOOB", "BANCOOB"], "DOURADOS")
 
 
 def test_banco_desconhecido_fica_pendente():
     robo = RoboFalso()
-    r = robo._lancar_tarifas(None, {"banco": "999"}, "10130", [TARIFA], ("10130", "", ""), {"injecoes": 0})
+    r = robo._lancar_tarifas(None, {"banco": "999"}, "10130", [TARIFA], {"injecoes": 0})
     assert r is False and robo.gravou == [] and "sem fornecedor" in robo.status[-1]
 
 
@@ -143,12 +148,12 @@ def test_nao_clica_sim_em_modal_de_sucesso():
 def test_centro_custo_usa_dr_quando_localidade_for_diretoria_regional():
     robo = RoboFalso()
     dados = {"banco": "748", "nome_adm": "DR - DOURADOS"}
-    robo._lancar_tarifas(None, dados, "10130", [TARIFA], ("10130", "", ""), {"injecoes": 0})
+    robo._lancar_tarifas(None, dados, "10130", [TARIFA], {"injecoes": 0})
     assert robo.centro_custo == "DR"
 
 
 def test_centro_custo_usa_dr_quando_tipo_adm_for_dr():
     robo = RoboFalso()
     dados = {"banco": "748", "tipo_adm": "DR", "nome_adm": "DOURADOS"}
-    robo._lancar_tarifas(None, dados, "10130", [TARIFA], ("10130", "", ""), {"injecoes": 0})
+    robo._lancar_tarifas(None, dados, "10130", [TARIFA], {"injecoes": 0})
     assert robo.centro_custo == "DR"

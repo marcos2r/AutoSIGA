@@ -1,33 +1,30 @@
 """
 Laço de conciliação de extratos: para cada extrato do lote, consulta a conta na
 Caixas e Bancos (TES01701), cruza a grade com o banco e lança o que falta.
+
+A grade é lida uma vez no começo do extrato e conferida uma vez no final; entre as duas,
+as gravações são decididas pela matriz em memória (`bot/conferencia_extrato.py`).
 """
 
 import logging
 import time
 
+from bot.conferencia_extrato import _LIMITE_TENTATIVAS
 from bot.descoberta_contas import _JS_LER_CONTAS_TES
 from bot.extratos import MesFechadoError
 from controllers.avisos_extrato import avisos_do_extrato
 from controllers.catalogo_contas import escolher_opcao_conta
 from controllers.conciliador import Conciliador, fora_do_periodo
-from controllers.exportador import Exportador
 from controllers.prova_real import (
     CONCILIADO,
-    CONFERE,
     CONTA_NAO_ENCONTRADA,
-    DIVERGE,
     MES_FECHADO,
     PENDENTE,
     RECUSADO,
     ResultadoExtrato,
-    conferir_saldo,
-    movimentos_do_banco,
+    duplicidades,
     nao_conferido,
-    parear,
-    valor_br,
 )
-from controllers.transferencias_internas import a_lancar as a_lancar_transferencias
 
 # Lê a grade #grid1 da TES01701 (Data, Lançto, Documento, Histórico, Origem, Entrada, Saída, Saldo)
 _JS_LER_GRADE = '''() => {
@@ -70,7 +67,12 @@ _JS_PREENCHER_PERIODO = '''([inicio, fim]) => {
     return [(document.getElementById('f_data1') || {}).value || '', (document.getElementById('f_data2') || {}).value || ''];
 }'''
 
-_LIMITE_TENTATIVAS = 3
+# Abertura da rotina e do filtro: espera a condição real e, se ela não vier, a pausa antiga
+_JS_MARCAR_PAGINA = "() => { window.__autosiga_pagina_anterior = true; }"
+_JS_TES01701_ABERTA = ("() => !window.__autosiga_pagina_anterior && document.readyState !== 'loading'"
+                       " && /TES01701/i.test(location.pathname) && !!document.querySelector('#btn-filtro')")
+_JS_FILTRO_ABERTO = ("() => !!document.querySelector('#modal-filtro.in')"
+                     " && document.querySelectorAll('#f_conta option').length > 1")
 
 
 class PeriodoNaoAplicadoError(Exception):
@@ -83,6 +85,7 @@ class FluxoExtratosMixin:
     def _fluxo_extratos(self, page, telemetria_lote):
         """Processa todos os extratos do lote e mostra o status final."""
         contexto = {"localidade": None, "competencia": None}
+        cronometro = self._reiniciar_cronometro()
         self._preparar_transferencias()
         self._preparar_remessas()
 
@@ -93,15 +96,25 @@ class FluxoExtratosMixin:
                 break
             self._verificar_sessao_ativa(page)
             if not provisionado and self._precisa_das_provisoes(dados):
-                self._provisionar_energia(page, telemetria_lote)
+                with self._medir("Provisões de energia"):
+                    self._provisionar_energia(page, telemetria_lote)
                 provisionado = True
-            if self._processar_extrato(page, dados, idx, telemetria_lote, contexto):
+            with self._medir("Extrato inteiro"):
+                processado = self._processar_extrato(page, dados, idx, telemetria_lote, contexto)
+            if processado:
                 self._atualizar_progresso(idx)
-                time.sleep(2)
 
         # Regime de competência: provisiona o período mesmo sem nenhum débito de energia no lote
         if not provisionado and self.browser_aberto:
-            self._provisionar_energia(page, telemetria_lote)
+            with self._medir("Provisões de energia"):
+                self._provisionar_energia(page, telemetria_lote)
+
+        cronometro.registrar_no_log()
+        telemetria_lote["tempos"] = cronometro.resumo()
+        qtd_duplicidades = sum(len(r.duplicidades) for r in telemetria_lote.get("extratos", []))
+        if qtd_duplicidades:
+            self.update_status(f"🗑️ {qtd_duplicidades} provável(is) lançamento(s) em duplicidade no SIGA: veja "
+                               "\"Excluir no SIGA\" no painel e no Excel e exclua lá, se confirmar.", "#D9534F")
 
         if self.competencias_fechadas:
             fechadas = ", ".join(f"{loc} {mes}" for loc, mes in sorted(self.competencias_fechadas))
@@ -152,7 +165,9 @@ class FluxoExtratosMixin:
 
         # Só troca de localidade e competência se for diferente do extrato anterior
         if localidade_atual != contexto["localidade"] or mes_ano_alvo != contexto["competencia"]:
-            if not self._ajustar_localidade_competencia(page, self.tipo_alvo, self.nome_alvo, mes_ano_alvo):
+            with self._medir("Troca de localidade e mês"):
+                trocou = self._ajustar_localidade_competencia(page, self.tipo_alvo, self.nome_alvo, mes_ano_alvo)
+            if not trocou:
                 # Não lança nada num mês/localidade diferente do extrato
                 self.competencias_fechadas.add(chave_competencia)
                 telemetria_lote["pendentes"] += qtd
@@ -168,10 +183,12 @@ class FluxoExtratosMixin:
         self.update_status(f"✅ Logado em: {self.localidade_selecionada}{sufixo}", "#3C763D")
 
         # Faturas de energia debitadas: baixadas antes, para a conciliação já encontrar a saída no SIGA
-        baixas, fechado = self._etapa_baixas_energia(page, dados, conta_alvo)
+        with self._medir("Baixas de energia"):
+            baixas, fechado = self._etapa_baixas_energia(page, dados, conta_alvo)
         # Boletos e PIX com provisão na Contas a Pagar, pelo mesmo motivo
         if not fechado:
-            dados["baixas_cp"], fechado = self._etapa_baixas_contas_pagar(page, dados, conta_alvo)
+            with self._medir("Baixas de boletos e PIX"):
+                dados["baixas_cp"], fechado = self._etapa_baixas_contas_pagar(page, dados, conta_alvo)
         if fechado:
             self.competencias_fechadas.add(chave_competencia)
             telemetria_lote["pendentes"] += qtd
@@ -209,50 +226,49 @@ class FluxoExtratosMixin:
         self.update_status(f"Cruzando {len(extrato_siga)} itens do SIGA com o OFX...", "#428BCA")
         novos_lancamentos = Conciliador.conciliar(dados.get("transacoes", []), extrato_siga)
 
-        pendentes, grade_atual, recusado = [], True, False
+        # Daqui até a conferência final as etapas decidem pela matriz em memória (dados["extrato_siga"])
+        pendentes, recusado, fechado = [], False, False
         injecoes_antes = telemetria_lote["injecoes"]
+        consulta = (conta_alvo, dados.get("data_inicial", ""), data_final)
         if novos_lancamentos and not self._pedir_autorizacao(novos_lancamentos, conta_alvo):
             pendentes, recusado = novos_lancamentos, True
-            telemetria_lote["pendentes"] += len(pendentes)
             self.update_status(f"⏭️ [{self.localidade_selecionada}] Lançamentos não autorizados: "
                                f"{len(pendentes)} item(ns) ficaram pendentes.", "#F89406")
         elif novos_lancamentos:
-            consulta = (conta_alvo, dados.get("data_inicial", ""), data_final)
-            pendentes, grade_atual = self._lancar_com_conferencia(page, novos_lancamentos, is_aplicacao,
-                                                                  chave_competencia, telemetria_lote, consulta)
-            if pendentes:
-                telemetria_lote["pendentes"] += len(pendentes)
-                if chave_competencia not in self.competencias_fechadas:
-                    self.update_status(f"⚠️ [{self.localidade_selecionada}] Alerta: {len(pendentes)} itens não "
-                                       f"bateram após {_LIMITE_TENTATIVAS} tentativas.", "#D9534F")
+            pendentes = novos_lancamentos
+            self.update_status(f"🚀 Importando automaticamente {len(pendentes)} lançamentos em "
+                               f"{self.localidade_selecionada}...", "#428BCA")
+            try:
+                self._gravar_investimentos(page, pendentes, is_aplicacao, telemetria_lote, dados)
+            except MesFechadoError:
+                # Não adianta tentar de novo: os outros extratos desta localidade e mês são pulados
+                fechado = True
+                self.competencias_fechadas.add(chave_competencia)
+                self.update_status(f"⛔ [{self.localidade_selecionada}] Mês {mes_ano_alvo} fechado no SIGA. "
+                                   f"{len(pendentes)} lançamento(s) ficaram pendentes.", "#D9534F")
         else:
             self.update_status(f"✅ [{self.localidade_selecionada}] Tudo conciliado! Nenhum lançamento novo faltando.", "#3C763D")
 
-        if chave_competencia in self.competencias_fechadas:
+        saldo = sobras = faltas = None
+        if fechado:
             situacao, saldo = MES_FECHADO, nao_conferido("mês fechado no SIGA", dados.get("saldo_atual"))
-            sobras = faltas = None
         else:
-            situacao = RECUSADO if recusado else (PENDENTE if pendentes else CONCILIADO)
-            saldo, sobras, faltas = self._prova_real(page, dados, grade_atual)
-            # Conta corrente: transferências entre contas (pela origem) e tarifas sem lançamento;
-            # se gravar algo, relê a grade e confere de novo
-            if not is_aplicacao:
-                consulta = (conta_alvo, dados.get("data_inicial", ""), data_final)
-                try:
-                    # Remessas de outras administrações que já caíram no banco: confirma o recebimento
-                    if self._confirmar_recebimentos(page, dados, conta_alvo, consulta, telemetria_lote):
-                        saldo, sobras, faltas = self._prova_real(page, dados, True)
-                    transf = a_lancar_transferencias(getattr(self, "_pares_transf", []), conta_alvo,
-                                                     dados.get("extrato_siga"))
-                    regravou = self._lancar_transferencias(page, transf, conta_alvo, consulta, dados, telemetria_lote)
-                    if regravou:
-                        saldo, sobras, faltas = self._prova_real(page, dados, True)
-                    if faltas and self._lancar_tarifas(page, dados, conta_alvo, faltas, consulta, telemetria_lote):
-                        saldo, sobras, faltas = self._prova_real(page, dados, True)
-                except MesFechadoError:
-                    self.competencias_fechadas.add(chave_competencia)
-                    self.update_status(f"⛔ [{self.localidade_selecionada}] Mês fechado: transferências e tarifas "
-                                       "ficaram pendentes.", "#D9534F")
+            tentou = bool(novos_lancamentos) and not recusado
+            # Conta corrente: recebimentos de outras administrações, transferências e tarifas
+            extras = (not is_aplicacao and
+                      self._etapas_conta_corrente(page, dados, conta_alvo, chave_competencia, telemetria_lote))
+            pendentes, grade_atual, fechado = self._conferencia_final(
+                page, dados, consulta, pendentes, tentou, tentou or extras, is_aplicacao, chave_competencia,
+                telemetria_lote)
+            if fechado:
+                situacao, saldo = MES_FECHADO, nao_conferido("mês fechado no SIGA", dados.get("saldo_atual"))
+            else:
+                situacao = RECUSADO if recusado else (PENDENTE if pendentes else CONCILIADO)
+                if pendentes and not recusado:
+                    self.update_status(f"⚠️ [{self.localidade_selecionada}] Alerta: {len(pendentes)} itens não "
+                                       f"bateram após {_LIMITE_TENTATIVAS} tentativas.", "#D9534F")
+                saldo, sobras, faltas = self._prova_real(dados, grade_atual)
+        telemetria_lote["pendentes"] += len(pendentes)
         self._registrar_resultado(telemetria_lote, dados, conta_alvo, situacao,
                                   telemetria_lote["injecoes"] - injecoes_antes, len(pendentes), saldo, sobras, baixas,
                                   faltas)
@@ -291,41 +307,6 @@ class FluxoExtratosMixin:
         self._autorizado = bool(autorizado)
         self._evento_autorizacao.set()
 
-    def _prova_real(self, page, dados, grade_atual):
-        """Confere o saldo final da grade com o do banco e procura lançamentos sem par.
-
-        Só lê a grade que já está na tela; nunca lança nem corrige nada.
-
-        Returns:
-            tuple: (ResultadoSaldo, sobras do SIGA, faltas no SIGA); as listas são None quando não
-            dá para apontá-las.
-        """
-        saldo_banco = dados.get("saldo_atual")
-        if not grade_atual:
-            return nao_conferido("a grade do SIGA não foi relida depois dos lançamentos", saldo_banco), None, None
-        data_saldo = dados.get("data_saldo")
-        if saldo_banco is not None and data_saldo and data_saldo != dados.get("data_final"):
-            return nao_conferido(f"o saldo do extrato é de {data_saldo}", saldo_banco), None, None
-
-        try:
-            texto = page.evaluate(_JS_LER_SALDO)
-        except Exception as e:
-            logging.warning(f"Saldo da TES01701 ilegível: {e}")
-            texto = None
-        saldo = conferir_saldo(saldo_banco, valor_br(texto) if texto is not None else None)
-
-        movimentos = movimentos_do_banco(dados)
-        sobras, faltas = parear(movimentos, dados.get("extrato_siga")) if movimentos is not None else (None, None)
-
-        if saldo.status == CONFERE:
-            self.update_status(f"🧾 Prova real: saldo confere ({Exportador.formatar_moeda(saldo.saldo_siga)}).", "#3C763D")
-        elif saldo.status == DIVERGE:
-            extra = f" · {len(sobras)} lançamento(s) no SIGA sem par no extrato" if sobras else ""
-            self.update_status(f"⚠️ Prova real: SIGA {Exportador.formatar_moeda(saldo.saldo_siga)} × banco "
-                               f"{Exportador.formatar_moeda(saldo.saldo_banco)} (diferença "
-                               f"{Exportador.formatar_moeda(saldo.diferenca)}){extra}.", "#F89406")
-        return saldo, sobras, faltas
-
     def _registrar_resultado(self, telemetria_lote, dados, conta_siga, situacao, lancados=0, pendentes=0,
                              saldo=None, sobras=None, baixas=None, faltas=None):
         """Guarda o resultado do extrato em `telemetria_lote["extratos"]` para o painel e o Excel."""
@@ -333,13 +314,17 @@ class FluxoExtratosMixin:
             conta_id=str(dados.get("conta_id", "")), conta_siga=conta_siga or "",
             localidade=dados.get("localidade_selecionada", ""), tipo=dados.get("tipo_extrato", ""),
             situacao=situacao, lancados=lancados, pendentes=pendentes, sobras=sobras, baixas=baixas, faltas=faltas,
-            periodo=_periodo(dados), baixas_cp=dados.get("baixas_cp"), avisos=avisos_do_extrato(dados, faltas) + self.avisos_transferencias(conta_siga or ""))
+            periodo=_periodo(dados), baixas_cp=dados.get("baixas_cp"), avisos=avisos_do_extrato(dados, faltas) + self.avisos_transferencias(conta_siga or ""),
+            duplicidades=duplicidades(sobras, dados.get("extrato_siga")) if sobras else [])
         if saldo is not None:
             resultado.saldo = saldo
         telemetria_lote.setdefault("extratos", []).append(resultado)
 
     def _abrir_consulta_tes01701(self, page, conta_alvo, data_in, data_fim):
         """Abre a TES01701, filtra a conta e o período e devolve as linhas da grade.
+
+        O saldo final do rodapé é lido junto e fica em `_saldo_tes01701` para a prova real
+        (a tela pode sair da TES01701 antes dela).
 
         Returns:
             list | None: Linhas da grade, ou None se a conta não está na lista da localidade.
@@ -348,6 +333,36 @@ class FluxoExtratosMixin:
             PeriodoNaoAplicadoError: O filtro não ficou com o período do extrato ou a grade
                 traz linhas de fora dele.
         """
+        self._saldo_tes01701 = None
+        with self._medir("Consulta da TES01701"):
+            linhas = self._consultar_tes01701(page, conta_alvo, data_in, data_fim)
+        if linhas is not None:
+            self._saldo_tes01701 = self._ler_saldo_tes01701(page)
+        return linhas
+
+    def _ler_saldo_tes01701(self, page):
+        """Texto do saldo final da grade na tela, ou None se ilegível."""
+        try:
+            return page.evaluate(_JS_LER_SALDO)
+        except Exception as e:
+            logging.warning(f"Saldo da TES01701 ilegível: {e}")
+            return None
+
+    def _esperar_ou_pausar(self, page, condicao, pausa, timeout_ms=8000):
+        """Espera a condição da tela; se ela não vier no prazo, cai na pausa fixa de antes.
+
+        Args:
+            condicao: Função JS que devolve verdadeiro quando a tela está pronta.
+            pausa: Segundos da pausa antiga, usada só quando a condição falha.
+        """
+        try:
+            page.wait_for_function(condicao, timeout=timeout_ms)
+        except Exception as e:
+            logging.warning(f"Condição da tela não veio em {timeout_ms} ms; pausa de {pausa} s: {e}")
+            time.sleep(pausa)
+
+    def _consultar_tes01701(self, page, conta_alvo, data_in, data_fim):
+        """Passo a passo da consulta (ver `_abrir_consulta_tes01701`)."""
         self.update_status("Acessando rotina TES01701...", "#428BCA")
         # Logo depois da troca de localidade o blockUI ainda cobre a tela; o clique forçado
         # caía no overlay, a rotina não abria e o lote parava sem achar o #btn-filtro.
@@ -358,9 +373,11 @@ class FluxoExtratosMixin:
         time.sleep(0.5)
 
         page.evaluate("document.querySelectorAll('.notificacao').forEach(e => e.remove());")
+        # Marca a página atual: a espera só termina quando a TES01701 nova carregar, não na antiga
+        page.evaluate(_JS_MARCAR_PAGINA)
         page.locator('#btn_executar_programa').click(force=True)
         page.wait_for_load_state("domcontentloaded")
-        time.sleep(2)
+        self._esperar_ou_pausar(page, _JS_TES01701_ABERTA, pausa=2)
         self.esperar_loading(page)
         self.fechar_modais_erro_siga(page)
 
@@ -368,7 +385,7 @@ class FluxoExtratosMixin:
         btn_extrato = page.locator('#btn-filtro')
         btn_extrato.wait_for(state="visible", timeout=10000)
         btn_extrato.click()
-        time.sleep(1.5)
+        self._esperar_ou_pausar(page, _JS_FILTRO_ABERTO, pausa=1.5)
 
         if not self._selecionar_conta(page, conta_alvo):
             return None
@@ -425,69 +442,6 @@ class FluxoExtratosMixin:
     def _ler_grade_tes01701(self, page):
         """Linhas da grade de movimentos da TES01701 como dicionários de texto."""
         return page.evaluate(_JS_LER_GRADE)
-
-    def _lancar_com_conferencia(self, page, pendentes, is_aplicacao, chave_competencia, telemetria_lote, consulta):
-        """Lança os pendentes e relê a grade até tudo bater, em até 3 tentativas.
-
-        A releitura refaz o filtro (conta e período do extrato): depois de gravar, a TES01701 volta
-        com o filtro padrão (mês atual), e reaproveitá-lo fazia um extrato de outro mês parecer não
-        lançado. Se a releitura não acha nenhum dos itens gravados, o bot não tenta de novo: lançar
-        outra vez duplicaria tudo o que já foi gravado.
-
-        Args:
-            consulta: (conta, data inicial, data final) do extrato, para refazer o filtro.
-
-        Returns:
-            tuple: (transações que continuaram sem par no SIGA, True se a grade na tela
-            é a relida depois do último lançamento).
-        """
-        for tentativa in range(1, _LIMITE_TENTATIVAS + 1):
-            if tentativa > 1:
-                self.update_status(f"🔄 Re-tentativa {tentativa}/{_LIMITE_TENTATIVAS}: Injetando "
-                                   f"{len(pendentes)} lançamentos restantes...", "#F89406")
-            else:
-                self.update_status(f"🚀 Importando automaticamente {len(pendentes)} lançamentos em "
-                                   f"{self.localidade_selecionada}...", "#428BCA")
-
-            self._qtd_injecoes_efetuadas = 0
-            try:
-                if is_aplicacao:
-                    self.inserir_rendimentos_siga(page, pendentes)
-                else:
-                    self.inserir_lancamentos_siga(page, pendentes)
-            except MesFechadoError:
-                # Não adianta tentar de novo: os outros extratos desta localidade e mês são pulados
-                self.competencias_fechadas.add(chave_competencia)
-                self.update_status(f"⛔ [{self.localidade_selecionada}] Mês {chave_competencia[1]} fechado no SIGA. "
-                                   f"{len(pendentes)} lançamento(s) ficaram pendentes.", "#D9534F")
-                return pendentes, False
-
-            telemetria_lote["injecoes"] += self._qtd_injecoes_efetuadas
-
-            self.update_status("Realizando conferência pós-lançamento...", "#428BCA")
-            time.sleep(2.5)
-            try:
-                extrato_recente = self._abrir_consulta_tes01701(page, *consulta)
-                if extrato_recente is None:
-                    raise RuntimeError(f"conta {consulta[0]} não encontrada no filtro")
-                self.dados_processados["extrato_siga"] = extrato_recente
-                restantes = Conciliador.conciliar(self.dados_processados.get("transacoes", []), extrato_recente)
-                if not restantes:
-                    self.update_status(f"✅ [{self.localidade_selecionada}] Conferência 100%: Nenhum item para trás!", "#3C763D")
-                    return [], True
-                if self._qtd_injecoes_efetuadas and len(restantes) >= len(pendentes):
-                    logging.error(f"Conferência não achou nenhum dos {self._qtd_injecoes_efetuadas} lançamento(s) "
-                                  "gravado(s); re-tentativa cancelada para não duplicar.")
-                    self.update_status(f"⛔ [{self.localidade_selecionada}] A conferência não encontrou os "
-                                       f"{self._qtd_injecoes_efetuadas} lançamento(s) gravado(s). Confira no SIGA "
-                                       "antes de rodar de novo: o robô não lançou outra vez.", "#D9534F")
-                    return restantes, True
-                pendentes = restantes
-            except Exception as e:
-                logging.error(f"Erro na conferência final: {e}")
-                self.update_status(f"✅ [{self.localidade_selecionada}] Finalizado sem prova real.", "#3C763D")
-                return pendentes, False
-        return pendentes, True
 
 
 def _periodo(dados):

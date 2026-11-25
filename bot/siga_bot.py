@@ -15,6 +15,8 @@ from playwright.sync_api import sync_playwright
 
 from bot.baixa_contas_pagar import BaixaContasPagarMixin
 from bot.baixa_provisoes import BaixaProvisoesMixin
+from bot.conferencia_extrato import ConferenciaExtratoMixin
+from bot.cronometro import CronometroMixin
 from bot.descoberta_contas import DescobertaContasMixin
 from bot.energia import EnergiaMixin
 from bot.energia_auditoria import AuditoriaEnergiaMixin
@@ -30,9 +32,9 @@ from bot.transferencias_internas import TransferenciasInternasMixin
 from controllers.exportador import Exportador
 
 
-class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, AuditoriaEnergiaMixin, EnergiaMixin,
-             OfertasMixin, DescobertaContasMixin, BaixaProvisoesMixin, BaixaContasPagarMixin, ProvisoesEnergiaMixin,
-             TarifasMixin, TransferenciasInternasMixin, RemessasMixin):
+class SigaBot(HelpersMixin, SessaoMixin, ExtratosMixin, FluxoExtratosMixin, ConferenciaExtratoMixin, CronometroMixin,
+             AuditoriaEnergiaMixin, EnergiaMixin, OfertasMixin, DescobertaContasMixin, BaixaProvisoesMixin,
+             BaixaContasPagarMixin, ProvisoesEnergiaMixin, TarifasMixin, TransferenciasInternasMixin, RemessasMixin):
     """
     Controlador do Navegador Playwright.
 

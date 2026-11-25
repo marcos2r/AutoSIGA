@@ -2,14 +2,15 @@
 Lançamento das tarifas do extrato como despesa em Caixas e Bancos (TES01702), Fase 2.
 
 Quem decide o que lançar é `controllers/tarifas.py`; aqui só se preenche a tela. Os campos
-foram levantados em 23/11/2026 (docs/regras/siga.md). Depois de gravar, a grade da
-TES01701 é relida e a prova real roda de novo, para a tarifa casar com a linha do extrato.
+foram levantados em 23/11/2026 (docs/regras/siga.md). Depois de gravar, cada tarifa entra
+na matriz do extrato; a conferência final relê a TES01701 uma vez e roda a prova real.
 """
 
 import logging
 import time
 
 from bot.extratos import MesFechadoError
+from controllers.matriz_extrato import projetar
 from controllers.tarifas import (
     RegraTarifa,
     centro_custo_da_localidade,
@@ -51,15 +52,20 @@ _JS_TEXTO_MODAL = """() => Array.from(document.querySelectorAll('.modal.in, .boo
     .join(' | ')"""
 
 
+def ordem_de_gravacao(plano):
+    """Tarifas da mais antiga para a mais nova, a ordem em que são gravadas."""
+    return sorted(plano, key=lambda x: tuple(reversed(x.data.split("/"))))
+
+
 class TarifasMixin:
     """Grava as tarifas que a prova real apontou como faltando no SIGA."""
 
-    def _lancar_tarifas(self, page, dados, conta_alvo, faltas, consulta, telemetria_lote):
-        """Planeja, pede a prévia (se ligada), grava e relê a grade.
+    def _lancar_tarifas(self, page, dados, conta_alvo, faltas, telemetria_lote):
+        """Planeja, pede a prévia (se ligada), grava e acrescenta à matriz do extrato.
 
         Returns:
-            bool: True se gravou alguma tarifa e a grade na tela é a relida (a prova real deve
-            rodar de novo); False se não havia o que lançar ou nada foi gravado.
+            bool: True se gravou alguma tarifa (a matriz em `dados["extrato_siga"]` já as
+            inclui); False se não havia o que lançar ou nada foi gravado.
         """
         regra = getattr(self, "regra_tarifas", None) or RegraTarifa.da_config(None)
         plano = planejar(faltas, regra)
@@ -83,14 +89,10 @@ class TarifasMixin:
         telemetria_lote["injecoes"] += gravadas
         if not gravadas:
             return False
-        try:
-            extrato = self._abrir_consulta_tes01701(page, *consulta)
-        except Exception as e:
-            logging.error(f"Releitura da TES01701 depois das tarifas falhou: {e}")
-            return False
-        if extrato is None:
-            return False
-        dados["extrato_siga"] = extrato
+        # A gravação segue a ordem de `ordem_de_gravacao` e para na primeira falha
+        dados["extrato_siga"] = projetar(dados.get("extrato_siga"),
+                                         [(lc.data, -lc.valor, f"TARIFA - {lc.descricao}")
+                                          for lc in ordem_de_gravacao(plano)[:gravadas]])
         return True
 
     def inserir_tarifas_siga(self, page, plano, conta_alvo, regra, fornecedor=(("SICREDI",), ""),
@@ -104,7 +106,7 @@ class TarifasMixin:
         """
         gravadas = 0
         try:
-            for i, lc in enumerate(sorted(plano, key=lambda x: tuple(reversed(x.data.split("/"))))):
+            for i, lc in enumerate(ordem_de_gravacao(plano)):
                 if not self.browser_aberto:
                     break
                 self._verificar_sessao_ativa(page)

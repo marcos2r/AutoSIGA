@@ -97,7 +97,7 @@ def linhas_do_extrato(r: ResultadoExtrato) -> list[tuple[str, str]]:
         list[tuple[str, str]]: (nível, texto); o nível só escolhe a cor.
     """
     baixas = linhas_do_painel(r.baixas) + linhas_dos_pagamentos(r.baixas_cp)
-    avisos = [("alerta", f"{_RECUO}Aviso: {a}") for a in r.avisos]
+    avisos = linhas_das_duplicidades(r) + [("alerta", f"{_RECUO}Aviso: {a}") for a in r.avisos]
     if r.saldo.status != DIVERGE or r.sobras is None or r.faltas is None:
         return avisos + baixas
     c = compor_diferenca(r.saldo.diferenca, r.sobras, r.faltas)
@@ -124,6 +124,32 @@ def linhas_do_extrato(r: ResultadoExtrato) -> list[tuple[str, str]]:
         linhas.append(("alerta", f"{_RECUO}• {_efeito(c.sem_explicacao)}: sem explicação nos movimentos do "
                                  "período (confira o saldo inicial e lançamentos fora do período)"))
     return linhas + avisos + baixas
+
+
+def linhas_das_duplicidades(r: ResultadoExtrato) -> list[tuple[str, str]]:
+    """O pedido de exclusão das prováveis duplicidades, com o nº do lançamento para achar na TES01701."""
+    if not r.duplicidades:
+        return []
+    linhas = [("alerta", f"{_RECUO}🗑 Excluir no SIGA (provável duplicidade, confira antes): "
+                         f"{len(r.duplicidades)} lançamento(s)")]
+    linhas += [("alerta", f"{_RECUO * 2}{_lancto(d.excluir)}{d.excluir.data} · {d.excluir.historico or 'sem histórico'}"
+                          f" · {moeda(d.excluir.valor)} (repete o lançamento {_numero(d.original)}de {d.original.data})")
+               for d in r.duplicidades]
+    return linhas
+
+
+def itens_para_excluir(r: ResultadoExtrato) -> list[tuple[str, str, str, float, str, str]]:
+    """Cada provável duplicidade para o Excel: (lançto a excluir, data, histórico, valor, lançto que fica, data dele)."""
+    return [(d.excluir.lote, d.excluir.data, d.excluir.historico, d.excluir.valor, d.original.lote, d.original.data)
+            for d in r.duplicidades]
+
+
+def _lancto(mov: MovimentoSiga) -> str:
+    return f"lançto {mov.lote} · " if mov.lote else ""
+
+
+def _numero(mov: MovimentoSiga) -> str:
+    return f"{mov.lote} " if mov.lote else ""
 
 
 def _efeito(valor: float) -> str:

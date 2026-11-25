@@ -15,7 +15,7 @@ from controllers.baixa_energia import resumo_baixa
 from controllers.classificador_extrato import OFERTA, classificar
 from controllers.conciliacao_bancaria import escrever_aba as escrever_conciliacao
 from controllers.conciliacao_bancaria import montar as montar_conciliacao
-from controllers.diferenca_extrato import itens_da_diferenca, tipo_legivel
+from controllers.diferenca_extrato import itens_da_diferenca, itens_para_excluir, tipo_legivel
 from controllers.prova_real import DIVERGE, resumo_resultado
 
 
@@ -249,6 +249,11 @@ class Exportador:
             if any(r.baixas_cp for r in telemetria["extratos"]):
                 abas.append(Exportador._aba_baixas_contas_pagar(wb, telemetria["extratos"], cor_header,
                                                                 fonte_header, fonte_normal))
+            if any(r.duplicidades for r in telemetria["extratos"]):
+                abas.append(Exportador._aba_excluir_no_siga(wb, telemetria["extratos"], cor_header, fonte_header,
+                                                            fonte_normal))
+        if telemetria.get("tempos"):
+            abas.append(Exportador._aba_tempos(wb, telemetria["tempos"], cor_header, fonte_header, fonte_normal))
 
         # Redimensionamento dinâmico das colunas
         for sheet in abas:
@@ -302,6 +307,36 @@ class Exportador:
                 ws.cell(row=linha, column=5).number_format = 'R$ #,##0.00'
                 ws.cell(row=linha, column=7).number_format = 'R$ #,##0.00'
         return ws
+
+    @staticmethod
+    def _tabela(wb, titulo, cabecalho, linhas, cor_header, fonte_header, fonte_normal, colunas_moeda=()):
+        """Aba simples: cabeçalho colorido e uma linha por item; `colunas_moeda` (base 1) em R$."""
+        ws = wb.create_sheet(title=titulo)
+        for col, texto in enumerate(cabecalho, start=1):
+            cell = ws.cell(row=1, column=col, value=texto)
+            cell.fill, cell.font = cor_header, fonte_header
+        for i, valores in enumerate(linhas, start=2):
+            for col, valor in enumerate(valores, start=1):
+                cell = ws.cell(row=i, column=col, value=valor)
+                cell.font = fonte_normal
+                if col in colunas_moeda:
+                    cell.number_format = 'R$ #,##0.00'
+        return ws
+
+    @staticmethod
+    def _aba_excluir_no_siga(wb, resultados, cor_header, fonte_header, fonte_normal):
+        """Aba "Excluir no SIGA": prováveis duplicidades, com o nº do lançamento a excluir e o que fica."""
+        linhas = [(r.localidade, r.conta_siga, *item) for r in resultados for item in itens_para_excluir(r)]
+        return Exportador._tabela(wb, "Excluir no SIGA", [
+            "Localidade", "Conta SIGA", "Lançto a Excluir", "Data", "Histórico", "Valor", "Lançto que Fica",
+            "Data do que Fica"], linhas, cor_header, fonte_header, fonte_normal, colunas_moeda=(6,))
+
+    @staticmethod
+    def _aba_tempos(wb, tempos, cor_header, fonte_header, fonte_normal):
+        """Aba "Tempos por Etapa": quanto o lote gastou em cada etapa, da mais demorada para a mais rápida."""
+        linhas = [(etapa, vezes, total, round(total / vezes, 1) if vezes else None) for etapa, vezes, total in tempos]
+        return Exportador._tabela(wb, "Tempos por Etapa", ["Etapa", "Vezes", "Total (s)", "Média (s)"], linhas,
+                                  cor_header, fonte_header, fonte_normal)
 
     @staticmethod
     def _aba_baixas_energia(wb, resultados, cor_header, fonte_header, fonte_normal):

@@ -20,7 +20,7 @@ class RoboFalso(TransferenciasInternasMixin):
         return self._grava
 
     def _abrir_consulta_tes01701(self, page, *consulta):
-        return ["linha"]
+        raise AssertionError("a etapa não relê a grade: a conferência final do extrato relê")
 
     def update_status(self, texto, cor=None):
         self.status.append(texto)
@@ -28,14 +28,16 @@ class RoboFalso(TransferenciasInternasMixin):
 
 def rodar(robo, transferencias):
     telemetria, dados = {"injecoes": 0}, {}
-    r = robo._lancar_transferencias(None, transferencias, "10130", ("10130", "", ""), dados, telemetria)
+    r = robo._lancar_transferencias(None, transferencias, "10130", dados, telemetria)
     return r, telemetria, dados
 
 
-def test_grava_e_rele_a_grade():
+def test_grava_e_projeta_a_saida_na_matriz():
     robo = RoboFalso()
     r, telemetria, dados = rodar(robo, [T])
-    assert r is True and telemetria["injecoes"] == 1 and dados["extrato_siga"] == ["linha"]
+    assert r is True and telemetria["injecoes"] == 1
+    [linha] = dados["extrato_siga"]
+    assert (linha["data"], linha["saida"]) == ("26/10/2026", "45.922,43")
     assert robo.previa[1] == "transferencias" and "10130 → 10123" in robo.previa[0][0]["descricao"]
 
 

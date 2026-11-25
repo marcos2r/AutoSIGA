@@ -42,6 +42,21 @@ class MovimentoSiga:
     data: str
     valor: float
     historico: str = ""
+    # Coluna "Lançto" da grade: o número que o usuário procura na TES01701 para excluir
+    lote: str = ""
+
+
+@dataclass(frozen=True)
+class Duplicidade:
+    """Lançamento do SIGA que repete outro já pareado com o banco: provável lançamento em dobro.
+
+    Attributes:
+        excluir: A cópia sem par no banco, que o usuário deve conferir e excluir no SIGA.
+        original: O lançamento igual que já casou com o extrato e deve ficar.
+    """
+
+    excluir: MovimentoSiga
+    original: MovimentoSiga
 
 
 @dataclass
@@ -93,6 +108,8 @@ class ResultadoExtrato:
     baixas_cp: list["ResultadoPagamento"] | None = None
     # Avisos que não são erro (rendimento ou tarifa faltando), de controllers/avisos_extrato
     avisos: list[str] = field(default_factory=list)
+    # Sobras que repetem um lançamento já pareado: o robô só aponta, quem exclui é o usuário
+    duplicidades: list[Duplicidade] = field(default_factory=list)
 
 
 def valor_br(texto: Any) -> float | None:
@@ -128,7 +145,7 @@ def normalizar_linhas_siga(linhas: list[dict[str, Any]] | None) -> list[Moviment
             continue
         # abs() evita sinal duplo caso o SIGA já traga o "-" na coluna Saída
         movimentos.append(MovimentoSiga(str(linha.get("data", "")).strip(), sinal * abs(valor),
-                                        str(linha.get("historico", "")).strip()))
+                                        str(linha.get("historico", "")).strip(), str(linha.get("lote", "")).strip()))
     return movimentos
 
 
@@ -210,6 +227,46 @@ def parear(movimentos_banco: list[tuple[Any, ...]],
     return sobras, livres
 
 
+def duplicidades(sobras: list[MovimentoSiga] | None,
+                 linhas_siga: list[dict[str, Any]] | None) -> list[Duplicidade]:
+    """Das sobras do SIGA, as que repetem um lançamento que já tem par no banco.
+
+    O pareamento com o banco é um para um, então uma sobra com um "gêmeo" pareado (mesmo
+    valor, data até `DIAS_TOLERANCIA` dias e histórico igual ou contido no outro) quer dizer
+    que o SIGA tem mais cópias do que o banco mostra. Duas tarifas iguais no mesmo dia que
+    também estão duas vezes no banco não viram sobra e não aparecem aqui. Sobra sem gêmeo
+    (valor errado, estorno esquecido) continua só como sobra.
+
+    Args:
+        sobras: Lançamentos do SIGA sem par no banco (de `parear`).
+        linhas_siga: A grade inteira da TES01701 de onde as sobras saíram.
+
+    Returns:
+        list[Duplicidade]: Uma por sobra com gêmeo, na ordem das sobras.
+    """
+    if not sobras:
+        return []
+    pareados = normalizar_linhas_siga(linhas_siga)
+    for s in sobras:
+        if s in pareados:
+            pareados.remove(s)  # tira a própria sobra; o que fica teve par no banco
+    achadas = []
+    for s in sobras:
+        dia = _data(s.data)
+        gemeos = [(abs((d - dia).days), m) for m in pareados
+                  if dia and (d := _data(m.data)) and abs((d - dia).days) <= DIAS_TOLERANCIA
+                  and abs(m.valor - s.valor) <= TOLERANCIA and _historico_parecido(m.historico, s.historico)]
+        if gemeos:
+            achadas.append(Duplicidade(s, min(gemeos, key=lambda g: g[0])[1]))
+    return achadas
+
+
+def _historico_parecido(a: str, b: str) -> bool:
+    """Históricos iguais sem diferença de caixa e espaços, ou um contido no outro (vazio casa com tudo)."""
+    x, y = " ".join(a.split()).casefold(), " ".join(b.split()).casefold()
+    return not x or not y or x in y or y in x
+
+
 def _data(texto: str) -> datetime | None:
     try:
         return datetime.strptime(str(texto).strip(), "%d/%m/%Y")
@@ -241,6 +298,8 @@ def resumo_resultado(r: ResultadoExtrato) -> tuple[str, str]:
         return ("alerta" if r.pendentes else "ok"), f"✔ Saldo confere ({moeda(r.saldo.saldo_siga)}){pendentes}"
     if r.saldo.status == DIVERGE:
         sobras = f" · {len(r.sobras)} no SIGA sem par no banco" if r.sobras else ""
+        if r.duplicidades:
+            sobras += f" ({len(r.duplicidades)} provável(is) duplicidade(s))"
         return "alerta", (f"⚠ Diferença de {moeda(r.saldo.diferenca)} (SIGA {moeda(r.saldo.saldo_siga)} × "
                           f"banco {moeda(r.saldo.saldo_banco)}){sobras}{pendentes}")
     return ("alerta" if r.pendentes else "neutro"), f"— Não conferido: {r.saldo.motivo}{pendentes}"

@@ -64,24 +64,32 @@ _JS_LER_PROVISOES = '''() => {
     }).filter(Boolean);
 }'''
 
-# A grade da TES01501 é paginada no servidor (100 por página): pede tudo de uma vez e
-# devolve quantas linhas vieram e quantas existem, para nunca decidir com a grade cortada
+# A grade da TES01501 é paginada no servidor (100 por página): lê página por página
+# sem aumentar _iDisplayLength (pedir 1000 de vez causa erro DataTableResult2 no SIGA).
 _JS_MOSTRAR_TODAS = '''async () => {
-    const $ = window.jQuery;
-    const grade = document.querySelector('#grid1');
+    const $ = window.jQuery, grade = document.querySelector('#grid1');
     if (!$ || !grade || !$.fn.dataTable || !$(grade).hasClass('dataTable')) return null;
-    const tabela = $(grade).dataTable();
-    const ajustes = tabela.fnSettings();
-    if (ajustes.fnRecordsDisplay() > tabela.fnGetNodes().length) {
-        ajustes._iDisplayLength = 1000;
-        ajustes._iDisplayStart = 0;
-        tabela.fnDraw();
-        for (let i = 0; i < 100; i++) {
+    const tabela = $(grade).dataTable(), ajustes = tabela.fnSettings(), total = ajustes.fnRecordsDisplay();
+    if (total <= tabela.fnGetNodes().length) return {lidas: tabela.fnGetNodes().length, total};
+    const ler = () => Array.from(document.querySelectorAll('#grid1 tbody tr')).map(tr => {
+        const t = tr.querySelectorAll('td'), a = tr.querySelector('a[data-codigo], a[href*="codigo="]');
+        if (t.length < 12) return null;
+        const g = a ? (a.getAttribute('data-codigo') || (a.getAttribute('href').split('codigo=')[1] || '').split('&')[0]) : '';
+        return {vencimento: t[2].innerText.trim(), numero: t[4].innerText.trim(), fornecedor: t[5].innerText.trim(),
+                valor: t[8].innerText.trim(), pago: t[9].innerText.trim(), status: t[11].innerText.trim(), guid: g};
+    }).filter(Boolean);
+    const todas = ler(), paginas = Math.ceil(total / Math.max(ajustes._iDisplayLength || 100, 1));
+    for (let p = 1; p < paginas && !document.querySelector('.bootbox.modal.in'); p++) {
+        const antes = ajustes._iDisplayStart;
+        tabela.fnPageChange('next');
+        for (let i = 0; i < 75 && (ajustes.bDrawing || ajustes._iDisplayStart === antes); i++) {
             await new Promise(r => setTimeout(r, 200));
-            if (!ajustes.bDrawing && tabela.fnGetNodes().length >= Math.min(ajustes.fnRecordsDisplay(), 1000)) break;
+            if (document.querySelector('.bootbox.modal.in')) break;
         }
+        if (document.querySelector('.bootbox.modal.in')) break;
+        todas.push(...ler());
     }
-    return {lidas: tabela.fnGetNodes().length, total: ajustes.fnRecordsDisplay()};
+    return {lidas: todas.length, total, linhas: todas};
 }'''
 
 # Filtro por vencimento na TES01501 e envio do formulário (o botão pode estar num modal fechado)
@@ -210,9 +218,15 @@ class BaixaProvisoesMixin:
             page.wait_for_load_state("domcontentloaded")
             time.sleep(2)
             self.esperar_loading(page)
+        if self.fechar_modais_erro_siga(page):
+            raise GradeIncompletaError("o SIGA exibiu erro inesperado na Contas a Pagar")
         contagem = page.evaluate(_JS_MOSTRAR_TODAS)
+        if self.fechar_modais_erro_siga(page):
+            raise GradeIncompletaError("o SIGA exibiu erro inesperado ao paginar a Contas a Pagar")
         if contagem and contagem.get("lidas", 0) < contagem.get("total", 0):
             raise GradeIncompletaError(f"a Contas a Pagar mostrou {contagem['lidas']} de {contagem['total']} linhas")
+        if isinstance(contagem, dict) and "linhas" in contagem:
+            return contagem["linhas"]
         return page.evaluate(_JS_LER_PROVISOES)
 
     def _etapa_baixas_energia(self, page, dados, conta_codigo):
@@ -425,12 +439,14 @@ class BaixaProvisoesMixin:
         return conferidos
 
     def _executar_programa(self, page, codigo):
+        self.fechar_modais_erro_siga(page)
         campo = page.locator('#f_executar_programa')
         campo.fill(codigo)
         page.locator('#btn_executar_programa').click()
         page.wait_for_load_state("domcontentloaded")
         time.sleep(2)
         self.esperar_loading(page)
+        self.fechar_modais_erro_siga(page)
 
     def _abrir_parcela(self, page, programa, provisao):
         """Abre a tela da parcela e confere o número da fatura e o valor.

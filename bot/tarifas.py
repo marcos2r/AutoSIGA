@@ -10,7 +10,14 @@ import logging
 import time
 
 from bot.extratos import MesFechadoError
-from controllers.tarifas import RegraTarifa, cidade_da_localidade, escolher_fornecedor, planejar, termos_do_banco
+from controllers.tarifas import (
+    RegraTarifa,
+    centro_custo_da_localidade,
+    cidade_da_localidade,
+    escolher_fornecedor,
+    planejar,
+    termos_do_banco,
+)
 
 _JS_DATA = '''([campo, data]) => {
     const inp = document.getElementById(campo);
@@ -33,6 +40,15 @@ _JS_VALOR = '''([campo, valor]) => {
         window.jQuery(el).trigger("blur");
     }
 }'''
+
+
+_JS_TEXTO_MODAL = """() => Array.from(document.querySelectorAll('.modal.in, .bootbox.in, .bootbox'))
+    .filter(m => {
+        const s = getComputedStyle(m);
+        return m.getClientRects().length > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+    })
+    .map(m => m.innerText || '')
+    .join(' | ')"""
 
 
 class TarifasMixin:
@@ -60,7 +76,10 @@ class TarifasMixin:
                                f"{len(plano)} tarifa(s) ficaram pendentes.", "#F89406")
             return False
         fornecedor = (termos, cidade_da_localidade(dados.get("nome_adm")))
-        gravadas = self.inserir_tarifas_siga(page, plano, conta_alvo, regra, fornecedor)
+        centro_custo = centro_custo_da_localidade(
+            dados.get("nome_adm"), regra.centro_custo, tipo_adm=dados.get("tipo_adm", ""),
+        )
+        gravadas = self.inserir_tarifas_siga(page, plano, conta_alvo, regra, fornecedor, centro_custo=centro_custo)
         telemetria_lote["injecoes"] += gravadas
         if not gravadas:
             return False
@@ -74,7 +93,8 @@ class TarifasMixin:
         dados["extrato_siga"] = extrato
         return True
 
-    def inserir_tarifas_siga(self, page, plano, conta_alvo, regra, fornecedor=(("SICREDI",), ""), simular=False):
+    def inserir_tarifas_siga(self, page, plano, conta_alvo, regra, fornecedor=(("SICREDI",), ""),
+                             simular=False, centro_custo=None):
         """Preenche e grava uma despesa por tarifa na TES01702 ("Salvar e Novo" entre elas).
 
         Com `simular=True` preenche a primeira e para antes de salvar (conferência na tela real).
@@ -106,9 +126,10 @@ class TarifasMixin:
                 page.evaluate(_JS_VALOR, ["f_valor", lc.valor])
                 time.sleep(0.5)
 
-                # Rateio: uma linha, 100% na despesa bancária da ADM
+                # Rateio: uma linha, 100% na despesa bancária da localidade (ADM ou DR)
                 self.selecionar_select2(page, "f_despesa_rateio", regra.despesa, dropdown_is_ajax=False)
-                self.selecionar_select2(page, "f_centrocusto_rateio", regra.centro_custo, dropdown_is_ajax=False)
+                self.selecionar_select2(page, "f_centrocusto_rateio", centro_custo or regra.centro_custo,
+                                        dropdown_is_ajax=False)
                 if not (page.locator('#f_valorRateio').input_value() or "").strip():
                     page.evaluate(_JS_VALOR, ["f_percentualRateio", 100])
                 self.selecionar_select2(page, "f_historico_debito", regra.historico, dropdown_is_ajax=False)
@@ -138,11 +159,26 @@ class TarifasMixin:
                 else:
                     page.locator('button.btn-success:has(i.icon-ok)').first.click()
                 page.wait_for_load_state("domcontentloaded")
-                time.sleep(1)
+                self._esperar_sem_overlay(page)
+                try:
+                    page.locator('.modal.in').first.wait_for(state="visible", timeout=15000)
+                except Exception:
+                    pass
                 if self._mes_fechado_na_tela(page):
                     raise MesFechadoError(lc.data)
                 self._recusar_se_invalido(page)
+                if self._confirmar_documento_duplicado(page, lc.documento):
+                    self._esperar_sem_overlay(page)
+                    try:
+                        page.locator('.modal.in').first.wait_for(state="visible", timeout=15000)
+                    except Exception:
+                        pass
+                    if self._mes_fechado_na_tela(page):
+                        raise MesFechadoError(lc.data)
+                    self._recusar_se_invalido(page)
                 self._confirmar_gravacao(page, timeout_ms=25000)
+                if self.fechar_modais_erro_siga(page):
+                    raise RuntimeError("SIGA exibiu erro inesperado após gravar a tarifa.")
                 gravadas += 1
             if gravadas:
                 self.update_status(f"✅ {gravadas} tarifa(s) lançada(s) como despesa no SIGA.", "#3C763D")
@@ -218,13 +254,28 @@ class TarifasMixin:
             RuntimeError: com o texto da mensagem do SIGA.
         """
         try:
-            texto = page.evaluate("""() => Array.from(document.querySelectorAll('.modal.in, .bootbox'))
-                .filter(m => m.offsetParent !== null).map(m => m.innerText).join(' | ')""") or ""
+            texto = page.evaluate(_JS_TEXTO_MODAL) or ""
         except Exception:
             return
         if any(p in texto.upper() for p in ("INCOMPLETO", "OBRIGAT", "PREENCHA", "INVÁLID", "INVALID")):
             self._capturar_tela_e_log(page, "gravacao_recusada")
             raise RuntimeError(f"o SIGA recusou a gravação: {' '.join(texto.split())[:200]}")
+
+    def _confirmar_documento_duplicado(self, page, documento=""):
+        """Responde 'Sim' se o SIGA avisar que o Nº Documento já existe e perguntar se deseja reutilizar."""
+        try:
+            texto = page.evaluate(_JS_TEXTO_MODAL) or ""
+        except Exception:
+            return False
+        upper = texto.upper()
+        if "EXISTE UM DOCUMENTO" not in upper and "UTILIZ" not in upper:
+            return False
+        botao = page.locator('.modal.in button:has-text("Sim"), .bootbox button:has-text("Sim")').first
+        botao.wait_for(state="visible", timeout=2000)
+        botao.click()
+        logging.info(f"Tarifa com documento {documento or '?'} já existente no SIGA: confirmado 'Sim' para reutilizar.")
+        time.sleep(0.5)
+        return True
 
     def _tratar_competencia(self, page, data):
         """Responde "Sim" ao pop-up de competência e para se o mês estiver fechado (como no rendimento)."""

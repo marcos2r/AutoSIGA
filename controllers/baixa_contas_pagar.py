@@ -15,6 +15,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from itertools import combinations
 from typing import Any
 
 from controllers.baixa_energia import APROVADO, LANCADO, PAGO, guid_valido
@@ -222,18 +223,44 @@ def _quita(pg: PagamentoExtrato, p: ParcelaSiga) -> bool:
     return abs(p.valor - pg.valor) <= TOLERANCIA or (p.status == PAGO and abs(p.pago - pg.valor) <= TOLERANCIA)
 
 
-def _somas(grupo: list[ParcelaSiga], valor: float) -> list[list[ParcelaSiga]]:
-    """Parcelas de um vencimento que somam o pagamento: todas, ou todas menos uma.
+def _soma_bate(parcelas: list[ParcelaSiga], valor: float) -> bool:
+    """Confere se a soma dos valores (ou valores pagos, se todas pagas) fecha com o pagamento."""
+    if abs(sum(p.valor for p in parcelas) - valor) <= TOLERANCIA:
+        return True
+    return all(p.status == PAGO for p in parcelas) and abs(sum(p.pago for p in parcelas) - valor) <= TOLERANCIA
 
-    "Menos uma" cobre a parcela paga em outro pagamento (um PIX avulso no mesmo dia, de
-    outro extrato) e só vale se uma única parcela, ao sair, fecha a soma.
+
+# Limite de parcelas no mesmo vencimento para buscar subconjuntos (2^12 = 4096, <1 ms)
+_MAX_PARCELAS_SUBCONJUNTO = 12
+
+
+def _somas(grupo: list[ParcelaSiga], valor: float) -> list[list[ParcelaSiga]]:
+    """Parcelas de um vencimento que somam o pagamento: todas, só abertas/pagas ou subconjunto único.
+
+    Separar abertas (`Lançado`/`Aprovado`) de `Pago` cobre vencimentos divididos entre dois
+    extratos. A busca de subconjunto único cobre um vencimento pago em dois ou mais lotes no
+    mesmo dia (ex.: 5 notas pagas em um boleto de 3 e outro de 2) — só casa quando há uma
+    única combinação possível, nunca na dúvida.
     """
     if len(grupo) < 2:
         return []
-    if abs(sum(p.valor for p in grupo) - valor) <= TOLERANCIA:
+    if _soma_bate(grupo, valor):
         return [grupo]
-    sem_uma = [[q for q in grupo if q is not p] for p in grupo]
-    fecham = [g for g in sem_uma if len(g) > 1 and abs(sum(q.valor for q in g) - valor) <= TOLERANCIA]
+    abertas = [p for p in grupo if p.status in {LANCADO, APROVADO}]
+    pagas = [p for p in grupo if p.status == PAGO]
+    if abertas and pagas:
+        por_status = [sub for sub in (abertas, pagas) if len(sub) >= 2 and _soma_bate(sub, valor)]
+        if por_status:
+            return por_status
+    alvo = abertas if abertas and pagas and len(abertas) > 2 else grupo
+    if len(alvo) <= _MAX_PARCELAS_SUBCONJUNTO:
+        fecham = [list(c) for r in range(2, len(alvo)) for c in combinations(alvo, r) if _soma_bate(list(c), valor)]
+        exatas = [g for g in fecham if abs(sum(p.valor for p in g) - valor) < 0.005]
+        if len(exatas) == 1:
+            return exatas
+        return fecham if len(fecham) == 1 else []
+    sem_uma = [[q for q in alvo if q is not p] for p in alvo]
+    fecham = [g for g in sem_uma if len(g) > 1 and _soma_bate(g, valor)]
     return fecham if len(fecham) == 1 else []
 
 

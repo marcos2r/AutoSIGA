@@ -152,3 +152,45 @@ def test_painel_do_extrato_mostra_os_boletos_e_pix_depois_da_energia():
     r = ResultadoExtrato("1234", "10123", "ADM - EXEMPLO", "CORRENTE", "lancado",
                          baixas_cp=[ResultadoPagamento(d, BAIXADA)])
     assert linhas_do_extrato(r) == [("ok", "💳 1 boleto(s)/PIX baixado(s) na Contas a Pagar")]
+
+
+def test_soma_em_lote_separa_abertas_de_pagas_no_mesmo_vencimento():
+    linhas = [
+        _linha("07/11/2026", "400,00", "Aprovado", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114152"),
+        _linha("07/11/2026", "1.300,01", "Pago", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114392",
+               pago="1.300,00"),
+        _linha("07/11/2026", "1.200,00", "Pago", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114406",
+               pago="1.200,00"),
+        _linha("07/11/2026", "433,34", "Aprovado", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114145"),
+        _linha("07/11/2026", "416,67", "Aprovado", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114154"),
+        _linha("07/11/2026", "416,67", "Aprovado", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114155"),
+    ]
+    [abertas] = _decidir([_boleto("09/11/2026", 1666.67, "PLANACON CONSTRUTORA LTDA")], linhas)
+    assert abertas.acao == BAIXAR
+    assert sorted(p.numero for p in abertas.parcelas) == ["114145", "114152", "114154", "114155"]
+
+    [pagas] = _decidir([_boleto("09/11/2026", 2500.00, "PLANACON CONSTRUTORA LTDA")], linhas)
+    assert pagas.acao == JA_BAIXADA
+    assert sorted(p.numero for p in pagas.parcelas) == ["114392", "114406"]
+
+
+def test_dois_lotes_no_mesmo_vencimento_casam_cada_subconjunto_unico():
+    linhas = [
+        _linha("19/11/2026", "1.300,03", "Aprovado", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114512"),
+        _linha("19/11/2026", "1.249,92", "Aprovado", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114411"),
+        _linha("19/11/2026", "1.249,92", "Aprovado", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114507"),
+        _linha("19/11/2026", "1.300,01", "Aprovado", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114486"),
+        _linha("19/11/2026", "1.134,22", "Aprovado", fornecedor="PLANACON CONSTRUTORA LTDA", numero="114499"),
+    ]
+    lote1, lote2 = _decidir([
+        _boleto("16/11/2026", 3799.87, "PLANACON CONSTRUTORA LTDA"),
+        _boleto("16/11/2026", 2434.23, "PLANACON CONSTRUTORA LTDA"),
+    ], linhas)
+    assert lote1.acao == BAIXAR and sorted(p.numero for p in lote1.parcelas) == ["114411", "114507", "114512"]
+    assert lote2.acao == BAIXAR and sorted(p.numero for p in lote2.parcelas) == ["114486", "114499"]
+
+
+def test_subconjunto_ambiguo_no_mesmo_vencimento_nao_baixa():
+    linhas = [_linha("19/11/2026", v, "Aprovado", numero=str(i)) for i, v in enumerate(("100,00", "200,00", "200,00", "50,00"))]
+    [d] = _decidir([_boleto("16/11/2026", 300.00)], linhas)
+    assert d.acao == SEM_PROVISAO

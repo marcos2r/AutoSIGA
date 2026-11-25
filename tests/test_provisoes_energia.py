@@ -228,3 +228,45 @@ def test_so_extrato_de_conta_corrente_com_debito_de_energia_precisa_das_provisoe
     assert bot._precisa_das_provisoes({"tipo_extrato": tipo, "transacoes": [debito]}) is esperado
     assert bot._precisa_das_provisoes({"tipo_extrato": "CORRENTE", "transacoes": []}) is False
 
+
+def test_modal_erro_siga_na_tes01501_fecha_e_falha_limpo(monkeypatch):
+    bot, _ = criar_bot(monkeypatch, bp, "extrato")
+    monkeypatch.setattr(bot, "_executar_programa", lambda page, codigo: None)
+    fechados = []
+
+    class Pagina:
+        def evaluate(self, script, arg=None):
+            if script == bot._JS_FECHAR_MODAL_ERRO:
+                fechados.append("ok")
+                return ["Atenção Ops, ocorreu um erro inesperado"]
+            return True
+
+        def wait_for_load_state(self, estado):
+            pass
+
+    with pytest.raises(bp.GradeIncompletaError, match="erro inesperado"):
+        bot._ler_contas_a_pagar(Pagina(), ("01/11/2026", "30/11/2026"))
+    assert fechados == ["ok"]
+
+
+def test_grade_paginada_retorna_linhas_consolidadas(monkeypatch):
+    bot, _ = criar_bot(monkeypatch, bp, "extrato")
+    monkeypatch.setattr(bot, "_executar_programa", lambda page, codigo: None)
+    esperado = [{"numero": "1"}, {"numero": "2"}]
+
+    class Pagina:
+        def evaluate(self, script, arg=None):
+            if script == bot._JS_FECHAR_MODAL_ERRO:
+                return []
+            if script == bp._JS_MOSTRAR_TODAS:
+                return {"lidas": 2, "total": 2, "linhas": esperado}
+            if script == bp._JS_LER_PROVISOES:
+                raise AssertionError("não devia reler só a página atual quando já consolidou todas")
+            return True
+
+        def wait_for_load_state(self, estado):
+            pass
+
+    assert bot._ler_contas_a_pagar(Pagina(), ("01/11/2026", "30/11/2026")) == esperado
+
+

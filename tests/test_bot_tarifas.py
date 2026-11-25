@@ -18,8 +18,8 @@ class RoboFalso(TarifasMixin):
         self.previa = (itens, conta, tipo)
         return self._autoriza
 
-    def inserir_tarifas_siga(self, page, plano, conta, regra, fornecedor=None):
-        self.gravou, self.fornecedor = plano, fornecedor
+    def inserir_tarifas_siga(self, page, plano, conta, regra, fornecedor=None, centro_custo=None):
+        self.gravou, self.fornecedor, self.centro_custo = plano, fornecedor, centro_custo
         return self._grava
 
     def _abrir_consulta_tes01701(self, page, *consulta):
@@ -97,3 +97,58 @@ def test_gravacao_recusada_pelo_siga_vira_erro():
     with pytest.raises(RuntimeError, match="recusou"):
         robo._recusar_se_invalido(PaginaComErro("Formulário Incompleto: Fornecedor é obrigatório"))
     robo._recusar_se_invalido(PaginaComErro("Registro salvo com sucesso!"))  # sucesso não para
+
+
+class _BotaoFalso:
+    def __init__(self, cliques):
+        self._cliques = cliques
+
+    @property
+    def first(self):
+        return self
+
+    def wait_for(self, state=None, timeout=None):
+        pass
+
+    def click(self):
+        self._cliques.append("Sim")
+
+
+class _PaginaModal:
+    def __init__(self, texto):
+        self.texto = texto
+        self.cliques = []
+
+    def evaluate(self, js):
+        return self.texto
+
+    def locator(self, seletor):
+        return _BotaoFalso(self.cliques)
+
+
+def test_confirma_sim_quando_documento_ja_existe():
+    robo = RoboFalso()
+    pag = _PaginaModal("Já existe um documento lançado com o número 16112026! Deseja utilizá-lo novamente?")
+    assert robo._confirmar_documento_duplicado(pag, "16112026") is True
+    assert pag.cliques == ["Sim"]
+
+
+def test_nao_clica_sim_em_modal_de_sucesso():
+    robo = RoboFalso()
+    pag = _PaginaModal("Registro salvo com sucesso!")
+    assert robo._confirmar_documento_duplicado(pag, "16112026") is False
+    assert pag.cliques == []
+
+
+def test_centro_custo_usa_dr_quando_localidade_for_diretoria_regional():
+    robo = RoboFalso()
+    dados = {"banco": "748", "nome_adm": "DR - DOURADOS"}
+    robo._lancar_tarifas(None, dados, "10130", [TARIFA], ("10130", "", ""), {"injecoes": 0})
+    assert robo.centro_custo == "DR"
+
+
+def test_centro_custo_usa_dr_quando_tipo_adm_for_dr():
+    robo = RoboFalso()
+    dados = {"banco": "748", "tipo_adm": "DR", "nome_adm": "DOURADOS"}
+    robo._lancar_tarifas(None, dados, "10130", [TARIFA], ("10130", "", ""), {"injecoes": 0})
+    assert robo.centro_custo == "DR"

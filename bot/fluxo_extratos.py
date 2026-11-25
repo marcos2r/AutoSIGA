@@ -31,19 +31,21 @@ from controllers.transferencias_internas import a_lancar as a_lancar_transferenc
 
 # Lê a grade #grid1 da TES01701 (Data, Lançto, Documento, Histórico, Origem, Entrada, Saída, Saldo)
 _JS_LER_GRADE = '''() => {
-    let r = [];
-    for (let tr of document.querySelectorAll('#grid1 tbody tr')) {
-        let tds = tr.querySelectorAll('td');
-        if (tds.length >= 8) {
-            r.push({
-                data: tds[0].innerText.trim(), lote: tds[1].innerText.trim(),
+    const $ = window.jQuery, grade = document.querySelector('#grid1');
+    let linhas = [];
+    try {
+        if ($ && grade && $.fn.dataTable && $(grade).hasClass('dataTable'))
+            linhas = Array.from($(grade).dataTable().fnGetNodes());
+    } catch (e) { linhas = []; }
+    if (!linhas.length) linhas = Array.from(document.querySelectorAll('#grid1 tbody tr'));
+    return linhas.map(tr => {
+        const tds = tr.querySelectorAll('td');
+        if (tds.length < 8) return null;
+        return {data: tds[0].innerText.trim(), lote: tds[1].innerText.trim(),
                 documento: tds[2].innerText.trim(), historico: tds[3].innerText.trim(),
                 origem: tds[4].innerText.trim(), entrada: tds[5].innerText.trim(),
-                saida: tds[6].innerText.trim(), saldo: tds[7].innerText.trim()
-            });
-        }
-    }
-    return r;
+                saida: tds[6].innerText.trim(), saldo: tds[7].innerText.trim()};
+    }).filter(Boolean);
 }'''
 
 # Saldo final da conta no período: coluna Saldo da linha "Total" do rodapé da grade
@@ -360,6 +362,7 @@ class FluxoExtratosMixin:
         page.wait_for_load_state("domcontentloaded")
         time.sleep(2)
         self.esperar_loading(page)
+        self.fechar_modais_erro_siga(page)
 
         self.update_status("Abrindo menu do Extrato...", "#428BCA")
         btn_extrato = page.locator('#btn-filtro')
@@ -379,7 +382,11 @@ class FluxoExtratosMixin:
         self.update_status("Consultando movimentações no banco...", "#F89406")
         page.locator('#f_main button[type="submit"].btn-success').click()
         page.wait_for_load_state("domcontentloaded")
-        time.sleep(3)
+        time.sleep(1.5)
+        # O Consultar da TES01701 pode levar mais de 3s; espera o loading e o DataTable terminarem.
+        self.esperar_loading(page)
+        self._esperar_grade_pronta(page)
+        self.fechar_modais_erro_siga(page)
 
         self.update_status("Lendo dados da tabela do SIGA...", "#428BCA")
         page.locator('#grid1').wait_for(state="visible", timeout=10000)
@@ -401,6 +408,19 @@ class FluxoExtratosMixin:
             return False
         page.evaluate('v => $("#f_conta").val(v).trigger("change")', valor)
         return True
+
+    def _esperar_grade_pronta(self, page, timeout_ms=15000):
+        """Aguarda o modal de filtro fechar e o DataTables da TES01701 terminar de desenhar."""
+        try:
+            page.wait_for_function(
+                "() => { const m = document.querySelector('#modal-filtro.in'); if (m) return false;"
+                " const $ = window.jQuery, g = document.querySelector('#grid1');"
+                " if ($ && g && $.fn.dataTable && $(g).hasClass('dataTable'))"
+                " return !$(g).dataTable().fnSettings().bDrawing;"
+                " return true; }",
+                timeout=timeout_ms)
+        except Exception as e:
+            logging.debug(f"[TES01701] Espera da grade encerrada: {e}")
 
     def _ler_grade_tes01701(self, page):
         """Linhas da grade de movimentos da TES01701 como dicionários de texto."""

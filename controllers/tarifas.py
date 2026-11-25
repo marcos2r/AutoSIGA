@@ -85,6 +85,15 @@ def cidade_da_localidade(nome_adm: Any) -> str:
     return str(nome_adm or "").split(" - ")[0].strip()
 
 
+def centro_custo_da_localidade(nome_adm: Any, padrao: str = "ADM", tipo_adm: Any = "") -> str:
+    """Usa "DR" no rateio quando a conta pertence à Diretoria Regional; senão mantém o padrão."""
+    tipo = str(tipo_adm or "").strip().upper()
+    nome = str(nome_adm or "").strip().upper()
+    if padrao.upper() == "ADM" and (tipo == "DR" or nome == "DR" or nome.startswith(("DR ", "DR-"))):
+        return "DR"
+    return padrao
+
+
 @dataclass(frozen=True)
 class RegraTarifa:
     """Como a Administração lança tarifa no SIGA."""

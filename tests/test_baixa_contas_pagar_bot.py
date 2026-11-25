@@ -207,3 +207,34 @@ def test_falha_ao_ler_a_contas_a_pagar_nao_para_a_conciliacao(monkeypatch):
 
     assert bot._etapa_baixas_contas_pagar(None, _extrato(), "10123") == (None, False)
     assert reg.capturas == ["erro_ler_contas_a_pagar"] and "puladas" in reg.status[-1]
+
+
+def test_lote_aplica_desconto_de_um_centavo_quando_parcelas_passam_do_extrato(monkeypatch):
+    bot, _ = _bot(monkeypatch)
+    p1 = ParcelaSiga("114154", FORNECEDOR, 100.00, APROVADO, GUID_A, "21/11/2026")
+    p2 = ParcelaSiga("114152", FORNECEDOR, 200.01, APROVADO, GUID_B, "21/11/2026")
+    decisao = DecisaoPagamento(PagamentoExtrato("26/10/2026", 300.00, "PIX", "123", bcp.PIX),
+                               BAIXAR, "2 parcelas", (p1, p2))
+
+    class PaginaDesconto(PaginaLote):
+        def __init__(self):
+            super().__init__()
+            self.total_tela = "300,01"
+            self.desconto_aplicado = None
+
+        def evaluate(self, js, arg=None):
+            if js is bcp._JS_DEFINIR_DESCONTO:
+                self.desconto_aplicado = arg
+                self.total_tela = "300,00"
+                return True
+            if js is bcp._JS_LER_LOTE:
+                return {"guids": [GUID_A, GUID_B], "total": self.total_tela}
+            return super().evaluate(js, arg)
+
+    pagina = PaginaDesconto()
+    conferidos = []
+    monkeypatch.setattr(bot, "_conferir_data_gravada", lambda p, parcela, d, v: conferidos.append((parcela.numero, v)))
+    bot._baixar_em_lote(pagina, decisao, "10123")
+
+    assert pagina.desconto_aplicado == [GUID_A, 0.01]
+    assert conferidos == [("114154", 99.99), ("114152", 200.01)]

@@ -96,6 +96,42 @@ class HelpersMixin:
             logging.debug(f"Não foi possível checar o aviso de mês fechado: {e}")
             return False
 
+    _JS_FECHAR_MODAL_ERRO = '''() => {
+        const mensagens = [];
+        document.querySelectorAll('.bootbox.modal.in, .modal.in').forEach(m => {
+            const texto = (m.innerText || '').trim();
+            if (!texto) return;
+            const ehErro = /ops[.,]?\\s*ocorreu um erro/i.test(texto)
+                || /encaminhar os detalhes do erro/i.test(texto)
+                || /erro inesperado/i.test(texto);
+            if (!ehErro) return;
+            mensagens.push(texto.slice(0, 200));
+            const btn = m.querySelector('.modal-footer button, button.btn-primary, .bootbox-close-button, .close');
+            if (btn) btn.click();
+            if (window.jQuery) {
+                try { window.jQuery(m).modal('hide'); } catch (e) {}
+            }
+            m.classList.remove('in');
+            m.style.display = 'none';
+        });
+        if (mensagens.length) {
+            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+            document.body.classList.remove('modal-open');
+        }
+        return mensagens;
+    }'''
+
+    def fechar_modais_erro_siga(self, page):
+        """Fecha modais de erro inesperado do SIGA para não travar a rotina seguinte."""
+        try:
+            msgs = page.evaluate(self._JS_FECHAR_MODAL_ERRO) or []
+            for m in msgs:
+                logging.warning(f"[SIGA] Modal de erro fechado automaticamente: {m.splitlines()[0]}")
+            return msgs
+        except Exception as e:
+            logging.debug(f"Falha ao fechar modal de erro do SIGA: {e}")
+            return []
+
     def _capturar_tela_e_log(self, page, identificador):
         """
         Tira um screenshot da página ativa e grava no diretório de logs.

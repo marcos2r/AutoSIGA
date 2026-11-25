@@ -98,6 +98,24 @@ _JS_DEFINIR_DATA = '''(data) => {
     return true;
 }'''
 
+_JS_DEFINIR_DESCONTO = '''([guid, desconto]) => {
+    const m = document.querySelector('.modal.in');
+    if (!m) return false;
+    const alvo = 'f_desconto_' + guid.toLowerCase();
+    const el = Array.from(m.querySelectorAll('input'))
+        .find(i => (i.id || i.name || '').toLowerCase() === alvo);
+    if (!el) return false;
+    if (window.jQuery && jQuery(el).data('autoNumeric')) {
+        jQuery(el).autoNumeric('set', desconto);
+        jQuery(el).trigger('change').trigger('blur');
+    } else {
+        el.value = desconto.toFixed(2).replace('.', ',');
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+        el.dispatchEvent(new Event('blur', {bubbles: true}));
+    }
+    return true;
+}'''
+
 _SUBMIT_LOTE = '.modal.in form button[type="submit"].btn-success'
 
 
@@ -137,7 +155,12 @@ class BaixaContasPagarMixin:
         # Fatura do cartão: o débito único quita as provisões das compras listadas no XLS da fatura
         usadas = {p.guid for d in decisoes for p in d.parcelas}
         faturas = getattr(self, "faturas_cartao", None) or []
-        decisoes += [decidir_fatura(deb, fatura_do_debito(deb, faturas), parcelas, usadas) for deb in debitos_cartao]
+        decisoes_cartao = [decidir_fatura(deb, fatura_do_debito(deb, faturas), parcelas, usadas)
+                           for deb in debitos_cartao]
+        for d in decisoes_cartao:
+            logging.info("Cartão de crédito [%s] %s R$ %.2f -> %s (%s)",
+                         conta_codigo, d.pagamento.data, d.pagamento.valor, d.acao, d.motivo or "ok")
+        decisoes += decisoes_cartao
         a_baixar = [d for d in decisoes if d.acao == BAIXAR]
         if not a_baixar:
             return resultados_sem_execucao(decisoes), False
@@ -216,7 +239,11 @@ class BaixaContasPagarMixin:
         if not self._esperar_condicao(page, _JS_LOTE_ABERTO, _ESPERA_LOTE_S):
             avisos = page.evaluate(_JS_AVISOS_ABERTOS) or []
             raise BaixaNaoConferidaError(f"a baixa em lote não abriu{': ' + avisos[0] if avisos else ''}")
-        self._conferir_lote(page, guids, pg.valor)
+        soma_parcelas = round(sum(p.valor for p in decisao.parcelas), 2)
+        desconto = round(soma_parcelas - pg.valor, 2)
+        if not 0 <= desconto <= 0.01:
+            desconto = 0.0
+        self._conferir_lote(page, guids, soma_parcelas if desconto else pg.valor)
 
         self._preencher_data_lote(page, pg.data)
         self._escolher(page, "f_formapagamento", FORMAS[pg.tipo], "forma de pagamento")
@@ -233,6 +260,11 @@ class BaixaContasPagarMixin:
         # O Documento é obrigatório e só aceita dígitos: vai o número da nota, como nas baixas manuais
         documento = re.sub(r"\D", "", decisao.parcelas[0].numero)[:20] or pg.documento[:20]
         self._preencher_campos(page, {"f_documento": documento})
+        if desconto > 0:
+            if not page.evaluate(_JS_DEFINIR_DESCONTO, [guids[0], desconto]):
+                raise BaixaNaoConferidaError(f"campo de desconto da parcela {decisao.parcelas[0].numero} não encontrado")
+            logging.info(f"Desconto de {valor_siga(desconto)} aplicado na parcela {decisao.parcelas[0].numero}.")
+            time.sleep(0.5)
 
         self._conferir_lote(page, guids, pg.valor)
         data_na_tela = page.evaluate(_JS_LER_DATA)
@@ -242,8 +274,15 @@ class BaixaContasPagarMixin:
             raise BaixaNaoConferidaError("uma lista da baixa em lote ficou aberta sobre o Confirmar")
         page.locator(_SUBMIT_LOTE).first.click()
         self._depois_de_gravar(page)
-        for parcela in decisao.parcelas:
-            self._conferir_data_gravada(page, parcela, pg.data, parcela.valor)
+        for i, parcela in enumerate(decisao.parcelas):
+            esperado = round(parcela.valor - desconto, 2) if i == 0 and desconto > 0 else parcela.valor
+            try:
+                self._conferir_data_gravada(page, parcela, pg.data, esperado)
+            except BaixaNaoConferidaError:
+                if i == 0 and desconto > 0:
+                    self._conferir_data_gravada(page, parcela, pg.data, parcela.valor)
+                else:
+                    raise
 
     def _preencher_data_lote(self, page, data):
         """Digita a data de pagamento; se a TES01519 deixar o campo vazio, põe o valor pelo jQuery."""

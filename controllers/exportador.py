@@ -8,7 +8,7 @@ permitindo a importação manual em lote no sistema legado do SIGA.
 
 import calendar
 import logging
-from datetime import datetime
+from datetime import date, datetime
 
 from controllers.baixa_contas_pagar import resumo_resultado as resumo_resultado_cp
 from controllers.baixa_energia import resumo_baixa
@@ -102,12 +102,17 @@ class Exportador:
         return ofertas, len(transacoes or []) - len(ofertas)
 
     @staticmethod
-    def resumo_ofertas(ofertas):
+    def resumo_ofertas(ofertas, hoje=None):
         """
         Calcula o total e a data de importação (último dia do mês da oferta mais recente).
 
+        Com o mês ainda em curso, a data é a da última oferta: o SIGA não aceita data
+        futura (25/11/2026: digitado 30/11, gravado 25/11). O mês do Nome Arquivo da
+        grade sai desta data.
+
         Args:
             ofertas (list): Transações já filtradas por `filtrar_ofertas`, com data "dd/mm/aaaa".
+            hoje (date | None): Data de referência (padrão: hoje), para os testes.
 
         Returns:
             tuple: (total, data_importacao "dd/mm/aaaa", competencia "mm/aaaa"); datas vazias se nenhuma for válida.
@@ -123,7 +128,9 @@ class Exportador:
             return total, "", ""
         mais_recente = max(datas)
         ultimo_dia = calendar.monthrange(mais_recente.year, mais_recente.month)[1]
-        return total, f"{ultimo_dia:02d}/{mais_recente:%m/%Y}", f"{mais_recente:%m/%Y}"
+        fim_do_mes = mais_recente.date().replace(day=ultimo_dia)
+        data_importacao = fim_do_mes if fim_do_mes <= (hoje or date.today()) else mais_recente.date()
+        return total, f"{data_importacao:%d/%m/%Y}", f"{mais_recente:%m/%Y}"
 
     @staticmethod
     def formatar_moeda(valor):

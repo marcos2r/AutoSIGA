@@ -99,6 +99,15 @@ def test_resumo_ofertas_usa_ultimo_dia_do_mes_mais_recente():
     assert competencia == "02/2026"
 
 
+def test_resumo_ofertas_mes_em_curso_usa_a_data_da_ultima_oferta():
+    # O SIGA não aceita data futura: no meio de novembro a importação vai com a data da última oferta
+    from datetime import date
+    ofertas = [{"valor": 10.0, "data": "20/11/2026"}, {"valor": 5.0, "data": "24/11/2026"}]
+    _, data_importacao, competencia = Exportador.resumo_ofertas(ofertas, hoje=date(2026, 11, 25))
+    assert data_importacao == "24/11/2026"
+    assert competencia == "11/2026"
+
+
 def test_resumo_ofertas_sem_datas_validas():
     assert Exportador.resumo_ofertas([{"valor": 5.0, "data": ""}]) == (5.0, "", "")
 

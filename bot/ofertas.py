@@ -97,8 +97,8 @@ class OfertasMixin:
         """
         Diz se a grade já tem a importação destas ofertas.
 
-        A coluna Data da grade não traz a data digitada no modal: em 25/11/2026 as
-        ofertas de novembro foram gravadas com 30/11/2026 e a grade mostrou 25/11/2026
+        O SIGA não aceita data futura no modal: em 25/11/2026 as
+        ofertas de novembro foram digitadas com 30/11/2026 e gravadas com 25/11/2026
         (o dia da importação). Por isso vale o valor total numa linha datada a partir
         do 1º dia da competência, e não a data exata.
 
